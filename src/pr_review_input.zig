@@ -10,7 +10,7 @@ fn repositoryPath(arena: A, dir: []const u8, name: []const u8) ![]const u8 {
     return std.mem.trimStart(u8, path, "/");
 }
 
-pub const File = struct { path: []const u8, before: ?[]const u8, after: ?[]const u8, change: ?[]const u8 = null, after_omitted: bool = false };
+pub const File = struct { path: []const u8, before: ?[]const u8, after: ?[]const u8, change: ?[]const u8 = null, after_omitted: bool = false, change_truncated: bool = false };
 pub const Input = struct {
     version: u8 = 3,
     base: []const u8,
@@ -51,13 +51,25 @@ pub fn diffsOnly(arena: A, input: Input) !Input {
 }
 
 pub const max_files = 32;
+/// One file's diff beyond this keeps its start only (#1337): a new capture
+/// fixture is all added lines, and must not make the review impossible.
+pub const max_file_diff = 32 * 1024;
+
+fn truncateDiff(arena: A, change: []const u8) ![]const u8 {
+    var end: usize = max_file_diff;
+    while (end > 0 and change[end - 1] != '\n') end -= 1;
+    if (end == 0) end = max_file_diff;
+    while (end > 0 and !std.unicode.utf8ValidateSlice(change[0..end])) end -= 1;
+    return std.fmt.allocPrint(arena, "{s}[diff truncated: {d} of {d} bytes shown]\n", .{ change[0..end], end, change.len });
+}
+
 pub const max_bytes = 128 * 1024;
 
-fn capture(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
+pub fn capture(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
     return evidence.capture(gpa, io, arena, .{ .cwd = cwd, .selector = "" }, args);
 }
 
-fn raw(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
+pub fn raw(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
     const runner = @import("process_runner.zig");
     const result = try runner.runCappedWithOptions(gpa, io, args, max_bytes + 1, 2048, 15_000, .{ .cwd = .{ .path = cwd } });
     defer gpa.free(result.stdout);
@@ -184,12 +196,18 @@ pub fn gather(gpa: A, io: std.Io, arena: A, cwd: []const u8, base: []const u8, h
         if (files.items.len >= max_files) return error.ReviewTooLarge;
         // A context diff carries the old lines; repeating the complete base
         // blob would charge unchanged source twice and crowd out test evidence.
-        const change = try raw(gpa, io, arena, cwd, &.{ "git", "diff", "--no-ext-diff", "--no-renames", "--unified=3", base, head, "--", path });
+        const full = raw(gpa, io, arena, cwd, &.{ "git", "diff", "--no-ext-diff", "--no-renames", "--unified=3", base, head, "--", path }) catch |err| blk: {
+            if (err != error.ReviewTooLarge) return err;
+            break :blk null; // over 128 KiB on its own
+        };
+        const truncated = full == null or full.?.len > max_file_diff;
+        const change = if (full) |d| (if (truncated) try truncateDiff(arena, d) else d) else "[diff truncated: this file's diff exceeds 128 KiB]\n";
         if (size + change.len > max_bytes) return error.ReviewTooLarge;
         size += change.len;
-        try files.append(arena, .{ .path = path, .before = null, .after = null, .change = change });
+        try files.append(arena, .{ .path = path, .before = null, .after = null, .change = change, .after_omitted = truncated, .change_truncated = truncated });
     }
     for (files.items) |*file| {
+        if (file.change_truncated) continue; // its excerpt is all the review gets
         var after_omitted = false;
         const after = blob(gpa, io, arena, cwd, head, file.path) catch |err| blk: {
             if (err != error.ReviewTooLarge) return err;
@@ -320,7 +338,9 @@ test "claim review budgets changed hunks instead of the complete base blob" {
     _ = try capture(gpa, io, a, cwd, &.{ "git", "add", "." });
     _ = try capture(gpa, io, a, cwd, &.{ "git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "oversized" });
     const large_head = try capture(gpa, io, a, cwd, &.{ "git", "rev-parse", "HEAD" });
-    try std.testing.expectError(error.ReviewTooLarge, gather(gpa, io, a, cwd, head, large_head, "claim"));
+    // #1337: a diff over the budget on its own is reviewed as a marked excerpt.
+    const excerpt = try gather(gpa, io, a, cwd, head, large_head, "claim");
+    try std.testing.expect(excerpt.files[0].change_truncated and excerpt.files[0].after == null);
 }
 
 test "claim review uses committed context when changed head source exceeds the budget" {
@@ -532,50 +552,4 @@ test "claim review includes committed nested package runners and workflow reacha
     var support: Support = .{ .gpa = gpa, .io = io, .arena = a, .cwd = cwd, .head = head, .files = &files, .size = &size, .seen = std.StringHashMap(void).init(a) };
     try std.testing.expect(try support.add("apps/client/package.json") == null);
     try std.testing.expect(support.omitted and files.items.len == 0 and size == max_bytes);
-}
-
-test "#1345 an early large file cannot crowd out a later file's diff" {
-    const io = std.testing.io;
-    var temp = std.testing.tmpDir(.{});
-    defer temp.cleanup();
-    var scratch = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer scratch.deinit();
-    const a = scratch.allocator();
-    const gpa = std.testing.allocator;
-    var path: [std.fs.max_path_bytes]u8 = undefined;
-    const cwd = path[0..try temp.dir.realPath(io, &path)];
-    _ = try capture(gpa, io, a, cwd, &.{ "git", "init", "-q" });
-    const large = try a.alloc(u8, 100 * 1024);
-    @memset(large, 'a');
-    for (large, 0..) |*byte, i| if (i % 80 == 79) {
-        byte.* = '\n';
-    };
-    large[0] = 'x';
-    try temp.dir.writeFile(io, .{ .sub_path = "alpha.txt", .data = large });
-    try temp.dir.writeFile(io, .{ .sub_path = "beta.txt", .data = "one\ntwo\nthree\n" });
-    const commit = &[_][]const u8{ "git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qam", "c" };
-    _ = try capture(gpa, io, a, cwd, &.{ "git", "add", "." });
-    _ = try capture(gpa, io, a, cwd, commit);
-    const base = try capture(gpa, io, a, cwd, &.{ "git", "rev-parse", "HEAD" });
-    large[0] = 'y';
-    try temp.dir.writeFile(io, .{ .sub_path = "alpha.txt", .data = large });
-    try temp.dir.writeFile(io, .{ .sub_path = "beta.txt", .data = "one\nTWO\nthree\n" });
-    _ = try capture(gpa, io, a, cwd, commit);
-    const head = try capture(gpa, io, a, cwd, &.{ "git", "rev-parse", "HEAD" });
-    // Size the claim so alpha's complete source would fill the budget exactly
-    // to within a few bytes, leaving no room for beta's small diff.
-    const alpha_diff = try raw(gpa, io, a, cwd, &.{ "git", "diff", "--no-ext-diff", "--no-renames", "--unified=3", base, head, "--", "alpha.txt" });
-    const body = try a.alloc(u8, max_bytes - alpha_diff.len - large.len - 8);
-    @memset(body, 'c');
-    const input = try gather(gpa, io, a, cwd, base, head, body);
-    try std.testing.expectEqual(@as(usize, 2), input.files.len);
-    try std.testing.expect(input.files[0].after == null and input.files[0].after_omitted);
-    try std.testing.expect(std.mem.indexOf(u8, input.files[0].change.?, "+yaaa") != null);
-    try std.testing.expectEqualStrings("one\nTWO\nthree\n", input.files[1].after.?);
-    try std.testing.expect(std.mem.indexOf(u8, input.files[1].change.?, "+TWO") != null);
-
-    const slim = try diffsOnly(a, input);
-    try std.testing.expectEqual(@as(usize, 2), slim.files.len);
-    for (slim.files) |file| try std.testing.expect(file.after == null and file.after_omitted and file.change != null);
-    try std.testing.expect(slim.support_omitted);
 }

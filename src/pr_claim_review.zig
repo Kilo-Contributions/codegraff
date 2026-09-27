@@ -119,6 +119,7 @@ pub fn review(self: *Agent, target: evidence.Target, base_name: ?[]const u8, cre
         \\This review does not certify execution or CI coverage beyond the supplied observations.
         \\If support_omitted is true, use support_limit to identify the missing evidence and return unresolved when it is required.
         \\A changed file with after_omitted=true has only a committed context diff, not complete proposed-head source.
+        \\A changed file with change_truncated=true has only the start of its diff; judge only what the excerpt shows.
         \\If required behavior, callers, or tests lie outside that excerpt, return unresolved even when checks pass.
         \\If required callers or tests are missing, return unresolved. If a claim exceeds supported scope,
         \\return unsupported with a concrete counterexample or missing coverage. Do not accept claims
