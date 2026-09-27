@@ -2,6 +2,7 @@
 const std = @import("std");
 const Io = std.Io;
 const mcp = @import("mcp_server.zig");
+const modern = @import("mcp_server_modern.zig");
 const Value = std.json.Value;
 const Session = struct { id: [32]u8, server: mcp.Server };
 const State = struct {
@@ -62,6 +63,9 @@ fn handle(st: *State, req: *std.http.Server.Request) !void {
     var host_ok = false;
     var sid: ?[]const u8 = null;
     var json_type = false;
+    var protocol_header: ?[]const u8 = null;
+    var method_header: ?[]const u8 = null;
+    var name_header: ?[]const u8 = null;
     var headers = req.iterateHeaders();
     while (headers.next()) |h| {
         if (std.ascii.eqlIgnoreCase(h.name, "host")) host_ok = std.mem.eql(u8, h.value, host);
@@ -69,13 +73,28 @@ fn handle(st: *State, req: *std.http.Server.Request) !void {
         if (std.ascii.eqlIgnoreCase(h.name, "authorization")) authorized = equalToken(h.value, bearer);
         if (std.ascii.eqlIgnoreCase(h.name, "mcp-session-id")) sid = try a.dupe(u8, h.value);
         if (std.ascii.eqlIgnoreCase(h.name, "content-type")) json_type = std.mem.eql(u8, h.value, "application/json") or std.mem.startsWith(u8, h.value, "application/json;");
-        if (std.ascii.eqlIgnoreCase(h.name, "mcp-protocol-version") and !std.mem.eql(u8, h.value, "2025-06-18") and !std.mem.eql(u8, h.value, "2025-03-26") and !std.mem.eql(u8, h.value, "2024-11-05")) return respond(req, .bad_request, "{}", null);
+        if (std.ascii.eqlIgnoreCase(h.name, "mcp-protocol-version")) protocol_header = try a.dupe(u8, h.value);
+        if (std.ascii.eqlIgnoreCase(h.name, "mcp-method")) method_header = try a.dupe(u8, h.value);
+        if (std.ascii.eqlIgnoreCase(h.name, "mcp-name")) name_header = try a.dupe(u8, h.value);
     }
     if (!host_ok) return respond(req, .forbidden, "{}", null);
     if (!authorized) return respond(req, .unauthorized, "{}", null);
     if (req.head.method != .POST and req.head.method != .DELETE) return respond(req, .method_not_allowed, "{}", null);
+    if (protocol_header) |v| {
+        const known = for (modern.supported_versions) |s| {
+            if (std.mem.eql(u8, v, s)) break true;
+        } else false;
+        // A legacy client learns nothing from a JSON-RPC body here; a modern
+        // one reads -32022 and its supported list.
+        if (!known) return respondUnsupported(a, req, v);
+    }
     try st.mutex.lock(st.io);
     defer st.mutex.unlock(st.io);
+    var legacy_body: ?[]const u8 = null;
+    if (req.head.method == .POST and json_type) switch (try modernRequest(st, a, req, protocol_header, method_header, name_header)) {
+        .handled => return,
+        .legacy => |body| legacy_body = body,
+    };
     var slot: ?*?Session = null;
     if (sid) |id| {
         for (&st.sessions) |*entry| if (entry.*) |s| {
@@ -91,12 +110,7 @@ fn handle(st: *State, req: *std.http.Server.Request) !void {
         return respond(req, .no_content, "", null);
     }
     if (!json_type) return respond(req, .unsupported_media_type, "{}", null);
-    if (req.head.content_length) |length| {
-        if (length > 65536) return respond(req, .payload_too_large, "{}", null);
-    }
-    var buffer: [4096]u8 = undefined;
-    const body_reader = try req.readerExpectContinue(&buffer);
-    const body = body_reader.allocRemaining(a, .limited(65536)) catch return respond(req, .payload_too_large, "{}", null);
+    const body = legacy_body orelse return respond(req, .bad_request, "{}", null);
     const value = std.json.parseFromSliceLeaky(Value, a, body, .{}) catch return respond(req, .bad_request, "{}", null);
     if (value != .object) return respond(req, .bad_request, "{}", null);
     const method = value.object.get("method") orelse return respond(req, .bad_request, "{}", null);
@@ -116,6 +130,53 @@ fn handle(st: *State, req: *std.http.Server.Request) !void {
         st.next = (st.next + 1) % st.sessions.len;
     }
     return respond(req, if (output.written().len == 0) .accepted else .ok, output.written(), new_id);
+}
+
+fn readBody(a: std.mem.Allocator, req: *std.http.Server.Request) !?[]const u8 {
+    if (req.head.content_length) |length| {
+        if (length > 65536) return null;
+    }
+    var buffer: [4096]u8 = undefined;
+    const body_reader = try req.readerExpectContinue(&buffer);
+    return body_reader.allocRemaining(a, .limited(65536)) catch null;
+}
+
+fn respondUnsupported(a: std.mem.Allocator, req: *std.http.Server.Request, requested: []const u8) !void {
+    var out: Io.Writer.Allocating = .init(a);
+    try modern.unsupported(&out.writer, .null, requested);
+    return respond(req, .bad_request, out.written(), null);
+}
+
+/// 2026-07-28 POSTs are stateless: no session, a fresh server per request,
+/// and headers that must agree with the body. The body is read here either
+/// way; a legacy one is handed back for the session path.
+const Routed = union(enum) { handled, legacy: []const u8 };
+
+fn modernRequest(st: *State, a: std.mem.Allocator, req: *std.http.Server.Request, protocol_header: ?[]const u8, method_header: ?[]const u8, name_header: ?[]const u8) !Routed {
+    const body = (try readBody(a, req)) orelse {
+        try respond(req, .payload_too_large, "{}", null);
+        return .handled;
+    };
+    const value = std.json.parseFromSliceLeaky(Value, a, body, .{}) catch return .{ .legacy = body };
+    if (value != .object) return .{ .legacy = body };
+    const params = value.object.get("params") orelse Value.null;
+    const requested = modern.requestedVersion(params) orelse return .{ .legacy = body };
+    const id = value.object.get("id") orelse Value.null;
+    var out: Io.Writer.Allocating = .init(a);
+    if (!modern.isSupported(requested)) {
+        try modern.unsupported(&out.writer, id, requested);
+        try respond(req, .bad_request, out.written(), null);
+        return .handled;
+    }
+    if (try modern.headerMismatch(a, value, protocol_header, method_header, name_header)) |why| {
+        try modern.mismatch(&out.writer, id, why);
+        try respond(req, .bad_request, out.written(), null);
+        return .handled;
+    }
+    var fresh = st.prototype;
+    try fresh.handle(a, &out.writer, body);
+    try respond(req, if (out.written().len == 0) .accepted else .ok, out.written(), null);
+    return .handled;
 }
 
 pub fn equalToken(a: []const u8, b: []const u8) bool {
