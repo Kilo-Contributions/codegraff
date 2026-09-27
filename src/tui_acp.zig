@@ -446,8 +446,11 @@ test "transcript sink: citations in reasoning answer and completion args reset o
     try std.testing.expectEqualStrings("why\nanswer args!fresh", buf[0..stream.len.load(.acquire)]);
     var aw: Io.Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
+    // The ACP wire itself now carries no markers (acp_citations.zig), so
+    // every ACP client matches this transcript.
     try writeUpdate(&aw.writer, "s1", .{ .text_delta = .{ .text = answer } });
-    try std.testing.expect(std.mem.indexOf(u8, aw.writer.buffered(), "\u{E200}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, aw.writer.buffered(), "\u{E200}") == null);
+    try std.testing.expect(std.mem.indexOf(u8, aw.writer.buffered(), "answer") != null);
 }
 
 test "transcript sink correlates parallel results using original engine call IDs" {
