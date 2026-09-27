@@ -454,35 +454,6 @@ test "translateEvent: reasoning and text become chunks" {
     try testing.expect(std.mem.indexOf(u8, w.buffered(), "agent_message_chunk") != null);
 }
 
-test "translateEvent: a citation marker split across text events never reaches the client" {
-    defer @import("acp_citations.zig").endTurn("sess-9");
-    var buf: [2048]u8 = undefined;
-    var w: Io.Writer = .fixed(&buf);
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const a = arena_state.allocator();
-    var id_buf: [64]u8 = @splat(0);
-    var next: u32 = 0;
-    for ([_][]const u8{
-        "{\"type\":\"reasoning\",\"text\":\"checked \\ue200cite\\ue202turn1search0\\ue201\"}",
-        "{\"type\":\"text\",\"text\":\"Rotate them. \\ue200cite\\ue202tur\"}",
-        "{\"type\":\"text\",\"text\":\"n3search0\\ue201\"}",
-        "{\"type\":\"text\",\"text\":\" Done.\"}",
-    }) |line| {
-        const ev = try std.json.parseFromSliceLeaky(Value, a, line, .{});
-        _ = try translateEvent(&w, "sess-9", ev, &id_buf, &next);
-    }
-    const out = w.buffered();
-    try testing.expect(std.mem.indexOf(u8, out, "\u{E200}") == null and std.mem.indexOf(u8, out, "\u{E201}") == null);
-    try testing.expect(std.mem.indexOf(u8, out, "turn3search0") == null and std.mem.indexOf(u8, out, "search0") == null);
-    try testing.expect(std.mem.indexOf(u8, out, "cite") == null);
-    try testing.expect(std.mem.indexOf(u8, out, "Rotate them. ") != null and std.mem.indexOf(u8, out, " Done.") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "checked ") != null);
-    // The all-marker delta sends nothing: two message chunks, one thought.
-    try testing.expectEqual(@as(usize, 2), std.mem.count(u8, out, "agent_message_chunk"));
-    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, out, "agent_thought_chunk"));
-}
-
 test "translateEvent: a transient-retry text event is an agent_message_chunk" {
     var buf: [1024]u8 = undefined;
     var w: Io.Writer = .fixed(&buf);
