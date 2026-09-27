@@ -27,7 +27,7 @@ test "slash commands refresh occupancy before their terminal response" {
     var dispatch: Dispatch = .{ .turn = echoTurn, .ctx = undefined, .slash = Fixture.slash, .meter = Fixture.meter };
     try handleLine(&dispatch, arena.allocator(), &writer, "{\"id\":1,\"method\":\"session/prompt\",\"params\":{\"prompt\":[{\"type\":\"text\",\"text\":\"/compact\"}]}}");
     const output = writer.buffered();
-    const meter_pos = std.mem.indexOf(u8, output, "\"used\":20,\"window\":100") orelse return error.MissingMeter;
+    const meter_pos = std.mem.indexOf(u8, output, "\"usage_update\",\"used\":20,\"size\":100") orelse return error.MissingMeter;
     const end_pos = std.mem.indexOf(u8, output, "stopReason") orelse return error.MissingResponse;
     try std.testing.expect(meter_pos < end_pos);
 }
