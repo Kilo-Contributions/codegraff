@@ -257,7 +257,7 @@ def main():
     run_case(args.graff, "body flag cannot turn non-draft into draft", [tool("gh pr create --title fixture --body '--draft'"), {"text": "Blocked."}], {"runs": "failure"})
     run_case(args.graff, "local-only and repeated completion cannot pass PR CI", [tool(create), completion(), completion(), {"text": "CI remains unverified."}], {"runs": "none"}, expected_mutations=1, refused=2, resume_check=True, review=True)
     run_case(args.graff, "fresh passing remote head completes", [tool(create), completion()], {"checks": "SUCCESS"}, expected_mutations=1, expected_final="Verification complete.", review=True)
-    run_case(args.graff, "draft handoff needs explicit scope", [tool(create + " --draft"), completion("Handing off the draft."), {"text": "Draft remains unverified."}], {"runs": "failure"}, expected_mutations=1, refused=1)
+    run_case(args.graff, "draft completes as an unverified handoff", [tool(create + " --draft"), completion("Handing off the draft.")], {"runs": "failure"}, expected_mutations=1, expected_final="Draft handoff \u2014 CI is not verified.")
     commit = "git -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -m next"
     run_case(args.graff, "ready refreshes changed head", [tool(create), tool(commit), tool("gh pr ready"), {"text": "New head needs CI."}], {"checks": "FAILURE"}, expected_mutations=1, review=True)
     run_case(args.graff, "passing old remote head is not local new head", [tool(create), tool(commit), completion(), {"text": "Push and verify the new head."}], {"checks": "SUCCESS", "remote_head": "initial"}, expected_mutations=1, refused=1, review=True)
