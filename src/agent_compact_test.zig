@@ -453,6 +453,8 @@ test "a compaction handoff carries the live checklist across the summary (#318)"
     // The summary and its framing are unchanged...
     try std.testing.expect(std.mem.indexOf(u8, handoff, "the model summarized the earlier work") != null);
     try std.testing.expect(std.mem.indexOf(u8, handoff, "Continue assisting the user based on this summary.") != null);
+    // #1286: kept recent messages outrank the summary's stale next steps.
+    try std.testing.expect(std.mem.indexOf(u8, handoff, "trust them over the summary") != null);
     // ...and the state a summary cannot be trusted to carry rides with it. The
     // last todo_write result is not in the ~8k suffix after a long tool loop,
     // and the summarizer may never have seen the item statuses at all.
@@ -559,7 +561,7 @@ test "the root handoff keeps its summary and appends the recorded-policy boundar
     const a = arena_state.allocator();
     var agent = th.subAgent(a, false);
     const handoff = try handoffMessage(&agent, "the model summarized the earlier work", &.{});
-    try std.testing.expectEqualStrings("Context: the earlier conversation was compacted to save space.\nSummary of the earlier work:\n\nthe model summarized the earlier work\n\nContinue assisting the user based on this summary." ++ @import("prompt_text.zig").constraint_authority_note, handoff);
+    try std.testing.expectEqualStrings("Context: the earlier conversation was compacted to save space.\nSummary of the earlier work:\n\nthe model summarized the earlier work\n\nContinue assisting the user based on this summary. Messages after this one were kept verbatim from the most recent part of the conversation; where they differ from the summary (for example a next step they show as already done), trust them over the summary." ++ @import("prompt_text.zig").constraint_authority_note, handoff);
 }
 test "pinChildTask captures the mandate once, never re-pins, and ignores a root agent or an unrecognised head" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
