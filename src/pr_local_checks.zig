@@ -68,6 +68,8 @@ pub fn repositoryRoot(root: anytype, cwd: []const u8) ![]const u8 {
 
 pub fn record(root: anytype, call: ToolCall, result: ExecResult) !void {
     if (root.sub or !shell.isFamily(call.name)) return;
+    // #1326: reading a backgrounded check's exit resolves it.
+    if (shell.actionOf(call) == .output) return noteJobExits(root, result.text);
     const command = shell.runCommand(call) orelse return;
     root.publication_checks.observation_mutex.lockUncancelable(root.io);
     defer root.publication_checks.observation_mutex.unlock(root.io);
@@ -88,6 +90,72 @@ pub fn record(root: anytype, call: ToolCall, result: ExecResult) !void {
     try root.publication_checks.recordReceipt(root.arena, .{ .repository = repository, .command = command, .head_after = head, .tracked_tree_clean_after = dirty.len == 0, .output = result.text, .failed = result.is_error or result.cancelled, .completed = !result.pending and std.mem.indexOf(u8, result.text, "[job ") == null });
 }
 
+/// The job id in `[job N started…`, `[job N: …` or `[job N exited…`.
+fn jobIdIn(text: []const u8) ?u64 {
+    const at = std.mem.indexOf(u8, text, "[job ") orelse return null;
+    const rest = text[at + "[job ".len ..];
+    var end: usize = 0;
+    while (end < rest.len and std.ascii.isDigit(rest[end])) end += 1;
+    if (end == 0) return null;
+    return std.fmt.parseInt(u64, rest[0..end], 10) catch null;
+}
+
+/// Every job exit in `text`: an output read's `[job N: exited with code C]`
+/// or a wake's `[job N exited C: cmd]` (#1326).
+pub fn noteJobExits(root: anytype, text: []const u8) !void {
+    if (root.sub) return;
+    var pos: usize = 0;
+    while (std.mem.indexOfPos(u8, text, pos, "[job ")) |at| {
+        pos = at + "[job ".len;
+        const id = jobIdIn(text[at..]) orelse continue;
+        var rest = text[pos..];
+        while (rest.len > 0 and std.ascii.isDigit(rest[0])) rest = rest[1..];
+        inline for (.{ ": exited with code ", " exited " }) |marker| if (std.mem.startsWith(u8, rest, marker)) {
+            const digits = rest[marker.len..];
+            var n: usize = 0;
+            while (n < digits.len and std.ascii.isDigit(digits[n])) n += 1;
+            if (std.fmt.parseInt(u8, digits[0..n], 10)) |code| try jobFinished(root, id, code, text) else |_| {}
+        };
+    }
+}
+
+/// Before a publication gate: resolve any tracked check whose background job
+/// has since exited 0, whether or not the model read that exit.
+pub fn resolveFinishedJobs(root: anytype) !void {
+    if (root.sub) return;
+    var ids: [16]u64 = undefined;
+    var n: usize = 0;
+    {
+        root.publication_checks.observation_mutex.lockUncancelable(root.io);
+        defer root.publication_checks.observation_mutex.unlock(root.io);
+        for (root.publication_checks.failed.items) |entry| if (entry.job) |id| if (n < ids.len) {
+            ids[n] = id;
+            n += 1;
+        };
+    }
+    for (ids[0..n]) |id| if (@import("job_notify.zig").exitCode(root.io, id)) |code| try jobFinished(root, id, code, "");
+}
+
+/// A tracked check that was running as job `id` has exited. Exit 0 resolves
+/// it and leaves a completed receipt at the head it finished on; any other
+/// code keeps it unresolved.
+fn jobFinished(root: anytype, id: u64, exit_code: u8, output: []const u8) !void {
+    const state = &root.publication_checks;
+    state.observation_mutex.lockUncancelable(root.io);
+    defer state.observation_mutex.unlock(root.io);
+    for (state.failed.items, 0..) |entry, i| {
+        if (entry.job != id) continue;
+        if (exit_code != 0) return;
+        _ = state.failed.orderedRemove(i);
+        const ev = @import("pr_evidence.zig");
+        const target = ev.Target{ .cwd = entry.cwd, .selector = "" };
+        const head = ev.localHead(root.gpa, root.io, root.arena, target) catch "";
+        const dirty = ev.capture(root.gpa, root.io, root.arena, target, &.{ "git", "status", "--porcelain", "--untracked-files=no" }) catch "unknown";
+        try state.recordReceipt(root.arena, .{ .repository = entry.repository orelse entry.cwd, .command = entry.command, .head_after = head, .tracked_tree_clean_after = dirty.len == 0, .output = output, .failed = false, .completed = true });
+        return;
+    }
+}
+
 pub fn batchGate(root: anytype, calls: []const ToolCall, call: ToolCall) !?ExecResult {
     if (calls.len <= 1 or !shell.isFamily(call.name)) return null;
     const raw = shell.runCommand(call) orelse return null;
@@ -100,7 +168,8 @@ pub fn batchGate(root: anytype, calls: []const ToolCall, call: ToolCall) !?ExecR
 }
 
 pub const State = struct {
-    const Entry = struct { cwd: []const u8, command: []const u8, repository: ?[]const u8 = null };
+    /// `job`: the background job still running this check (#1326).
+    const Entry = struct { cwd: []const u8, command: []const u8, repository: ?[]const u8 = null, job: ?u64 = null };
     pub const Receipt = struct { repository: []const u8, command: []const u8, head_after: []const u8, tracked_tree_clean_after: bool, output: []const u8, failed: bool, completed: bool, command_truncated: bool = false, output_truncated: bool = false };
     observation_mutex: std.Io.Mutex = .init,
     failed: std.ArrayList(Entry) = .empty,
@@ -141,14 +210,18 @@ pub const State = struct {
 
     fn observeKnown(self: *State, arena: Allocator, cwd: []const u8, repository: []const u8, raw: []const u8, result: ExecResult) !void {
         const command = std.mem.trim(u8, raw, " \t\r\n");
-        for (self.failed.items, 0..) |entry, i| {
+        const backgrounded = result.pending or std.mem.indexOf(u8, result.text, "[job ") != null;
+        const job: ?u64 = if (backgrounded and !result.is_error and !result.cancelled) jobIdIn(result.text) else null;
+        for (self.failed.items, 0..) |*entry, i| {
             if (!std.mem.eql(u8, entry.cwd, cwd) or !std.mem.eql(u8, entry.command, command)) continue;
-            if (!result.is_error and !result.cancelled and !result.pending and std.mem.indexOf(u8, result.text, "[job ") == null)
-                _ = self.failed.orderedRemove(i);
+            if (!result.is_error and !result.cancelled and !backgrounded)
+                _ = self.failed.orderedRemove(i)
+            else
+                entry.job = job;
             return;
         }
-        if (!result.is_error and !result.cancelled and !result.pending and std.mem.indexOf(u8, result.text, "[job ") == null) return;
-        try self.failed.append(arena, .{ .cwd = try arena.dupe(u8, cwd), .command = try arena.dupe(u8, command), .repository = try arena.dupe(u8, repository) });
+        if (!result.is_error and !result.cancelled and !backgrounded) return;
+        try self.failed.append(arena, .{ .cwd = try arena.dupe(u8, cwd), .command = try arena.dupe(u8, command), .repository = try arena.dupe(u8, repository), .job = job });
     }
 
     pub fn write(self: *const State, writer: anytype) !void {
@@ -346,4 +419,51 @@ test "claim review local receipts retain bounded owned output and explicit limit
     try std.testing.expect(last.command_truncated);
     try std.testing.expect(last.output_truncated);
     try std.testing.expect(!last.completed and !last.tracked_tree_clean_after);
+}
+
+test "a check promoted to the background resolves when its job exits 0 (#1326)" {
+    const io = std.testing.io;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var path: [std.fs.max_path_bytes]u8 = undefined;
+    const cwd = path[0..try temp.dir.realPath(io, &path)];
+    const ev = @import("pr_evidence.zig");
+    const target: ev.Target = .{ .cwd = cwd, .selector = "" };
+    _ = try ev.capture(std.testing.allocator, io, a, target, &.{ "git", "init", "-q" });
+    _ = try ev.capture(std.testing.allocator, io, a, target, &.{ "git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "base" });
+    var root: @import("agent.zig").Agent = undefined;
+    root.gpa = std.testing.allocator;
+    root.arena = a;
+    root.io = io;
+    root.sub = false;
+    root.agent_cwd = cwd;
+    root.publication_checks = .{};
+    const repository = try repositoryRoot(&root, cwd);
+    const run = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"run\",\"command\":\"zig build test\"}", .{});
+    const read = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"output\",\"id\":424242,\"wait_ms\":60000}", .{});
+
+    // Output read: a nonzero exit keeps it unresolved, exit 0 resolves it.
+    try record(&root, .{ .id = "run", .name = "shell", .input = run }, .{ .text = "[job 424242 started: zig build test]\nCommand exceeded the 120s foreground wait", .is_error = false, .pending = true });
+    try std.testing.expect(root.publication_checks.unresolved(repository) != null);
+    try record(&root, .{ .id = "read", .name = "shell", .input = read }, .{ .text = "[job 424242: exited with code 1]\nfailed", .is_error = true });
+    try std.testing.expect(root.publication_checks.unresolved(repository) != null);
+    try record(&root, .{ .id = "run2", .name = "shell", .input = run }, .{ .text = "[job 424243 started: zig build test]", .is_error = false, .pending = true });
+    const reread = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"output\",\"id\":424243}", .{});
+    try record(&root, .{ .id = "read2", .name = "shell", .input = reread }, .{ .text = "[job 424243: exited with code 0]\nAll 3 tests passed.", .is_error = false });
+    try std.testing.expect(root.publication_checks.unresolved(repository) == null);
+    const receipt = root.publication_checks.recent.items[root.publication_checks.recent.items.len - 1];
+    try std.testing.expect(receipt.completed and !receipt.failed);
+    try std.testing.expectEqualStrings("zig build test", receipt.command);
+
+    // Never read: the publication gate consults the job's recorded exit.
+    try record(&root, .{ .id = "run3", .name = "shell", .input = run }, .{ .text = "[job 424244 started: zig build test]", .is_error = false, .pending = true });
+    try std.testing.expect(root.publication_checks.unresolved(repository) != null);
+    const job_notify = @import("job_notify.zig");
+    job_notify.queue(io, 424244, 0, false, "zig build test", false, "ok");
+    try resolveFinishedJobs(&root);
+    try std.testing.expect(root.publication_checks.unresolved(repository) == null);
+    job_notify.dismiss(io, 424244);
 }
