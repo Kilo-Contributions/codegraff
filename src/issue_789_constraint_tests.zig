@@ -176,3 +176,29 @@ test "#789 v1 user records are legacy unscoped and visibly require review" {
     try std.testing.expect(std.mem.indexOf(u8, state, "\"scope\":\"legacy_unscoped\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, playbook.authority_note, "require user review with /never") != null);
 }
+
+test "#1342 a standing rule typed into an ask_user answer can be recorded verbatim" {
+    try inScratch(struct {
+        fn body(io: Io, arena: std.mem.Allocator) !void {
+            const answers = @import("ask_user_answers.zig");
+            answers.reset();
+            defer answers.reset();
+            var aw: Io.Writer.Allocating = .init(arena);
+            var root = rootStub(arena, &aw.writer);
+            root.named_work_task = "Set up the release branch.";
+            const answer = "Always keep releases on the beta channel until I say otherwise. For this one, skip the changelog.";
+            answers.record(answers.turnKey(glue.currentUserText(&root)), answer);
+
+            // A fragment that drops the qualifier is still refused.
+            try std.testing.expect(glue.noteConstraint(&root, try call(arena, "keep releases on the beta channel", "project")).is_error);
+            const result = glue.noteConstraint(&root, try call(arena, "Always keep releases on the beta channel until I say otherwise.", "project"));
+            try std.testing.expect(!result.is_error);
+            try std.testing.expect(std.mem.indexOf(u8, result.text, "origin=user's ask_user answer") != null);
+            try std.testing.expectEqual(@as(usize, 1), playbook.load(io, arena).len);
+
+            // An answer from an earlier turn is not a source for this one.
+            root.named_work_task = "Now cut the tag.";
+            try std.testing.expect(glue.noteConstraint(&root, try call(arena, "For this one, skip the changelog.", "project")).is_error);
+        }
+    }.body);
+}
