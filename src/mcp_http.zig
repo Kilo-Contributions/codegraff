@@ -6,6 +6,7 @@ const Value = std.json.Value;
 const Allocator = std.mem.Allocator;
 const mcp_oauth = @import("mcp_oauth.zig");
 const mcp_protocol = @import("mcp_protocol.zig");
+const mcp_notify = @import("mcp_notify.zig");
 
 const max_http_response = 1 << 20;
 
@@ -15,6 +16,8 @@ pub const HttpTransport = struct {
     headers: []const std.http.Header = &.{},
     oauth_home: ?[]const u8 = null,
     session_id: ?[]const u8 = null,
+    /// The owning server's sink: SSE notifications and the resume point.
+    notes: ?*mcp_notify.Sink = null,
 };
 
 fn validRemoteUri(uri: std.Uri) bool {
@@ -98,7 +101,7 @@ fn jsonResponseMatches(gpa: Allocator, bytes: []const u8, expected_id: i64) bool
 /// response arrives. This is important for servers that keep the POST stream
 /// open after emitting the response. Multiple `data:` fields are joined with
 /// newlines per the SSE specification.
-fn readSseResponse(gpa: Allocator, reader: *Io.Reader, expected_id: ?i64) !?[]u8 {
+fn readSseResponse(gpa: Allocator, reader: *Io.Reader, expected_id: ?i64, notes: ?*mcp_notify.Sink, io: Io) !?[]u8 {
     const line_buf = try gpa.alloc(u8, max_http_response);
     defer gpa.free(line_buf);
     var event_data: std.ArrayList(u8) = .empty;
@@ -128,7 +131,9 @@ fn readSseResponse(gpa: Allocator, reader: *Io.Reader, expected_id: ?i64) !?[]u8
             consumed += 1;
         }
 
-        if (std.mem.startsWith(u8, line, "data:")) {
+        if (std.mem.startsWith(u8, line, "id:")) {
+            if (notes) |sink| sink.noteEventId(std.mem.trim(u8, line["id:".len..], " \t"));
+        } else if (std.mem.startsWith(u8, line, "data:")) {
             const data = std.mem.trimStart(u8, line["data:".len..], " \t");
             if (event_data.items.len > 0) try event_data.append(gpa, '\n');
             if (event_data.items.len + data.len > max_http_response) return error.McpResponseTooLarge;
@@ -139,6 +144,7 @@ fn readSseResponse(gpa: Allocator, reader: *Io.Reader, expected_id: ?i64) !?[]u8
             if (event_data.items.len > 0) {
                 const matches = if (expected_id) |id| jsonResponseMatches(gpa, event_data.items, id) else true;
                 if (matches) return try gpa.dupe(u8, event_data.items);
+                if (notes) |sink| _ = mcp_notify.observe(sink, io, event_data.items);
                 event_data.clearRetainingCapacity();
             }
         }
@@ -223,20 +229,60 @@ fn httpPostUnwatched(http: *HttpTransport, body: []const u8, meta: RequestMeta, 
         }
     }
 
-    return readResponseBody(http.client.allocator, &response, expected_id);
+    if (http.notes) |sink| sink.clearEventId();
+    const got = try readResponseBody(http.client.allocator, &response, expected_id, http.notes, http.client.io);
+    if (got != null or expected_id == null or meta.modern) return got;
+    // The SSE stream closed before the reply arrived (legacy sessions).
+    return resumeStream(http, meta, expected_id.?);
+}
+
+/// Streamable HTTP lets a client reopen a dropped SSE stream with GET and
+/// `Last-Event-ID`; the server replays events after that one. At most two
+/// attempts, and only when the stream carried event ids.
+fn resumeStream(http: *HttpTransport, meta: RequestMeta, id: i64) !?[]u8 {
+    const sink = http.notes orelse return null;
+    var attempt: u8 = 0;
+    while (attempt < 2) : (attempt += 1) {
+        const last = sink.lastEventId() orelse return null;
+        var arena_state = std.heap.ArenaAllocator.init(http.client.allocator);
+        defer arena_state.deinit();
+        const a = arena_state.allocator();
+        var extra: std.ArrayList(std.http.Header) = .empty;
+        try extra.appendSlice(a, try buildHeaders(a, http, meta, loadBearer(http, a)));
+        try extra.append(a, .{ .name = "last-event-id", .value = try a.dupe(u8, last) });
+        var req = try http.client.request(.GET, try std.Uri.parse(http.url), .{
+            .redirect_behavior = .unhandled,
+            .headers = .{ .user_agent = .{ .override = "codegraff-mcp/1" } },
+            .extra_headers = extra.items,
+        });
+        defer req.deinit();
+        errdefer {
+            if (req.connection) |connection| connection.closing = true;
+        }
+        try req.sendBodiless();
+        var response = try req.receiveHead(&.{});
+        const status = @intFromEnum(response.head.status);
+        if (status < 200 or status >= 300) {
+            if (req.connection) |connection| connection.closing = true;
+            return null;
+        }
+        if (try readResponseBody(http.client.allocator, &response, id, sink, http.client.io)) |body| return body;
+    }
+    return null;
 }
 
 const HttpPostDone = union(enum) {
     posted: anyerror!?[]u8,
     timeout,
+    cancelled,
 };
 
 fn httpPostTask(http: *HttpTransport, body: []const u8, meta: RequestMeta, expected_id: ?i64) anyerror!?[]u8 {
     return httpPostUnwatched(http, body, meta, expected_id);
 }
 
-fn httpPostTimeout(io: Io) void {
-    io.sleep(.fromSeconds(15), .awake) catch {};
+fn httpPostTimeout(io: Io, seconds: i64) void {
+    io.sleep(.fromSeconds(seconds), .awake) catch {};
 }
 
 fn freeLateHttpPost(allocator: Allocator, result: anyerror!?[]u8) void {
@@ -248,43 +294,73 @@ fn freeLateHttpPost(allocator: Allocator, result: anyerror!?[]u8) void {
 fn cancelHttpPost(select: *Io.Select(HttpPostDone), allocator: Allocator) void {
     while (select.cancel()) |late| switch (late) {
         .posted => |result| freeLateHttpPost(allocator, result),
-        .timeout => {},
+        .timeout, .cancelled => {},
     };
 }
 
-/// Race network I/O against a hard deadline. Cancellation unwinds the request,
-/// whose errdefer poisons the connection so a timed-out socket is never pooled.
+pub const PostOptions = struct {
+    /// Stop when the user cancels the turn (error.McpCancelled).
+    watch_cancel: bool = true,
+    timeout_s: i64 = 15,
+};
+
+/// Race network I/O against a hard deadline and the user's cancel.
+/// Cancellation unwinds the request, whose errdefer poisons the connection so
+/// a timed-out socket is never pooled.
 pub fn post(http: *HttpTransport, body: []const u8, meta: RequestMeta, expected_id: ?i64) !?[]u8 {
-    var done_buf: [2]HttpPostDone = undefined;
+    return postWith(http, body, meta, expected_id, .{});
+}
+
+pub fn postWith(http: *HttpTransport, body: []const u8, meta: RequestMeta, expected_id: ?i64, opts: PostOptions) !?[]u8 {
+    var done_buf: [3]HttpPostDone = undefined;
     var select: Io.Select(HttpPostDone) = .init(http.client.io, &done_buf);
     select.concurrent(.posted, httpPostTask, .{ http, body, meta, expected_id }) catch
         return error.McpRequestTimedOut;
-    select.concurrent(.timeout, httpPostTimeout, .{http.client.io}) catch {
+    var watch_done = std.atomic.Value(bool).init(false);
+    defer watch_done.store(true, .release);
+    if (opts.watch_cancel) select.concurrent(.cancelled, @import("mcp_wait.zig").watchCancel, .{ http.client.io, &watch_done }) catch {};
+    select.concurrent(.timeout, httpPostTimeout, .{ http.client.io, opts.timeout_s }) catch {
         const only = select.await() catch |err| {
             cancelHttpPost(&select, http.client.allocator);
             return err;
         };
-        select.cancelDiscard();
-        return only.posted;
+        cancelHttpPost(&select, http.client.allocator);
+        return switch (only) {
+            .posted => |result| result,
+            .timeout => error.McpRequestTimedOut,
+            .cancelled => error.McpCancelled,
+        };
     };
 
     const first = select.await() catch |err| {
         cancelHttpPost(&select, http.client.allocator);
         return err;
     };
+    watch_done.store(true, .release);
     switch (first) {
         .posted => |result| {
-            select.cancelDiscard();
+            cancelHttpPost(&select, http.client.allocator);
             return result;
         },
         .timeout => {
-            while (select.cancel()) |late| switch (late) {
-                .posted => |result| freeLateHttpPost(http.client.allocator, result),
-                .timeout => {},
-            };
+            cancelHttpPost(&select, http.client.allocator);
             return error.McpRequestTimedOut;
         },
+        .cancelled => {
+            cancelHttpPost(&select, http.client.allocator);
+            return error.McpCancelled;
+        },
     }
+}
+
+/// Tell a legacy session to stop request `id`. Best effort: bounded, and the
+/// turn's cancel flag (still set) must not abort this send.
+pub fn notifyCancelled(http: *HttpTransport, protocol_version: []const u8, id: i64) void {
+    var buf: [256]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    const line = mcp_notify.cancelledLine(fba.allocator(), id) catch return;
+    const reply = postWith(http, line, .{ .protocol_version = protocol_version, .method = "notifications/cancelled", .modern = false }, null, .{ .watch_cancel = false, .timeout_s = 3 }) catch return;
+    if (reply) |bytes| http.client.allocator.free(bytes);
 }
 
 /// A probe reply: the raw status and (if any) body, on ANY status — unlike
@@ -332,7 +408,7 @@ fn probeUnwatched(http: *HttpTransport, body: []const u8, meta: RequestMeta) !Pr
         if (req.connection) |connection| connection.closing = true;
     }
 
-    return .{ .status = status, .body = try readResponseBody(http.client.allocator, &response, null) };
+    return .{ .status = status, .body = try readResponseBody(http.client.allocator, &response, null, null, http.client.io) };
 }
 
 fn decompressWindow(gpa: Allocator, encoding: std.http.ContentEncoding) ![]u8 {
@@ -346,7 +422,7 @@ fn decompressWindow(gpa: Allocator, encoding: std.http.ContentEncoding) ![]u8 {
 
 /// Decode the HTTP body, honoring Content-Encoding (gzip/deflate/zstd).
 /// Callers used to omit Accept-Encoding so catalogs crossed the wire raw.
-fn readResponseBody(gpa: Allocator, response: *std.http.Client.Response, expected_id: ?i64) !?[]u8 {
+fn readResponseBody(gpa: Allocator, response: *std.http.Client.Response, expected_id: ?i64, notes: ?*mcp_notify.Sink, io: Io) !?[]u8 {
     if (response.head.content_length == 0) return null;
     const is_sse = if (response.head.content_type) |content_type|
         std.ascii.startsWithIgnoreCase(content_type, "text/event-stream")
@@ -357,7 +433,7 @@ fn readResponseBody(gpa: Allocator, response: *std.http.Client.Response, expecte
     var transfer_buf: [4096]u8 = undefined;
     var decompress: std.http.Decompress = undefined;
     const reader = response.readerDecompressing(&transfer_buf, &decompress, window);
-    if (is_sse) return readSseResponse(gpa, reader, expected_id);
+    if (is_sse) return readSseResponse(gpa, reader, expected_id, notes, io);
 
     const response_buf = try gpa.alloc(u8, max_http_response);
     errdefer gpa.free(response_buf);
@@ -405,7 +481,7 @@ pub fn probe(http: *HttpTransport, body: []const u8, meta: RequestMeta) !ProbeRe
     var select: Io.Select(ProbeDone) = .init(http.client.io, &done_buf);
     select.concurrent(.probed, probeTask, .{ http, body, meta }) catch
         return error.McpRequestTimedOut;
-    select.concurrent(.timeout, httpPostTimeout, .{http.client.io}) catch {
+    select.concurrent(.timeout, httpPostTimeout, .{ http.client.io, 15 }) catch {
         const only = select.await() catch |err| {
             cancelProbe(&select, http.client.allocator);
             return err;

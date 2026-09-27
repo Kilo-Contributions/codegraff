@@ -14,6 +14,8 @@ const mcp_http = @import("mcp_http.zig");
 const mcp_protocol = @import("mcp_protocol.zig");
 const mcp_stdio = @import("mcp_stdio.zig");
 const mcp_teardown = @import("mcp_teardown.zig");
+const mcp_notify = @import("mcp_notify.zig");
+const mcp_wait = @import("mcp_wait.zig");
 
 const legacy_protocol = mcp_protocol.legacy_protocol;
 const modern_protocol = mcp_protocol.modern_protocol;
@@ -53,7 +55,15 @@ pub const Server = struct {
     /// Borrowed `tools/call` JSON while `request` is in flight; used to accept
     /// read-only Computer Use `get_app_state` elicitation (#768).
     elicit_source: []const u8 = "",
+    /// Notifications seen while waiting: stale catalog, SSE resume point.
+    notes: mcp_notify.Sink = .{},
 };
+
+/// Point the notification sink at this server (after `transport` is set).
+pub fn bindNotes(server: *Server) void {
+    server.notes.server = server.name;
+    if (server.transport == .http) server.transport.http.notes = &server.notes;
+}
 
 pub fn deinitServer(server: *Server, io: Io, budget: mcp_teardown.Budget) void {
     finishInitialized(server);
@@ -139,7 +149,7 @@ fn stdioRequestBounded(server: *Server, a: Allocator, io: Io, params: []const u8
 
 /// A handshake round trip, bounded when the caller supplied an Io and the
 /// transport is stdio. HTTP is already bounded by the client's own timeouts.
-fn handshakeRequest(server: *Server, a: Allocator, bound_io: ?Io, params: []const u8, method: []const u8) !Value {
+pub fn handshakeRequest(server: *Server, a: Allocator, bound_io: ?Io, params: []const u8, method: []const u8) !Value {
     if (bound_io) |io| if (server.transport == .stdio) return stdioRequestBounded(server, a, io, params, method);
     return request(server, a, params, method, null);
 }
@@ -181,27 +191,33 @@ pub fn request(server: *Server, response_alloc: Allocator, params: []const u8, m
     const id = server.next_id;
     server.next_id += 1;
     const modern = server.era == .modern;
-    const body = try mcp_protocol.buildRequest(response_alloc, id, method, params, modern);
+    const built = try mcp_protocol.buildRequest(response_alloc, id, method, params, modern);
+    // A tool call carries a progress token so the server may report progress.
+    const body = if (std.mem.eql(u8, method, "tools/call")) try mcp_notify.withProgressToken(response_alloc, built, id) else built;
 
     switch (server.transport) {
         .stdio => |*stdio| {
             try mcp_stdio.writeRequest(&stdio.stdin_writer.interface, body);
-
-            const r = &stdio.stdout_reader.interface;
-            while (true) {
-                const line = try mcp_stdio.takeLine(r);
-                if (try mcp_elicitation.replyStdio(&stdio.stdin_writer.interface, response_alloc, line, server.elicit_source)) continue;
-                if (mcp_http.matchingResponse(response_alloc, line, id)) |parsed| return parsed;
-            }
+            return mcp_wait.awaitStdio(.{
+                .writer = &stdio.stdin_writer.interface,
+                .reader = &stdio.stdout_reader.interface,
+                .sink = &server.notes,
+                .elicit_source = server.elicit_source,
+            }, stdio.stdout_reader.io, response_alloc, id);
         },
         .http => |*http| {
             const protocol_version = if (modern) modern_protocol else if (std.mem.eql(u8, method, "initialize")) legacy_protocol else server.protocol_version;
-            const response_body = (try mcp_http.post(http, body, .{
+            const response_body = (mcp_http.post(http, body, .{
                 .protocol_version = protocol_version,
                 .method = method,
                 .name = name,
                 .modern = modern,
-            }, id)) orelse return error.BadMcpResponse;
+            }, id) catch |err| {
+                // A modern request is cancelled by dropping it; a legacy
+                // session is told which request to stop.
+                if (err == error.McpCancelled and !modern) mcp_http.notifyCancelled(http, server.protocol_version, id);
+                return err;
+            }) orelse return error.BadMcpResponse;
             defer http.client.allocator.free(response_body);
             return mcp_http.parseHttpResponse(response_alloc, response_body, id) orelse error.BadMcpResponse;
         },
