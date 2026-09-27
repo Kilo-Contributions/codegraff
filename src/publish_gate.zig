@@ -61,7 +61,7 @@ fn observe(self: *Agent, cmd: []const u8) !?ExecResult {
     if (!draft) {
         const review = @import("pr_claim_review.zig").review(self, target, command.flag("--base", "-B"), creating, ev.head_sha, ev.body, ev.head_status) catch |err|
             return .{ .text = if (err == error.ReviewTooLarge)
-                "PR publication preflight: claim review input exceeded its size limit (128 KiB committed source budget or 256 KiB review packet); write NOT performed. Narrow the change or provide smaller relevant evidence."
+                "PR publication preflight: the PR's own diff exceeds the claim review limit (128 KiB of changed hunks, 32 changed files, or a 256 KiB packet even with complete sources omitted); write NOT performed. Split the PR or keep it a draft. Large unchanged source around a small edit does not count toward this limit."
             else
                 "PR publication preflight: claim review could not establish readiness from the committed source and tests; write NOT performed. Keep a draft while evidence is unresolved.", .is_error = true };
         if (review.verdict != .supported) return .{ .text = try std.fmt.allocPrint(self.arena, "PR publication preflight: claim review is {s}: {s}. Write NOT performed; keep a draft or fix the unsupported claim and coverage.", .{ @tagName(review.verdict), review.reason }), .is_error = true };
