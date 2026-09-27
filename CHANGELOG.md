@@ -10,6 +10,39 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.8
+
+### Context and prompt cache
+
+- A mid-session edit to `AGENTS.md` / `HARNESS.md` / `CLAUDE.md`, or a UTC date rollover, reaches the model as one keyed `<context>` message before the next prompt instead of rewriting the cached system prompt. The update uses a role that outranks the stale prompt on each wire (developer on Responses, system on Chat Completions, user elsewhere). Compaction drops those messages and folds the latest values into the new system prompt, and a `/model` switch across wires keeps them. `/cache` shows hot-context updates. (#1333, ADR 0208)
+- After compaction, the handoff says the recent messages kept verbatim outrank the summary, so a stale "next step" in the summary no longer makes the model redo finished work. (#1286)
+
+### Pull requests
+
+- `/pr-acceptance` is removed. A run that published a draft PR completes as an unverified handoff ("Draft handoff — CI is not verified.") instead of stopping to ask for a command; a ready PR still needs passing current-head checks. (ADR 0120)
+- The ready-for-review claim review reserves every changed hunk before adding complete sources, keeps only the diffs when the packet would be too large, and reviews an oversized single-file diff (such as a new fixture) as a marked excerpt. A small edit in a large file no longer makes publication impossible. (#1341, #1343, #1345, #1337)
+- A local check that finished in the background resolves publication readiness, and checks are keyed by what they run, not how the command was spelled. (#1326, #1337)
+- The claim gate no longer blames an unrelated claim when an explicit `gh pr edit N` / `gh pr ready N` target can't be looked up: a different numbered PR claim does not block, a conservative refusal says what could not be resolved, and nobody is asked for a handoff. More `gh pr edit/close/comment/merge` options are recognized. (#1340, #1344)
+
+### Shell jobs
+
+- A finite command that outlives the foreground wait, or is started with `run_in_background`, stays awaitable: `action=output` with `wait_ms>0` waits for exit. Only server-like commands (dev servers, watchers, tunnels, followed logs) are parked as persistent. (#1324, #1349)
+- `rlm` says when a `sleep_ms` was capped and points to blocking waits.
+
+### ACP
+
+- The context meter uses the standard `usage_update` (`used`, `size`, and `cost` only when every call was priced) instead of a graff-only update. (#1290)
+- Clients that opt in get `compaction_update` (`in_progress`, then `completed` with the summary, `failed`, or `cancelled`) when the agent compacts.
+- An `ask_user` question the client returns without an answer is no longer reported as a user cancel. (#1322)
+
+### MCP
+
+- The MCP client follows `tools/list` pagination, refreshes on `list_changed` (including `subscriptions/listen`), relays `notifications/progress`, sends `notifications/cancelled` when a call is interrupted, answers input-required (MRTR) rounds, and resumes a Streamable HTTP stream with `Last-Event-ID`.
+
+### Constraints
+
+- `note_constraint` accepts a standing rule the user typed into an `ask_user` answer, under the same verbatim rule as the user's message. (#1342)
+
 ## v0.0.302.7
 
 ### Safety
