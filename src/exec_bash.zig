@@ -75,9 +75,10 @@ fn spawnFailText(gpa: Allocator, err: anyerror) ![]u8 {
         try std.fmt.allocPrint(gpa, "could not start background job ({t}) — run it in the foreground instead", .{err});
 }
 
-/// How a job got to the background: started there, or parked after the
-/// foreground wait as a server-like or a finite command (#1324).
-const Started = enum { background, server, finite };
+/// How a job got to the background: started there as a server or as a
+/// finite command (#1349), or parked after the foreground wait as a
+/// server-like or a finite command (#1324).
+const Started = enum { background, background_finite, server, finite };
 
 fn startedText(gpa: Allocator, id: u64, cmd: []const u8, ssh: bool, how: Started, wait_s: u64, partial: []const u8) ![]u8 {
     var aw: Io.Writer.Allocating = .init(gpa);
@@ -88,6 +89,8 @@ fn startedText(gpa: Allocator, id: u64, cmd: []const u8, ssh: bool, how: Started
         try w.print("Follow-up received while this was running; it was moved to the background so you can talk. Process is still running as job {d}. You are notified on exit — do not poll. action=output is a snapshot; action=kill stops it.", .{id});
     } else if (how == .server) {
         try w.print("Command exceeded the {d}s foreground wait and was automatically moved to the background. Process is still running as job {d}. You are notified on exit with the status and output — do not poll. action=output is a snapshot; leave it on /jobs or action=kill it.", .{ wait_s, id });
+    } else if (how == .background_finite) {
+        try w.print("Running in the background as job {d}. You are notified on exit with the status and output. To block until it finishes, call action=output id {d} with wait_ms>0 once; action=kill stops it.", .{ id, id });
     } else if (how == .finite) {
         try w.print("Command exceeded the {d}s foreground wait and was automatically moved to the background. Process is still running as job {d}. You are notified on exit with the status and output. To block until it finishes instead, call action=output id {d} with wait_ms>0 once; action=kill stops it.", .{ wait_s, id, id });
     } else {
@@ -264,6 +267,15 @@ test "an auto-parked finite command offers the wait-until-exit read (#1324)" {
     try std.testing.expect(std.mem.indexOf(u8, text, "persistent server") == null);
 }
 
+test "a finite command backgrounded on purpose offers the wait-until-exit read (#1349)" {
+    const gpa = std.testing.allocator;
+    const text = try startedText(gpa, 9, "cargo test", false, .background_finite, 0, "");
+    defer gpa.free(text);
+    try std.testing.expect(std.mem.indexOf(u8, text, "action=output id 9 with wait_ms>0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "persistent server") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "do not poll") == null);
+}
+
 test "persistent start text parks the server and forbids polling" {
     const gpa = std.testing.allocator;
     const text = try startedText(gpa, 446, "npm run dev", false, .background, 0, "");
@@ -360,6 +372,7 @@ fn execUnchecked(ctx: ToolCtx, call: tools.ToolCall) !ToolOutput {
     };
     const ssh = isSshCommand(cmd);
     const bg = tools.json_args.flag(input, "run_in_background");
+    const server_like = @import("job_class.zig").looksPersistent(cmd);
     if (bg or !ctx.from_sub) {
         var live = exec_bash_stream.Ctx{ .io = io };
         const job = jobs.spawnJobOpts(gpa, io, cmd, .{
@@ -367,11 +380,13 @@ fn execUnchecked(ctx: ToolCtx, call: tools.ToolCall) !ToolOutput {
             .stream = if (!ctx.from_sub and !bg) exec_bash_stream.emit else null,
             .stream_ctx = if (!ctx.from_sub and !bg) &live else null,
             .quiet = !bg, // foreground wait is not a /jobs event until auto-bg
-            .persistent = bg,
+            // #1349: only a server-like command is persistent; a finite one
+            // backgrounded on purpose keeps the wait-until-exit `action=output`.
+            .persistent = bg and server_like,
         }) catch |err| return .{ .text = try spawnFailText(gpa, err), .is_error = true };
         if (bg) {
             @import("subagent_interactive.zig").request(ctx);
-            return .{ .text = try startedText(gpa, job.id, job.cmd, ssh, .background, 0, ""), .pending = true };
+            return .{ .text = try startedText(gpa, job.id, job.cmd, ssh, if (server_like) .background else .background_finite, 0, ""), .pending = true };
         }
         const wait_ms = rootWaitMsFor(input, ctx.interactive_children);
         const waited = jobs.waitForeground(gpa, io, job.id, wait_ms) catch |err| return .{
@@ -387,7 +402,7 @@ fn execUnchecked(ctx: ToolCtx, call: tools.ToolCall) !ToolOutput {
                 defer gpa.free(r.output);
                 // #1324: only a server-like command parks as persistent; a
                 // finite one keeps the wait-until-exit `action=output`.
-                const server = @import("job_class.zig").looksPersistent(cmd);
+                const server = server_like;
                 if (server) jobs.markPersistent(io, r.id);
                 @import("subagent_interactive.zig").request(ctx);
                 break :blk .{ .text = try startedText(gpa, r.id, cmd, ssh, if (server) .server else .finite, wait_ms / 1000, r.output), .pending = true };

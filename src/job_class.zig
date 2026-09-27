@@ -6,7 +6,8 @@
 //! exit. Only commands that look like they keep running on purpose (dev
 //! servers, watchers, followed logs, foreground containers, tunnels) park as
 //! persistent now; everything else stays a finite job (ADR 0010 waits).
-//! `run_in_background` jobs are persistent by the caller's choice, not here.
+//! The same rule applies to `run_in_background` (#1349): a backgrounded
+//! `cargo test` stays awaitable; a backgrounded dev server is persistent.
 
 const std = @import("std");
 
