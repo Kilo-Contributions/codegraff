@@ -179,6 +179,7 @@ graff [flags]                 REPL
 graff -p "prompt"             one-shot (answer on stdout)
 graff login [codegraff|codex|kimi|xai|zai]
 graff key set <provider> <key>
+graff mcp add <url | @scope/pkg | uvx:pkg | json>   save + verify an MCP server
 graff mcp add <name> -- <cmd>
 graff learn <command>
 graff --schema

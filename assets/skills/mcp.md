@@ -10,39 +10,34 @@ only when you need field-level detail. Do the add here.
 
 ## Choreography
 
-1. Name the server (short, lowercase, no spaces). Infer from the URL or
-   package when the user did not pick one (`deepwiki`, `playwright`, …).
-2. Classify the entry:
-   - Remote / hosted: a `https://…/mcp` URL (Streamable HTTP). Prefer `/mcp`
-     over legacy `/sse`.
-   - Local / stdio: a `command` plus `args` (`npx -y @playwright/mcp`).
-3. Persist to the **project** `.mcp.json` (never the global file unless the
-   user said "every project"):
+1. Pass what the user gave you straight to `graff mcp add`. It infers the
+   name and transport, saves to the **project** `.mcp.json`, then connects
+   and lists the tools:
 
 ```sh
-graff mcp add <name> --url https://host/mcp
-graff mcp add <name> -- <command> [args...]
+graff mcp add https://mcp.deepwiki.com/mcp          # URL → HTTP, named "deepwiki"
+graff mcp add @playwright/mcp                       # npm package → npx -y
+graff mcp add uvx:mcp-server-fetch                  # Python package → uvx
+graff mcp add '{"mcpServers":{...}}'                # a pasted Claude/Cursor/VS Code block
 graff mcp add <name> --env KEY=VALUE -- <command> [args...]
 ```
 
-`edit_file` on `.mcp.json` is equally valid. Do not commit secrets; OAuth
-is `graff mcp login <name>`.
+   `--name <name>` overrides the inferred name. Never write the global file
+   unless the user said "every project". Do not put secrets in the chat.
 
-4. Connect **this** session. Editing the file does not attach tools to the
-   running harness. Ask the user to run one of:
+2. Read the result line:
+   - `✓ <name> works: N tool(s) — …`: done.
+   - `needs sign-in: run graff mcp login <name>`: ask the user to run it
+     (it opens a browser; you cannot finish it for them).
+   - `✗ saved <name>, but it did not connect (…): <hint>`: follow the hint
+     (install Node or uv, add `--env`, fix the package name), then re-run
+     the same `graff mcp add`.
 
-```
-/mcp add <name> --url <URL>
-/mcp add <name> <command> [args...]
-/mcp trust
-```
-
-Then `load_tool_schemas` with `server` set to that name (or the exact
-`mcp__<server>__<tool>` names) before calling anything.
-
-5. If the tools still do not appear after a restart: the command is not on
-   PATH, the URL is not HTTPS (localhost excepted), a token is missing, or
-   consent was declined. Fall back to native tools and keep going.
+3. Use it. When this session already connected its configured servers, a new
+   entry joins before your next request with no restart. Call
+   `load_tool_schemas` with `server` set to the name (or the exact
+   `mcp__<server>__<tool>` names) before calling anything. If startup consent
+   was declined, the user runs `/mcp trust` first.
 
 ## DeepWiki and Mobbin
 
@@ -60,11 +55,9 @@ webfetch DeepWiki pages; use those tools once loaded.
 
 User: "using the MCP skill, add this MCP: https://mcp.deepwiki.com/mcp"
 
-- `graff mcp add deepwiki --url https://mcp.deepwiki.com/mcp`
-- Ask them to `/mcp add deepwiki --url https://mcp.deepwiki.com/mcp` so this
-  session can `load_tool_schemas` `server=deepwiki`.
+- `graff mcp add https://mcp.deepwiki.com/mcp`
+- `load_tool_schemas` with `server=deepwiki`, then use it.
 
 User: "add playwright MCP"
 
-- `graff mcp add playwright -- npx -y @playwright/mcp`
-- Then `/mcp add playwright npx -y @playwright/mcp`.
+- `graff mcp add @playwright/mcp`
