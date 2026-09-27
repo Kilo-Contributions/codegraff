@@ -31,12 +31,15 @@ const chat_sse_body =
     "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" ++
     "data: [DONE]\n\n";
 
+const stop_line = "GRAFF-TEST-STOP";
+
 /// Reads one request head and body; true when it is a POST.
 fn readRequest(reader: *std.Io.net.Stream.Reader) !bool {
     var content_length: usize = 0;
     var post: ?bool = null;
     while (true) {
         const line = (try reader.interface.takeDelimiter('\n')) orelse return error.EndOfStream;
+        if (post == null and std.mem.eql(u8, std.mem.trimEnd(u8, line, "\r"), stop_line)) return error.Stop;
         if (post == null) post = std.mem.startsWith(u8, line, "POST ");
         if (line.len == 0 or (line.len == 1 and line[0] == '\r')) break;
         if (std.ascii.startsWithIgnoreCase(line, "content-length:")) {
@@ -54,9 +57,13 @@ pub fn serveReplies(io: Io, server: *std.Io.net.Server, replies: []const Reply, 
         defer conn.close(io);
         var read_buf: [16 * 1024]u8 = undefined;
         var reader = std.Io.net.Stream.Reader.init(conn, io, &read_buf);
-        const post = readRequest(&reader) catch {
-            _ = accepted.fetchAdd(1, .acq_rel);
-            return;
+        // Only releaseAccept's stop line ends the server. A connection that
+        // closes before sending a request is not an agent request: ignoring it
+        // used to END the server, so one aborted or probing connection
+        // starved every request after it (a CI-only #753 flake).
+        const post = readRequest(&reader) catch |err| {
+            if (err == error.Stop) return;
+            continue;
         };
         // #1303: every agent request is a POST. Another local process can
         // probe any fresh loopback listener (seen: `HEAD /` for `localhost`
@@ -93,7 +100,12 @@ fn serveInvalidTls(io: Io, server: *std.Io.net.Server, count: usize, accepted: *
 
 pub fn releaseAccept(io: Io, server: *std.Io.net.Server) void {
     const address = server.socket.address;
-    if (std.Io.net.IpAddress.connect(&address, io, .{ .mode = .stream })) |stream| stream.close(io) else |_| {}
+    const stream = std.Io.net.IpAddress.connect(&address, io, .{ .mode = .stream }) catch return;
+    defer stream.close(io);
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.net.Stream.Writer.init(stream, io, &buf);
+    writer.interface.writeAll(stop_line ++ "\n") catch {};
+    writer.interface.flush() catch {};
 }
 
 pub fn provider(url: []const u8) Provider {
