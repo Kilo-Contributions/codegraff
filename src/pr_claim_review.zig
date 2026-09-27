@@ -45,6 +45,20 @@ fn repoField(self: *Agent, target: evidence.Target, field: []const u8, query: []
     return evidence.capture(self.gpa, self.io, self.arena, selected, args);
 }
 
+const max_packet = 256 * 1024;
+
+fn reviewPacket(arena: std.mem.Allocator, repo: []const u8, base: []const u8, input: inputs.Input, local: []const @import("pr_local_checks.zig").State.Receipt, ci: @import("pr_publish.zig").HeadStatus, pr_checks: []const u8) ![]u8 {
+    return std.json.Stringify.valueAlloc(arena, .{
+        .repository = repo,
+        .base_tip = base,
+        .committed_inputs = input,
+        .observed_local_checks = local,
+        .local_check_limit = if (local.len == 0) "no local check receipt was observed for this repository in the current or restored session" else "receipts are bounded observations; head_after and tracked_tree_clean_after do not prove immutable execution",
+        .observed_head_ci = @tagName(ci),
+        .observed_pr_checks = pr_checks,
+    }, .{});
+}
+
 pub fn review(self: *Agent, target: evidence.Target, base_name: ?[]const u8, creating: bool, head: []const u8, body: []const u8, ci: @import("pr_publish.zig").HeadStatus) !Result {
     const repo = if (creating) try repoField(self, target, "url", ".url") else blk: {
         const pr = @import("artifact_repository.zig").pullRequest(self.arena, self.io, target) orelse return error.UnknownRepository;
@@ -66,16 +80,15 @@ pub fn review(self: *Agent, target: evidence.Target, base_name: ?[]const u8, cre
     for (self.publication_checks.recent.items) |receipt| {
         if (std.mem.eql(u8, receipt.repository, repository)) try local.append(self.arena, receipt);
     }
-    const packet = try std.json.Stringify.valueAlloc(self.arena, .{
-        .repository = repo,
-        .base_tip = base,
-        .committed_inputs = input,
-        .observed_local_checks = local.items,
-        .local_check_limit = if (local.items.len == 0) "no local check receipt was observed for this repository in the current or restored session" else "receipts are bounded observations; head_after and tracked_tree_clean_after do not prove immutable execution",
-        .observed_head_ci = @tagName(ci),
-        .observed_pr_checks = pr_checks,
-    }, .{});
-    if (packet.len > 256 * 1024) return error.ReviewTooLarge;
+    var committed = input;
+    var packet = try reviewPacket(self.arena, repo, base, committed, local.items, ci, pr_checks);
+    // #1345: complete sources are context, not the change. Keep the diffs and
+    // mark the rest omitted before refusing a review for its size.
+    if (packet.len > max_packet) {
+        committed = try inputs.diffsOnly(self.arena, input);
+        packet = try reviewPacket(self.arena, repo, base, committed, local.items, ci, pr_checks);
+    }
+    if (packet.len > max_packet) return error.ReviewTooLarge;
     var hash: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(packet, &hash, .{});
     const key = std.fmt.bytesToHex(hash, .lower);
