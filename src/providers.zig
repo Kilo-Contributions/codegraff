@@ -19,7 +19,6 @@ const router_catalog = @import("router_catalog.zig");
 const serde = @import("serde.zig");
 const saveModel = serde.saveModel;
 const messages_mod = @import("messages.zig");
-const textMessage = messages_mod.textMessage;
 const engine_sink = @import("engine_sink.zig"); // #429: the failover notice is a typed event, not a print
 const fallback_config = @import("fallback_config.zig");
 const util = @import("util.zig");
@@ -55,23 +54,6 @@ pub fn extractText(arena: Allocator, m: Value) []const u8 {
     return b.items;
 }
 
-/// Rebuild the history as text-only user/assistant turns in `to_kind`'s format
-/// — used to carry the conversation across a wire-format switch. Tool-call
-/// structure is dropped (the dialogue is what matters for continuity).
-fn translateHistory(arena: Allocator, msgs: *std.json.Array, to_kind: Provider.Kind) void {
-    _ = to_kind; // textMessage's {role,content:string} shape is valid in all 3 formats
-    var out = std.json.Array.init(arena);
-    for (msgs.items) |m| {
-        if (m != .object) continue;
-        const role = if (m.object.get("role")) |r| (if (r == .string) r.string else "") else "";
-        if (!std.mem.eql(u8, role, "user") and !std.mem.eql(u8, role, "assistant")) continue;
-        const text = std.mem.trim(u8, extractText(arena, m), " \t\r\n");
-        if (text.len == 0) continue;
-        out.append(@import("session_wake.zig").copyOrigin(arena, m, textMessage(arena, role, text) catch continue) catch continue) catch {};
-    }
-    msgs.* = out;
-}
-
 pub fn applyProviderInner(root: *Agent, arena: Allocator, p: Provider, persist: bool) ![]const u8 {
     const same_format = root.provider.kind == p.kind;
     const same_selection = same_format and
@@ -82,7 +64,7 @@ pub fn applyProviderInner(root: *Agent, arena: Allocator, p: Provider, persist: 
     var note: []const u8 = "context kept";
     if (!same_format) {
         if (root.keep_context) {
-            translateHistory(arena, &root.messages, p.kind);
+            @import("history_translate.zig").translateHistory(arena, &root.messages, p.kind);
             note = "context translated & kept";
         } else {
             root.messages = std.json.Array.init(arena);
@@ -462,29 +444,6 @@ test "nextFallbackProvider: rotates after the failed provider and skips missing 
     try std.testing.expect(nextFallbackProvider(sparse, "openai", &exhausted, &allow_all) == null);
     const allow_codegraff = [_][]const u8{"codegraff"};
     try std.testing.expectEqualStrings("codegraff", nextFallbackProvider(sparse, "codex", &tried_codex, &allow_codegraff).?.id);
-}
-
-test "translateHistory: flattens to {role,content:string}, keeps user/assistant, drops the rest" {
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    const a = arena_state.allocator();
-    const mk = struct {
-        fn p(al: Allocator, s: []const u8) Value {
-            return std.json.parseFromSliceLeaky(Value, al, s, .{}) catch unreachable;
-        }
-    }.p;
-    var msgs = std.json.Array.init(a);
-    try msgs.append(mk(a, "{\"role\":\"system\",\"content\":\"sys\"}")); // dropped
-    try msgs.append(mk(a, "{\"role\":\"user\",\"content\":\"hello\"}")); // kept
-    try msgs.append(mk(a, "{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}")); // flattened
-    try msgs.append(mk(a, "{\"role\":\"tool\",\"content\":\"result\"}")); // dropped
-    try msgs.append(mk(a, "{\"role\":\"user\",\"content\":\"   \"}")); // whitespace-only -> dropped
-    translateHistory(a, &msgs, .anthropic);
-    try std.testing.expectEqual(@as(usize, 2), msgs.items.len);
-    try std.testing.expectEqualStrings("user", msgs.items[0].object.get("role").?.string);
-    try std.testing.expectEqualStrings("hello", msgs.items[0].object.get("content").?.string);
-    try std.testing.expectEqualStrings("assistant", msgs.items[1].object.get("role").?.string);
-    try std.testing.expectEqualStrings("hi", msgs.items[1].object.get("content").?.string);
 }
 
 test "applyProviderInner preserves the server meter on an exact model re-selection" {

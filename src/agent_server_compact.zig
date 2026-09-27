@@ -168,6 +168,7 @@ fn installItems(self: *Agent, items: []const std.json.Value) !void {
     self.goal_note_fp = 0;
     self.history_rewrites +%= 1;
     session_prunes +|= 1; // manual compaction is not an A/B treatment exposure
+    @import("hot_context.zig").afterCompact(self); // #1333: the opaque item replaced history; fold latest keys
 }
 
 pub fn installCompactedOutput(self: *Agent, response: std.json.Value) !usize {

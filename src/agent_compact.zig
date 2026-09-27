@@ -243,6 +243,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     // prefix, so mutating the system prompt here costs nothing extra. Root-only
     // and once per session — prompts.noteSessionCompacted owns both rules.
     prompts.noteSessionCompacted(self, self.arena);
+    @import("hot_context.zig").afterCompact(self); // #1333: fold latest keys into the new prefix
     // A/B control arm doing work (#compact-ab): a client-side summary on the
     // Responses wire. Manual /compact on codex lands here too — correctly
     // labeled, since it IS a client compaction.
@@ -580,6 +581,7 @@ pub fn compactOrRecover(self: *Agent, trim_on_fail: bool) void {
             // call site rather than inside emergencyTrim() because the direct
             // emergencyTrim callers drive partially-initialized test agents.
             prompts.noteSessionCompacted(self, self.arena);
+            @import("hot_context.zig").afterCompact(self);
             if (main_mod.json_mode)
                 self.emit(.{ .type = "compact", .ok = true, .trimmed = dropped })
             else

@@ -234,6 +234,7 @@ record only when you need the evidence or the edge cases.
 | [0205](0205-subagent-progress-is-standard-tool-content.md) | By default a subagent streams its work onto the parent tool call as content-only `tool_call_update` rows (rolling log + `_meta["graff/subagent"]`); the draft child-session stream only when both sides opt in; `GRAFF_ACP_SUBAGENT_PROGRESS=0` turns it off. |
 | [0206](0206-acp-v2-preview-behind-a-gate.md) | ACP v2 draft shapes behind `GRAFF_ACP_V2=1` plus a client `protocolVersion` >= 2; v1 stays the default and unchanged. Prompt is acknowledged with `messageId` on insertion, the outcome travels as `state_update`. |
 | [0207](0207-jev-file-retrieval-is-not-economical.md) | Rejected: no Jev file retrieval (`locate` tool, Jev rerank after `codedb context`, or jevgrep). A full Jev scan found answer files best (80% in top 5 vs 38% for `codedb context`) but costs one request per file and grows with repo size; `codedb` stays the retrieval path. |
+| [0208](0208-hot-context-keyed-updates-keep-the-prefix.md) | A mid-session instruction-file edit or date rollover is appended before the next prompt as a keyed `<context>` message (developer role on Responses, system on Chat Completions, user elsewhere), and the system prompt is left as is. Compaction drops those messages and folds the latest values into the new system prompt. |
 
 ## When to write one
 

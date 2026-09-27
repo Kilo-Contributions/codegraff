@@ -36,7 +36,18 @@ pub const Snap = struct {
     last_bust: Bust = .none,
     last_read: u64 = 0,
     last_write: u64 = 0,
+    /// #1333: keyed context updates delivered without touching the prefix.
+    hot_updates: u32 = 0,
+    last_hot: []const u8 = "",
 };
+
+/// A hot-context key update (static label). Not a bust: the prefix is kept.
+pub fn noteHot(key: []const u8) void {
+    acquire();
+    defer release();
+    snap.hot_updates += 1;
+    snap.last_hot = key;
+}
 
 var lock: std.atomic.Value(bool) = .init(false);
 var snap: Snap = .{};
@@ -200,6 +211,7 @@ pub fn render(w: *Io.Writer) !void {
         }
         try w.writeByte('\n');
         try w.print("  busts      {d}  last: {s}\n", .{ s.busts, bustLabel(s.last_bust) });
+        if (s.hot_updates > 0) try w.print("  hot ctx    {d} update{s}  last: {s}  (appended; prefix {s})\n", .{ s.hot_updates, if (s.hot_updates == 1) "" else "s", s.last_hot, if (s.same) "kept" else "changed" });
     }
     try w.print("  catalog    {s}\n", .{if (mcp_schema_gate.g_stable_catalog) "stable (loads append tail only)" else "mutating (a load rewrites tools JSON)"});
     if (g_xai and g_aff_len > 0) {
@@ -312,6 +324,20 @@ test "render stays content-free and names remaining levers" {
     try std.testing.expect(!contains(text, "SECRET-PROMPT"));
     try std.testing.expect(!contains(text, "/Users/me"));
     try std.testing.expect(!contains(text, "bash"));
+}
+
+test "hot context updates show in render with the prefix kept" {
+    reset();
+    defer reset();
+    noteRequest(std.testing.io, "system", "[]");
+    noteHot("core/instructions");
+    noteRequest(std.testing.io, "system", "[]");
+    var buf: [2048]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try render(&w);
+    const text = w.buffered();
+    try std.testing.expect(contains(text, "hot ctx    1 update  last: core/instructions  (appended; prefix kept)"));
+    try std.testing.expectEqual(@as(u32, 0), snapshot().busts);
 }
 
 test "render shows xAI affinity without prompt text" {
