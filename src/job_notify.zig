@@ -100,6 +100,31 @@ pub fn record(io: Io, id: u64, exit_code: ?u8, killed: bool, cmd: []const u8, id
     publish(io, id, exit_code, killed);
 }
 
+/// Exit codes of recently finished jobs, kept after their notice is read or
+/// dismissed, so the PR check ledger can resolve a check that finished in the
+/// background however its exit reached the model (#1326). Killed and
+/// idle-stopped jobs record no code.
+const Exit = struct { id: u64, code: ?u8 };
+const exits_cap = 64;
+var exits: [exits_cap]Exit = undefined;
+var exits_len: usize = 0;
+var exits_next: usize = 0;
+
+fn noteExitLocked(id: u64, code: ?u8) void {
+    exits[exits_next] = .{ .id = id, .code = code };
+    exits_next = (exits_next + 1) % exits_cap;
+    exits_len = @min(exits_len + 1, exits_cap);
+}
+
+/// The exit code of a recently finished job; null when unknown, killed, or
+/// still running.
+pub fn exitCode(io: Io, id: u64) ?u8 {
+    mu.lockUncancelable(io);
+    defer mu.unlock(io);
+    for (exits[0..exits_len]) |e| if (e.id == id) return e.code;
+    return null;
+}
+
 /// Queue while holding the jobs mutex, in the same critical section as done.
 /// Consumers hold jobs -> notification mutex in that same order. Never call
 /// a frontend here: it may re-enter jobOutput.
@@ -118,6 +143,7 @@ pub fn queue(io: Io, id: u64, exit_code: ?u8, killed: bool, cmd: []const u8, idl
         .output_truncated = tail.truncated,
     };
     mu.lockUncancelable(io);
+    noteExitLocked(id, if (killed or idle) null else exit_code);
     var queued = false;
     if (dismissedIndex(id)) |i| {
         std.mem.copyForwards(u64, dismissed[i .. dismissed_len - 1], dismissed[i + 1 .. dismissed_len]);
