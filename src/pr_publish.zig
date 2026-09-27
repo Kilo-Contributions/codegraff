@@ -217,7 +217,8 @@ pub fn decide(draft: bool, ev: Evidence) Decision {
 pub fn reason(decision: Decision, ev: Evidence) []const u8 {
     return switch (decision) {
         .allow => "ready",
-        .draft_only => "create as a draft, or disclose the base-reproduced failure in the PR body",
+        // #1197: disclosure explains a blocker; it never permits non-draft publication (ADR 0120).
+        .draft_only => "create as a draft: a failure that also happens on the base explains the blocker but does not permit non-draft publication",
         .block => if (claimOverreach(ev.body, ev.coverage))
             "behavior claim overreaches the committed regression (helper/one-separator coverage is not the changed dispatch path)"
         else if (!hasVerificationSection(ev.body))
@@ -225,7 +226,7 @@ pub fn reason(decision: Decision, ev: Evidence) []const u8 {
         else if (ev.head_status == .pending)
             "non-draft publication blocked: the exact head SHA still has a pending branch run"
         else if (ev.head_status == .failed)
-            "non-draft publication blocked: the exact head SHA has an unexplained failed branch run"
+            "non-draft publication blocked: the exact head SHA has a failed branch run; a failure that also happens on the base still blocks, so fix it or publish a draft"
         else
             "non-draft publication blocked: head readiness is unresolved",
     };
