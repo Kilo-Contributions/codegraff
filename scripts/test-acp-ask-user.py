@@ -4,6 +4,8 @@
 - no capability: the tool returns at once and the turn ends (no freeze)
 - clientCapabilities.elicitation.form: standard elicitation/create, answer flows back
 - _meta["graff/askUser"]: graff's gui_ask_user + session/answer (apps/native)
+- a `questions: [{question, options: [{label}]}]` call still carries its
+  question and choices to the form (#1308)
 """
 import json, os, queue, shutil, signal, subprocess, sys, tempfile, threading, time
 from pathlib import Path
@@ -24,13 +26,17 @@ def tool_results(model):
 
 
 def run(binary, case):
+    arguments = {'question': QUESTION, 'options': ['npm', 'GitHub release']}
+    if case == 'questions':
+        arguments = {'questions': [{'question': QUESTION, 'options': [{'label': 'npm'}, {'label': 'GitHub release'}]}]}
     model = ScriptedModel([
-        {'tool': 'ask_user', 'arguments': {'question': QUESTION, 'options': ['npm', 'GitHub release']}},
+        {'tool': 'ask_user', 'arguments': arguments},
         {'text': 'Done.'},
     ])
     caps = {
         'none': {'fs': {}},
         'elicitation': {'fs': {}, 'elicitation': {'form': {}}},
+        'questions': {'fs': {}, 'elicitation': {'form': {}}},
         'legacy': {'fs': {}, '_meta': {'graff/askUser': True}},
     }[case]
     # Windows keeps the killed process's files open briefly; do not fail on cleanup.
@@ -72,7 +78,7 @@ def run(binary, case):
                 if m.get('id') == id and 'method' not in m:
                     return m
                 if m.get('method') == 'elicitation/create':
-                    assert case == 'elicitation', m
+                    assert case in ('elicitation', 'questions'), m
                     params = m['params']
                     assert params['mode'] == 'form' and params['message'] == QUESTION, params
                     answer = params['requestedSchema']['properties']['answer']
@@ -118,5 +124,5 @@ def run(binary, case):
 
 if __name__ == '__main__':
     binary = str(Path(sys.argv[1] if len(sys.argv) > 1 else 'zig-out/bin/graff').resolve())
-    for case in ['none', 'elicitation', 'legacy']:
+    for case in ['none', 'elicitation', 'questions', 'legacy']:
         run(binary, case)
