@@ -35,7 +35,8 @@ pub const legacy_poll_ms: u64 = 30_000;
 /// * `> 0` on a finite job — wait until exit (or Esc), always `wait_cap_ms`.
 ///   Mid-range "safety timeouts" used to bounce the model every few minutes
 ///   (#640 / ADR 0010).
-/// * `> 0` on a persistent server (`run_in_background` or auto-parked) —
+/// * `> 0` on a persistent server (a server-like command, backgrounded or
+///   auto-parked; job_class.looksPersistent) —
 ///   snapshot now. `wait_ms` is ignored so a 15s/30s poll cannot hold the
 ///   turn (ADR 0152). Unread bytes stay in the job until a later snapshot.
 pub fn resolveDeadline(wait_ms: u64) u64 {

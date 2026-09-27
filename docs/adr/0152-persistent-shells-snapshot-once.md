@@ -30,3 +30,13 @@ A `wait_ms: 30000` call on a server returns now, not in 30s, so the 15s
 pulse cannot fire. A model that wanted "sleep 1s then snapshot startup
 logs" no longer can through `wait_ms`; it snapshots now and reads again
 later if needed. Finite CI watches are unchanged.
+
+## Amendment (#1324, 2026-09-27)
+
+Auto-parking a command no longer makes it persistent by itself. Finite
+commands that outlive the foreground wait (`cargo test`, `sleep 45`, a CI
+watch) were snapshotting on `action=output wait_ms>0`, contradicting the
+tool contract. `job_class.looksPersistent` now decides: dev servers,
+watchers, followed logs, foreground `compose up` and tunnels park as
+persistent; every other auto-parked command stays finite and keeps the
+ADR 0010 wait. `run_in_background` jobs remain persistent.
