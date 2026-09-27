@@ -22,8 +22,9 @@ pub const Evidence = struct {
     body: []const u8 = "",
     coverage: Coverage = .{},
     /// `gh pr create`: the push that preceded it started the head's runs, so a
-    /// pending run is evidence not yet arrived, not a failure (#1189). The
-    /// verification obligation armed at publication still gates completion.
+    /// run still pending after the gate's reread is evidence not yet arrived,
+    /// not a failure (#1189). The obligation armed at publication still gates
+    /// completion; a run that fails during the reread is refused (#1179).
     creating: bool = false,
 };
 
