@@ -379,6 +379,20 @@ pub fn checkoutClaimed(gpa: Allocator, io: Io, arena: Allocator, home: []const u
     return lease.duplicateOwner(peers.records, peers.probes, identity.id, self) != null;
 }
 
+/// Take this checkout's startup claim, or report that a peer holds it (#1200).
+fn startupContended(gpa: Allocator, io: Io, arena: Allocator, home: []const u8) bool {
+    if (home.len == 0) return false;
+    const identity = lease.currentIdentity(gpa, io, arena);
+    if (identity.id.len == 0 or identity.kind == .not_git) return false;
+    const dir_path = std.fmt.allocPrint(arena, "{s}/{s}", .{ home, presence.registry_subdir }) catch return false;
+    Io.Dir.cwd().createDirPath(io, dir_path) catch return false;
+    var dir = Io.Dir.cwd().openDir(io, dir_path, .{}) catch return false;
+    defer dir.close(io);
+    var buf: [48]u8 = undefined;
+    const claim = @import("startup_claim.zig");
+    return claim.heldByOther(io, dir, claim.fileName(&buf, identity.id), @import("util.zig").unixMs(io));
+}
+
 pub fn enter(io: Io, arena: Allocator, wt: Workspace) !void {
     if (builtin.os.tag == .windows) return error.Unsupported;
     const z = try arena.dupeSentinel(u8, wt.path, 0);
@@ -394,14 +408,9 @@ pub fn enter(io: Io, arena: Allocator, wt: Workspace) !void {
 pub fn maybeAutoIsolate(gpa: Allocator, io: Io, arena: Allocator, home: []const u8, already_isolated: bool, lean: bool) AutoIsolate {
     if (builtin.os.tag == .windows) return .skip;
     const is_git = isGitAt(gpa, io, ".");
-    const claimed = checkoutClaimed(gpa, io, arena, home);
-    if (!shouldAutoIsolate(.{
-        .already_isolated = already_isolated,
-        .lean = lean,
-        .is_git = is_git,
-        .claimed = claimed,
-        .windows = false,
-    })) return .skip;
+    const eligible = shouldAutoIsolate(.{ .already_isolated = already_isolated, .lean = lean, .is_git = is_git, .claimed = true, .windows = false });
+    // #1200: a live peer, or one that started with us and has not announced yet.
+    if (!eligible or !(checkoutClaimed(gpa, io, arena, home) or startupContended(gpa, io, arena, home))) return .skip;
     var raw: [4]u8 = undefined;
     io.random(&raw);
     const nonce = std.fmt.bytesToHex(raw, .lower);
