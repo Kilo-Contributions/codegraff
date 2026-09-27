@@ -4,6 +4,7 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const Value = std.json.Value;
 const app = @import("mcp_server_app.zig");
+const modern = @import("mcp_server_modern.zig");
 const runner = @import("process_runner.zig");
 
 pub const Task = struct {
@@ -37,32 +38,48 @@ pub const Server = struct {
             return;
         }
         const params = request.object.get("params") orelse Value.null;
-        if (std.mem.eql(u8, method, "ping")) return reply(out, id, struct {}{});
-        if (std.mem.eql(u8, method, "initialize")) {
+        // 2026-07-28: the version rides each request's _meta; no handshake.
+        const era: ?[]const u8 = modern.requestedVersion(params);
+        if (era) |requested| if (!modern.isSupported(requested)) return modern.unsupported(out, id, requested);
+        const apps = if (era != null) app.supported(try modern.capabilityParams(a, params)) else self.apps;
+        const answer: Answer = .{ .a = a, .out = out, .id = id, .modern = era != null };
+        if (std.mem.eql(u8, method, "ping")) return answer.send(struct {}{}, false);
+        if (std.mem.eql(u8, method, "server/discover")) {
+            if (era == null) return failure(out, id, -32601, "Method not found");
+            return answer.send(.{
+                .supportedVersions = modern.supported_versions,
+                .capabilities = capabilities,
+                .serverInfo = server_info,
+                .instructions = instructions,
+            }, true);
+        }
+        if (era == null and std.mem.eql(u8, method, "initialize")) {
             if (self.initialized) return failure(out, id, -32600, "Already initialized");
             const requested = string(params, "protocolVersion") orelse
                 return failure(out, id, -32602, "protocolVersion is required");
-            const protocol = if (std.mem.eql(u8, requested, "2024-11-05") or std.mem.eql(u8, requested, "2025-03-26") or std.mem.eql(u8, requested, "2025-06-18")) requested else "2025-06-18";
+            const protocol = for (modern.supported_versions[1..]) |v| {
+                if (std.mem.eql(u8, requested, v)) break v;
+            } else modern.supported_versions[1];
             self.apps = app.supported(params);
             self.initialized = true;
             return reply(out, id, .{
                 .protocolVersion = protocol,
-                .capabilities = .{ .tools = struct {}{}, .resources = struct {}{} },
-                .serverInfo = .{ .name = "codegraff", .title = "Codegraff", .version = @import("main.zig").harness_version },
-                .instructions = "Delegate a small, self-contained task with run_task. Tasks run serially in the server launch directory with fresh context. Include scope and acceptance criteria; inspect the result and changes before integrating.",
+                .capabilities = capabilities,
+                .serverInfo = server_info,
+                .instructions = instructions,
             });
         }
-        if (!self.ready) return failure(out, id, -32000, "Initialize the server first");
+        if (era == null and !self.ready) return failure(out, id, -32000, "Initialize the server first");
         if (std.mem.eql(u8, method, "tools/list")) {
-            const catalog = try app.catalog(a, tool_catalog, self.apps);
-            return reply(out, id, catalog);
+            const catalog = try app.catalog(a, tool_catalog, apps);
+            return answer.send(catalog, true);
         }
-        if (std.mem.eql(u8, method, "resources/list")) return reply(out, id, .{ .resources = .{app.resource} });
-        if (std.mem.eql(u8, method, "resources/templates/list")) return reply(out, id, .{ .resourceTemplates = [0]struct {}{} });
+        if (std.mem.eql(u8, method, "resources/list")) return answer.send(.{ .resources = .{app.resource} }, true);
+        if (std.mem.eql(u8, method, "resources/templates/list")) return answer.send(.{ .resourceTemplates = [0]struct {}{} }, true);
         if (std.mem.eql(u8, method, "resources/read")) {
             const uri = string(params, "uri") orelse return failure(out, id, -32602, "Resource URI is required");
             if (!std.mem.eql(u8, uri, app.uri)) return failure(out, id, -32002, "Resource not found");
-            return reply(out, id, app.contents());
+            return answer.send(app.contents(), true);
         }
         if (!std.mem.eql(u8, method, "tools/call")) return failure(out, id, -32601, "Method not found");
         const name = string(params, "name") orelse return failure(out, id, -32602, "Tool name is required");
@@ -73,13 +90,30 @@ pub const Server = struct {
             .text = try std.fmt.allocPrint(a, "Task could not run: {s}", .{@errorName(err)}),
             .isError = true,
         };
-        return reply(out, id, .{ .content = .{.{ .type = "text", .text = result.text }}, .isError = result.isError, .structuredContent = .{
+        return answer.send(.{ .content = .{.{ .type = "text", .text = result.text }}, .isError = result.isError, .structuredContent = .{
             .text = result.text,
             .status = if (result.timed_out) "timed_out" else if (result.cancelled) "cancelled" else if (result.isError) "failed" else "completed",
             .output_truncated = result.output_truncated,
             .timeout_seconds = task.timeout_seconds,
             .max_model_calls = task.max_model_calls,
-        } });
+        } }, false);
+    }
+};
+
+const capabilities = .{ .tools = struct {}{}, .resources = struct {}{} };
+const server_info = .{ .name = "codegraff", .title = "Codegraff", .version = @import("main.zig").harness_version };
+const instructions = "Delegate a small, self-contained task with run_task. Tasks run serially in the server launch directory with fresh context. Include scope and acceptance criteria; inspect the result and changes before integrating.";
+
+/// One reply, in the requesting era's shape.
+const Answer = struct {
+    a: Allocator,
+    out: *Io.Writer,
+    id: Value,
+    modern: bool,
+
+    fn send(self: Answer, result: anytype, cacheable: bool) !void {
+        if (!self.modern) return reply(self.out, self.id, result);
+        return reply(self.out, self.id, try modern.envelope(self.a, result, cacheable));
     }
 };
 

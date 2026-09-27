@@ -177,6 +177,7 @@ fn promptTurn(d: *Dispatch, arena: Allocator, w: *Io.Writer, req: proto.Request)
         break :blk d.session_id orelse "";
     };
     if (d.bind_session) |bind| bind(d.ctx, sid);
+    @import("acp_citations.zig").endTurn(sid); // a failed turn must not leave a marker open
     const config_before = configOptions(d, arena) catch |err| return turnError(d, w, req, err);
     const workspace_before = acp_workspace.snapshot(d.workspace, arena);
     const text = try flattenPrompt(arena, if (obj) |o| o.get("prompt") else null);

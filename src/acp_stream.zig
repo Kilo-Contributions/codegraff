@@ -52,7 +52,11 @@ pub fn titleFor(name: []const u8, input: Value) []const u8 {
     return name;
 }
 
-pub fn writeThought(w: *Io.Writer, session_id: []const u8, text: []const u8) !void {
+pub fn writeThought(w: *Io.Writer, session_id: []const u8, raw: []const u8) !void {
+    const cleaned = @import("acp_citations.zig").filter(session_id, .thought, raw);
+    defer cleaned.deinit();
+    const text = cleaned.text;
+    if (text.len == 0 and raw.len != 0) return; // the chunk was all marker
     if (v2.on()) return v2.writeChunk(w, session_id, true, text);
     try proto.writeNotification(w, "session/update", .{
         .sessionId = session_id,
