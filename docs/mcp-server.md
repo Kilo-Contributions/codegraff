@@ -56,7 +56,11 @@ the Host and Origin headers, and exposes only `/mcp`. There is no public bind
 or browser CORS access. The embedded UI is delivered through the MCP host.
 
 POST accepts JSON-RPC and returns JSON, or HTTP 202 for accepted notifications.
-Initialization returns `Mcp-Session-Id`; later calls must send it. DELETE closes
+A 2026-07-28 request is stateless: no session, and its `MCP-Protocol-Version`,
+`Mcp-Method` and `Mcp-Name` headers must match the body (HTTP 400 with
+`-32020` otherwise; an unknown version gets HTTP 400 with `-32022`). For the
+older revisions, initialization returns `Mcp-Session-Id`; later calls must
+send it. DELETE closes
 a session, and GET returns 405 (no SSE stream). The service retains up to 64
 client handshakes, replacing the oldest on overflow; an evicted client gets
 404 and must initialize again. Each client negotiates Apps support separately.
@@ -159,12 +163,19 @@ See the [MCP Apps specification](https://github.com/modelcontextprotocol/ext-app
 
 ## Lifecycle and limits
 
-The server implements MCP initialization, `ping`, `tools/list`, and
-`tools/call`, `resources/list`, `resources/read`, and an empty
-`resources/templates/list` using newline-delimited JSON-RPC on stdin/stdout. It supports
-protocol revisions 2024-11-05, 2025-03-26, and 2025-06-18, negotiating the
-last of these for an unknown revision. See the
-[MCP lifecycle specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle).
+The server implements `server/discover`, `ping`, `tools/list`, `tools/call`,
+`resources/list`, `resources/read`, and an empty `resources/templates/list`
+using newline-delimited JSON-RPC on stdin/stdout.
+
+- **2026-07-28** (stateless): each request carries its version and client
+  capabilities in `_meta`; no `initialize`. Results carry `resultType`, and
+  discovery, list and read results add `ttlMs` and `cacheScope: "public"`.
+  An unknown version gets `-32022` with `supported` and `requested`.
+- **2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05**: the `initialize`
+  handshake, negotiating 2025-11-25 for an unknown revision. `server/discover`
+  without `_meta` is method-not-found, so dual-era clients fall back.
+
+See the [MCP specification](https://modelcontextprotocol.io/specification).
 
 Calls run serially. This initial adapter has no progress stream, live
 cancellation, session continuation, or background task handle.
