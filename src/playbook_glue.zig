@@ -94,6 +94,12 @@ fn exactUserSegment(user: []const u8, text: []const u8) bool {
     return false;
 }
 
+/// The user text this turn's constraints must quote: a named work task, else
+/// the latest user message. ask_user answers are keyed to it (#1342).
+pub fn currentUserText(agent: *const Agent) []const u8 {
+    return if (agent.named_work_task.len > 0) agent.named_work_task else messages.latestUserText(agent.messages.items);
+}
+
 /// The `note_constraint` meta-tool handler (root-only; the spec lives in
 /// root_specs, so a subagent is never even told it exists). Append-only by
 /// construction — see this file's header.
@@ -108,12 +114,11 @@ pub fn noteConstraint(agent: *Agent, input: std.json.Value) ExecResult {
     };
     if (text.len == 0) return .{ .text = "note_constraint needs non-empty exact text from the current user message", .is_error = true };
     if (text.len > playbook.max_text) return .{ .text = "constraint NOT recorded: exact text exceeds the 240-byte project-constraint limit; ask the user for a shorter standing rule", .is_error = true };
-    const current_user = if (agent.named_work_task.len > 0)
-        agent.named_work_task
-    else
-        messages.latestUserText(agent.messages.items);
-    if (current_user.len == 0 or !exactUserSegment(current_user, text)) return .{
-        .text = "constraint NOT recorded: `text` must be a complete verbatim sentence or line from the current user message; do not drop task qualifiers, exceptions, or other limiting language",
+    const current_user = currentUserText(agent);
+    const answers = @import("ask_user_answers.zig");
+    const from_user = current_user.len > 0 and exactUserSegment(current_user, text);
+    if (!from_user and !answers.any(answers.turnKey(current_user), text, exactUserSegment)) return .{
+        .text = "constraint NOT recorded: `text` must be a complete verbatim sentence or line from the current user message or the user's ask_user answer this turn; do not drop task qualifiers, exceptions, or other limiting language",
         .is_error = true,
     };
     var prov_buf: [32]u8 = undefined;
@@ -143,7 +148,7 @@ pub fn noteConstraint(agent: *Agent, input: std.json.Value) ExecResult {
         "Durable state is saved, but the active prompt could not be refreshed. Do not claim activation; retry note_constraint to reconcile it.";
     // ADR 0021: the user just said this. Echoing "constraint recorded" is
     // machine state, not progress. The tool result still tells the model.
-    return .{ .text = std.fmt.allocPrint(agent.arena, "recorded project constraint {s}: \"{s}\" (scope=project, origin=current user message at {d}). It rides later root, subagent, workflow, and pipeline briefs in this project. Undo without knowing the id via `/never rm <unique text>` or review with `/never`. {s}", .{ r.id, text, now, effect }) catch "project constraint recorded; active prompt refresh status unavailable", .is_error = false };
+    return .{ .text = std.fmt.allocPrint(agent.arena, "recorded project constraint {s}: \"{s}\" (scope=project, origin={s} at {d}). It rides later root, subagent, workflow, and pipeline briefs in this project. Undo without knowing the id via `/never rm <unique text>` or review with `/never`. {s}", .{ r.id, text, if (from_user) "current user message" else "user's ask_user answer", now, effect }) catch "project constraint recorded; active prompt refresh status unavailable", .is_error = false };
 }
 
 /// Privacy-safe operational trace: id + success, never constraint text (#644).

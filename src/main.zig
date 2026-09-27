@@ -53,7 +53,7 @@ test {
     _ = .{ @import("http2_buffered.zig"), @import("clipboard_native.zig"), @import("clipboard_edge_tests.zig"), @import("clipboard_failure_tests.zig"), @import("process_runner_clipboard_tests.zig") };
     _ = @import("server_orphan.zig");
     _ = @import("repo_transaction.zig");
-    _ = .{ @import("pr_command.zig"), @import("pr_evidence.zig"), @import("pr_verify.zig"), @import("pr_acceptance.zig"), @import("artifact_repository.zig"), @import("artifact_claim_ledger.zig"), @import("artifact_claim_store.zig"), @import("artifact_claim_stale.zig") };
+    _ = .{ @import("pr_command.zig"), @import("pr_evidence.zig"), @import("pr_verify.zig"), @import("artifact_repository.zig"), @import("artifact_claim_ledger.zig"), @import("artifact_claim_store.zig"), @import("artifact_claim_stale.zig"), @import("pr_review_input_tests.zig"), @import("artifact_claim_unresolved.zig") };
     _ = @import("argstream_citation_tests.zig"); // unit_tests' root is main.zig only, so reference every split-out module or its tests silently never run
     _ = @import("codex_node_repl.zig");
     _ = pricing;
@@ -579,7 +579,7 @@ test { // ── Unit tests (`zig build test`): pull in tests from imported modu
     _ = .{ @import("http2_pool.zig"), @import("agent_stream_h2.zig"), @import("agent_stream_h2_transport_test.zig") }; // h2 stream path, and graff's request/response contract over the pinned http-zig
     _ = @import("tui_acp_updates.zig");
     _ = @import("acp_preauth.zig"); // credential-free ACP loop must stay in the test root
-    _ = .{ @import("acp_protocol.zig"), @import("acp_v2.zig"), @import("acp_v2_prompt.zig"), @import("acp_elicit.zig"), @import("mcp_notify.zig"), @import("mcp_wait.zig"), @import("mcp_pages.zig"), @import("mcp_mrtr.zig"), @import("ask_user_args.zig"), @import("acp_engine_test.zig"), @import("subagent_mimo_tests.zig"), @import("mimo_effort_tests.zig"), @import("gateway_picker_catalog.zig") };
+    _ = .{ @import("acp_protocol.zig"), @import("acp_v2.zig"), @import("acp_v2_prompt.zig"), @import("acp_elicit.zig"), @import("hot_context.zig"), @import("history_translate.zig"), @import("mcp_notify.zig"), @import("mcp_wait.zig"), @import("mcp_pages.zig"), @import("mcp_mrtr.zig"), @import("ask_user_args.zig"), @import("acp_engine_test.zig"), @import("subagent_mimo_tests.zig"), @import("mimo_effort_tests.zig"), @import("gateway_picker_catalog.zig"), @import("ask_user_answers.zig"), @import("job_class.zig"), @import("startup_claim.zig") };
     _ = @import("task_outcome.zig"); // goal-outcome telemetry events
     _ = @import("learn_delete.zig"); // #303: its tests were dead until listed here
     _ = .{ @import("additional_tests.zig"), @import("req_stats.zig"), @import("exact_reply.zig"), @import("rlm_order_tests.zig"), @import("async_tool_policy.zig"), @import("agent_async_tools.zig"), @import("request_usage_attempts.zig"), @import("learn_formal.zig") };

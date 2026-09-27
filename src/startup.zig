@@ -109,6 +109,7 @@ pub fn buildSystemPrompt(
         if (trimmed.len == 0) continue;
         const capped = @import("context_limits.zig").applyAlloc(arena, trimmed, @import("context_limits.zig").agents_md_bytes);
         sys_normal = try std.fmt.allocPrint(arena, "{s}\n\n# Project instructions (from {s})\n{s}", .{ base_prompt, fname, capped });
+        @import("hot_context.zig").noteBaked(fname, capped); // #1333: later edits arrive as keyed updates
         if (!quiet) {
             try out.print("loaded project instructions from {s} ({d} bytes)\n", .{ fname, trimmed.len });
             try out.flush();

@@ -10,9 +10,51 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
-## Unreleased
+## v0.0.302.8
+
+### Context and prompt cache
+
+- A mid-session edit to `AGENTS.md` / `HARNESS.md` / `CLAUDE.md`, or a UTC date rollover, reaches the model as one keyed `<context>` message before the next prompt instead of rewriting the cached system prompt. The update uses a role that outranks the stale prompt on each wire (developer on Responses, system on Chat Completions, user elsewhere). Compaction drops those messages and folds the latest values into the new system prompt, and a `/model` switch across wires keeps them. `/cache` shows hot-context updates. (#1333, ADR 0208)
+- After compaction, the handoff says the recent messages kept verbatim outrank the summary, so a stale "next step" in the summary no longer makes the model redo finished work. (#1286)
+
+### Pull requests
+
+- `/pr-acceptance` is removed. A run that published a draft PR completes as an unverified handoff ("Draft handoff — CI is not verified.") instead of stopping to ask for a command; a ready PR still needs passing current-head checks. (ADR 0120)
+- The ready-for-review claim review reserves every changed hunk before adding complete sources, keeps only the diffs when the packet would be too large, and reviews an oversized single-file diff (such as a new fixture) as a marked excerpt. A small edit in a large file no longer makes publication impossible. (#1341, #1343, #1345, #1337)
+- A local check that finished in the background resolves publication readiness, and checks are keyed by what they run, not how the command was spelled. (#1326, #1337)
+- A non-draft `gh pr create` right after pushing no longer falls back to a draft: the head's pending run is re-read for up to a minute, a run that fails meanwhile still refuses, and a create still pending afterwards proceeds while completion waits for the checks. (#1189)
+- Publication refusals state the rule plainly: a failure that also happens on the base still blocks non-draft publication; disclosure explains it but is not a way around it. (#1197)
+- The claim gate no longer blames an unrelated claim when an explicit `gh pr edit N` / `gh pr ready N` target can't be looked up: a different numbered PR claim does not block, a conservative refusal says what could not be resolved, and nobody is asked for a handoff. More `gh pr edit/close/comment/merge` options are recognized. (#1340, #1344)
+
+### Shell jobs
+
+- A finite command that outlives the foreground wait, or is started with `run_in_background`, stays awaitable: `action=output` with `wait_ms>0` waits for exit. Only server-like commands (dev servers, watchers, tunnels, followed logs) are parked as persistent. (#1324, #1349)
+- `rlm` says when a `sleep_ms` was capped and points to blocking waits.
+
+### Sessions
+
+- Two sessions started at the same moment in one checkout no longer both stay on the primary working tree: a startup claim taken before deciding makes the second one isolate into its own worktree. (#1200)
+
+### ACP
+
+- The context meter uses the standard `usage_update` (`used`, `size`, and `cost` only when every call was priced) instead of a graff-only update. (#1290)
+- Clients that opt in get `compaction_update` (`in_progress`, then `completed` with the summary, `failed`, or `cancelled`) when the agent compacts.
+- An `ask_user` question the client returns without an answer is no longer reported as a user cancel. (#1322)
+
+### MCP
+
+- The MCP client follows `tools/list` pagination, refreshes on `list_changed` (including `subscriptions/listen`), relays `notifications/progress`, sends `notifications/cancelled` when a call is interrupted, answers input-required (MRTR) rounds, and resumes a Streamable HTTP stream with `Last-Event-ID`.
+
+### Constraints
+
+- `note_constraint` accepts a standing rule the user typed into an `ask_user` answer, under the same verbatim rule as the user's message. (#1342)
+
+## v0.0.302.7
 
 ### Safety
+
+- Functions an `rlm` script calls on the host (`bash`, `write_file`, `edit_file`, MCP tools) go through the same approval prompt, plan mode and subagent destructive-git block as direct tool calls; before, only the outer `rlm` call was gated.
+- Tool shells honor an explicit `git -c core.editor=…` or `-c sequence.editor=…` again, so scripted rebases and rewords work, and a user's own Git askpass helper is kept.
 
 - Shell commands called by the tool's current name (`shell`) now go through the approval prompt, the subagent destructive-git block and the publish gate. Only the legacy `bash` name was gated before; plan mode was already enforced separately. (#1292)
 - Commands the agent runs no longer inherit provider API keys from graff's environment, so `env` in a tool call can't copy them into transcripts. `GRAFF_TOOL_ENV_PASS` keeps named variables when a tool genuinely needs one. (#1267)
@@ -28,6 +70,10 @@ current is part of cutting a release.
 - Images read with `read_file` are downscaled to the provider-safe size, or refused with a reason, instead of failing the next request. (#1272)
 - When a reasoning model spends its whole reply reasoning without answering, the retry asks for brief thinking and a direct answer instead of repeating the identical request. (#1293)
 - Retry backoff adds bounded jitter so parallel workers don't retry in lockstep; a server's Retry-After is never shortened. (#1274)
+- Tool calls an OpenAI-compatible server leaves in the reply text as `<tool_call><function=…>` markup now run. A block runs only when it is wrapped in `<tool_call>`, sits outside backtick code, names a tool the request offered and its parameters parse; anything else stays text. The markup still appears while the reply streams. (#1247)
+- `ask_user` reads the question when a model names it `prompt` or `message`, sends a `questions` list, or JSON-encodes its arguments, instead of showing "(no question)" above the options. A call with no question text goes back to the model as an error. (#1308)
+- A router model whose provider has no credential reports the missing key instead of "unknown --model", and a transient macOS Keychain failure is retried once. (#1296)
+- The MCP result-shape cache is freed at session end. (#1196)
 
 ### ACP
 
@@ -35,6 +81,16 @@ current is part of cutting a release.
 - Permission requests include the tool's kind, input, locations and diff, so clients show what is being approved. (#1289)
 - A mistyped slash command is answered locally with a suggestion ("did you mean /resume?") in the terminal, the TUI and over ACP, instead of going to the model. (#1275)
 - An image block's `uri` no longer becomes a bare line in the prompt text.
+- Provider citation markers from hosted web search are stripped from ACP answer and reasoning text, including markers split across streamed chunks and replayed history.
+- `session/new` and `session/load` wait at most 3 seconds for the MCP servers a client passes. A server whose host cannot be resolved or reached keeps connecting in the background and joins on a later request, instead of holding the reply until DNS gives up. (#1291)
+
+### MCP
+
+- `graff mcp serve` answers MCP 2026-07-28 clients (`server/discover`, versioned requests without `initialize`) beside the legacy handshake.
+
+### Pull requests
+
+- Publication review charges changed hunks with committed context instead of whole unchanged head files against its budget, and loads test roots before broad workflow files.
 
 ## v0.0.302.6
 

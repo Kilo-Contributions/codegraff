@@ -91,6 +91,9 @@ pub const LiveTurn = struct {
         sink.output_lock = &output_lock;
         sink.output_io = self.root.io;
         sink.step = .{ .ctx = self, .run = stepMeter };
+        var compaction: @import("acp_compaction.zig").Sink = .{ .out = self.out, .output_lock = &output_lock, .io = self.root.io, .session_id = self.session_id, .events = &sink.writer };
+        @import("acp_compaction.zig").install(&compaction);
+        defer @import("acp_compaction.zig").uninstall();
         // Standard progress on the parent tool call by default; the draft
         // child-session stream only when both sides opted in (ADR 0194/0205).
         const draft = self.dispatch != null and self.dispatch.?.subagents and self.dispatch.?.draft_subagents_enabled;

@@ -43,9 +43,11 @@ pub fn arm(agent: *Agent, target: evidence.Target, match_local: bool) !void {
     agent.pr_verification = .pending;
 }
 
-pub fn decision(receipt: evidence.Receipt, local: ?[]const u8, draft_authorized: bool) State {
+/// A draft PR is an honest handoff: completion proceeds, and the result is
+/// labeled unverified (agent_tools). A ready PR still needs passing checks.
+pub fn decision(receipt: evidence.Receipt, local: ?[]const u8) State {
     if (local) |sha| if (!std.mem.eql(u8, sha, receipt.head)) return .pending;
-    if (receipt.draft) return if (draft_authorized) .draft else .pending;
+    if (receipt.draft) return .draft;
     return if (receipt.status == .passed) .passed else .pending;
 }
 
@@ -83,7 +85,7 @@ fn deferred(a: A, receipt: evidence.Receipt, local: ?[]const u8) ![]const u8 {
     // flooding the model context when repositories have hundreds of checks.
     var limit = @min(receipt.checks_json.len, 16 * 1024);
     while (limit < receipt.checks_json.len and limit > 0 and receipt.checks_json[limit] & 0xc0 == 0x80) limit -= 1;
-    return std.fmt.allocPrint(a, "completion deferred: current-head PR verification is {s}. Remote head: {s}. Observed checks: {s}{s}. Repeating attempt_completion or completing todos cannot waive verification. Draft publication and base-branch failures do not waive verification. Only the user can authorize a draft-only scope with /pr-acceptance draft.", .{ reason, receipt.head, receipt.checks_json[0..limit], if (limit < receipt.checks_json.len) " [truncated; full checks retained in local receipt]" else "" });
+    return std.fmt.allocPrint(a, "completion deferred: current-head PR verification is {s}. Remote head: {s}. Observed checks: {s}{s}. Repeating attempt_completion or completing todos cannot waive verification. Base-branch failures do not waive verification; to hand off without verified CI, leave the PR as a draft.", .{ reason, receipt.head, receipt.checks_json[0..limit], if (limit < receipt.checks_json.len) " [truncated; full checks retained in local receipt]" else "" });
 }
 
 pub fn completionGate(agent: *Agent) ?[]const u8 {
@@ -100,10 +102,10 @@ pub fn completionGate(agent: *Agent) ?[]const u8 {
     for (records) |record| {
         if (!std.mem.eql(u8, record.session, @import("http_headers.zig").sessionId(agent.io))) continue;
         observe(agent, record, null, null) catch return "completion deferred: unable to retire previous PR observation";
-        const receipt = evidence.pr(agent.gpa, agent.io, agent.arena, record.target) catch return "completion deferred: current-head PR checks could not be observed. Local tests and completed todos are not remote CI evidence; retry the lookup. Draft-only completion requires explicit user authorization.";
+        const receipt = evidence.pr(agent.gpa, agent.io, agent.arena, record.target) catch return "completion deferred: current-head PR checks could not be observed. Local tests and completed todos are not remote CI evidence; retry the lookup.";
         const local = if (record.match_local) evidence.localHead(agent.gpa, agent.io, agent.arena, record.target) catch return "completion deferred: local publication head could not be resolved" else null;
         observe(agent, record, receipt, local) catch return "completion deferred: unable to retain current PR observation";
-        switch (decision(receipt, local, @import("pr_acceptance.zig").allowsDraft(agent))) {
+        switch (decision(receipt, local)) {
             .pending, .unused => return deferred(agent.arena, receipt, local) catch "completion deferred: unable to describe PR verification evidence",
             .draft => result = .draft,
             .passed => {},
@@ -115,10 +117,13 @@ pub fn completionGate(agent: *Agent) ?[]const u8 {
 
 test "#853 a changed head or a second completion attempt cannot reuse a passing receipt" {
     const receipt = evidence.Receipt{ .head = "new", .status = .passed };
-    try std.testing.expectEqual(State.pending, decision(receipt, "old", false));
-    try std.testing.expectEqual(State.passed, decision(receipt, "new", false));
-    for (0..2) |_| try std.testing.expectEqual(State.pending, decision(.{ .head = "new", .status = .pending }, "new", false));
-    try std.testing.expectEqual(State.draft, decision(.{ .head = "new", .status = .failed, .draft = true }, "new", true));
+    try std.testing.expectEqual(State.pending, decision(receipt, "old"));
+    try std.testing.expectEqual(State.passed, decision(receipt, "new"));
+    for (0..2) |_| try std.testing.expectEqual(State.pending, decision(.{ .head = "new", .status = .pending }, "new"));
+    // A draft completes as an unverified handoff without a user command; a
+    // stale local head still defers it.
+    try std.testing.expectEqual(State.draft, decision(.{ .head = "new", .status = .failed, .draft = true }, "new"));
+    try std.testing.expectEqual(State.pending, decision(.{ .head = "new", .status = .failed, .draft = true }, "old"));
 }
 
 pub fn hasObligation(agent: *const Agent) bool {
@@ -148,12 +153,11 @@ test "PR obligations isolate conversations and cannot use restored IDs as paths"
     try std.testing.expectEqualStrings(std.fs.path.dirname(first).?, std.fs.path.dirname(hostile).?);
 }
 
-test "draft PRs require user-authorized scope even with passing or base-failing checks" {
+test "a draft PR is a draft handoff whatever its checks; a ready PR still needs a pass" {
     for ([_]@import("pr_publish.zig").HeadStatus{ .passed, .failed, .pending, .none, .unknown }) |status| {
         const receipt = evidence.Receipt{ .head = "new", .status = status, .draft = true };
-        try std.testing.expectEqual(State.pending, decision(receipt, "new", false));
-        try std.testing.expectEqual(State.draft, decision(receipt, "new", true));
-        try std.testing.expectEqual(State.pending, decision(receipt, "old", true));
+        try std.testing.expectEqual(State.draft, decision(receipt, "new"));
+        try std.testing.expectEqual(State.pending, decision(receipt, "old"));
     }
-    try std.testing.expectEqual(State.pending, decision(.{ .head = "new", .status = .failed }, "new", true));
+    try std.testing.expectEqual(State.pending, decision(.{ .head = "new", .status = .failed }, "new"));
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real ACP user controls, publication and goal state against local-only fixtures."""
+"""Real ACP publication and goal state against local-only fixtures: a draft PR completes as an unverified handoff."""
 import argparse
 import json
 import os
@@ -32,10 +32,7 @@ def main():
         tool('todo_write', todos=[{'content': 'inspect exact-head CI', 'status': 'pending'}]),
         tool('bash', command='gh pr create --draft --title fixture --body-file notes.md'),
         tool('todo_write', todos=[{'content': 'provide draft handoff', 'status': 'completed'}]),
-        attempt, attempt, {'text': 'CI remains unresolved.'},
-        attempt,
-        tool('todo_write', todos=[{'content': 'provide another handoff', 'status': 'completed'}]),
-        attempt, {'text': 'New goal still requires verified CI.'},
+        attempt, {'text': 'Draft handoff.'},
     ])
     with tempfile.TemporaryDirectory(prefix='graff-pr-acp-') as temp:
         work = Path(temp)
@@ -85,35 +82,17 @@ def main():
                 return json.loads(current.read_text())['goal']
             prompt('/goal Deliver a PR with passing current-head CI')
             assert not model.requests, 'Slash goal command was sent to the model'
-            prompt('Run the publication fixture and complete the task.')
-            assert saved_goal()['status'] == 'active', saved_goal()
-            assert 'completion deferred: current-head PR verification' in json.dumps(model.requests[-1])
-            print('PASS ACP default: failed draft, replaced checklist, repeated completion leave the goal active', flush=True)
+            _, updates = prompt('Run the publication fixture and complete the task.')
+            assert saved_goal()['status'] == 'complete', saved_goal()
+            assert 'Draft handoff \u2014 CI is not verified.' in json.dumps(updates) or 'Draft handoff — CI is not verified.' in json.dumps(updates, ensure_ascii=False), updates
+            assert 'completion deferred' not in json.dumps(model.requests), 'a draft handoff was deferred'
+            print('PASS ACP default: a draft PR completes as a labeled unverified handoff with no user command', flush=True)
             if args.only_default:
                 return
             before = len(model.requests)
-            _, updates = prompt('/pr-acceptance draft')
-            assert len(model.requests) == before, 'Scope command was sent to the model'
-            assert 'draft handoff authorized' in json.dumps(updates), updates
-            prompt('Complete the explicitly authorized draft-only handoff.')
-            assert saved_goal()['status'] == 'complete', saved_goal()
-            print('PASS ACP explicit draft scope permits only the authorized goal to complete', flush=True)
-            prompt('/goal Deliver another verified PR')
-            prompt('Complete this new task.')
-            assert saved_goal()['status'] == 'active', saved_goal()
-            _, updates = prompt('/pr-acceptance')
-            assert 'PR acceptance: verified.' in json.dumps(updates), updates
-            print('PASS ACP new goal cannot reuse the prior draft scope', flush=True)
-            prompt('/save acceptance-fixture')
             prompt('/pr-acceptance draft')
-            prompt('/resume acceptance-fixture')
-            _, updates = prompt('/pr-acceptance')
-            assert 'PR acceptance: verified.' in json.dumps(updates), updates
-            prompt('/pr-acceptance draft')
-            prompt('/new')
-            _, updates = prompt('/pr-acceptance')
-            assert 'PR acceptance: verified.' in json.dumps(updates), updates
-            print('PASS ACP resume and new conversation reset draft-only scope', flush=True)
+            assert len(model.requests) == before, 'removed /pr-acceptance was sent to the model'
+            print('PASS ACP /pr-acceptance is gone and never reaches the model', flush=True)
         finally:
             if args.evidence:
                 args.evidence.mkdir(parents=True, exist_ok=True)

@@ -118,6 +118,8 @@ test "noAnswerText keeps cancel as cancel and never calls a lost question a canc
 
 fn finishAnswer(self: *Agent, raw: []const u8) !ExecResult {
     const answer = try self.arena.dupe(u8, raw);
+    // #1342: the answer is user-authored text note_constraint may record.
+    @import("ask_user_answers.zig").record(@import("ask_user_answers.zig").turnKey(@import("playbook_glue.zig").currentUserText(self)), answer);
     vision.stageGuiImageAttachment(self, answer);
     _ = vision_queue.retainReferenced(self, answer);
     // Pixels stay queued for flushPending after the text tool result. If the

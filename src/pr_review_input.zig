@@ -10,7 +10,7 @@ fn repositoryPath(arena: A, dir: []const u8, name: []const u8) ![]const u8 {
     return std.mem.trimStart(u8, path, "/");
 }
 
-pub const File = struct { path: []const u8, before: ?[]const u8, after: ?[]const u8, change: ?[]const u8 = null, after_omitted: bool = false };
+pub const File = struct { path: []const u8, before: ?[]const u8, after: ?[]const u8, change: ?[]const u8 = null, after_omitted: bool = false, change_truncated: bool = false };
 pub const Input = struct {
     version: u8 = 3,
     base: []const u8,
@@ -31,14 +31,45 @@ pub fn digest(arena: A, input: Input) ![64]u8 {
     return std.fmt.bytesToHex(value, .lower);
 }
 
+/// The same review with every complete source dropped: changed files keep
+/// only their committed diffs and supporting files are omitted (#1345). Used
+/// when the full packet would exceed its transport limit.
+pub fn diffsOnly(arena: A, input: Input) !Input {
+    var files: std.ArrayList(File) = .empty;
+    for (input.files) |file| {
+        if (file.change == null) continue;
+        var kept = file;
+        kept.after_omitted = kept.after_omitted or kept.after != null;
+        kept.after = null;
+        try files.append(arena, kept);
+    }
+    var out = input;
+    out.files = files.items;
+    out.support_omitted = true;
+    out.support_limit = "review packet exceeded 256 KiB; complete sources and supporting files omitted, committed diffs kept";
+    return out;
+}
+
 pub const max_files = 32;
+/// One file's diff beyond this keeps its start only (#1337): a new capture
+/// fixture is all added lines, and must not make the review impossible.
+pub const max_file_diff = 32 * 1024;
+
+fn truncateDiff(arena: A, change: []const u8) ![]const u8 {
+    var end: usize = max_file_diff;
+    while (end > 0 and change[end - 1] != '\n') end -= 1;
+    if (end == 0) end = max_file_diff;
+    while (end > 0 and !std.unicode.utf8ValidateSlice(change[0..end])) end -= 1;
+    return std.fmt.allocPrint(arena, "{s}[diff truncated: {d} of {d} bytes shown]\n", .{ change[0..end], end, change.len });
+}
+
 pub const max_bytes = 128 * 1024;
 
-fn capture(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
+pub fn capture(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
     return evidence.capture(gpa, io, arena, .{ .cwd = cwd, .selector = "" }, args);
 }
 
-fn raw(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
+pub fn raw(gpa: A, io: std.Io, arena: A, cwd: []const u8, args: []const []const u8) ![]const u8 {
     const runner = @import("process_runner.zig");
     const result = try runner.runCappedWithOptions(gpa, io, args, max_bytes + 1, 2048, 15_000, .{ .cwd = .{ .path = cwd } });
     defer gpa.free(result.stdout);
@@ -157,36 +188,54 @@ pub fn gather(gpa: A, io: std.Io, arena: A, cwd: []const u8, base: []const u8, h
     var paths = std.mem.splitScalar(u8, names, 0);
     var files: std.ArrayList(File) = .empty;
     var size = body.len;
+    // Reserve every changed hunk first (#1345): complete sources are optional
+    // context, so an early large file must not crowd out a later file's diff.
+    // Only the diffs themselves can make a review too large.
     while (paths.next()) |path| {
         if (path.len == 0) continue;
         if (files.items.len >= max_files) return error.ReviewTooLarge;
+        // A context diff carries the old lines; repeating the complete base
+        // blob would charge unchanged source twice and crowd out test evidence.
+        const full = raw(gpa, io, arena, cwd, &.{ "git", "diff", "--no-ext-diff", "--no-renames", "--unified=3", base, head, "--", path }) catch |err| blk: {
+            if (err != error.ReviewTooLarge) return err;
+            break :blk null; // over 128 KiB on its own
+        };
+        const truncated = full == null or full.?.len > max_file_diff;
+        const change = if (full) |d| (if (truncated) try truncateDiff(arena, d) else d) else "[diff truncated: this file's diff exceeds 128 KiB]\n";
+        if (size + change.len > max_bytes) return error.ReviewTooLarge;
+        size += change.len;
+        try files.append(arena, .{ .path = path, .before = null, .after = null, .change = change, .after_omitted = truncated, .change_truncated = truncated });
+    }
+    for (files.items) |*file| {
+        if (file.change_truncated) continue; // its excerpt is all the review gets
         var after_omitted = false;
-        const after = blob(gpa, io, arena, cwd, head, path) catch |err| blk: {
+        const after = blob(gpa, io, arena, cwd, head, file.path) catch |err| blk: {
             if (err != error.ReviewTooLarge) return err;
             after_omitted = true;
             break :blk null;
         };
         // In mixed changes, reserve room for source and test reachability
         // instead of repeating complete documentation pages.
-        if (after != null and has_source_change and std.mem.endsWith(u8, path, ".md")) after_omitted = true;
-        // A context diff carries the old lines; repeating the complete base
-        // blob would charge unchanged source twice and crowd out test evidence.
-        var change = try raw(gpa, io, arena, cwd, &.{ "git", "diff", "--no-ext-diff", "--no-renames", "--unified=3", base, head, "--", path });
-        if (size + change.len > max_bytes) return error.ReviewTooLarge;
+        if (after != null and has_source_change and std.mem.endsWith(u8, file.path, ".md")) after_omitted = true;
         if (after) |text| {
-            if (size + change.len + text.len > max_bytes) after_omitted = true;
+            if (size + text.len > max_bytes) after_omitted = true;
         }
         if (after_omitted) {
             // Preserve more committed context when it fits. Never label this
             // excerpt as the complete proposed-head source.
-            if (raw(gpa, io, arena, cwd, &.{ "git", "diff", "--no-ext-diff", "--no-renames", "--unified=20", base, head, "--", path })) |expanded| {
-                if (size + expanded.len <= max_bytes) change = expanded;
+            if (raw(gpa, io, arena, cwd, &.{ "git", "diff", "--no-ext-diff", "--no-renames", "--unified=20", base, head, "--", file.path })) |expanded| {
+                if (size - file.change.?.len + expanded.len <= max_bytes) {
+                    size = size - file.change.?.len + expanded.len;
+                    file.change = expanded;
+                }
             } else |err| {
                 if (err != error.ReviewTooLarge) return err;
             }
+        } else if (after) |text| {
+            size += text.len;
+            file.after = text;
         }
-        size += change.len + if (after_omitted) @as(usize, 0) else if (after) |text| text.len else 0;
-        try files.append(arena, .{ .path = path, .before = null, .after = if (after_omitted) null else after, .change = change, .after_omitted = after_omitted });
+        file.after_omitted = after_omitted;
     }
     if (files.items.len == 0) return error.NoChangedFiles;
     var support: Support = .{ .gpa = gpa, .io = io, .arena = arena, .cwd = cwd, .head = head, .files = &files, .size = &size, .seen = std.StringHashMap(void).init(arena) };
@@ -289,7 +338,9 @@ test "claim review budgets changed hunks instead of the complete base blob" {
     _ = try capture(gpa, io, a, cwd, &.{ "git", "add", "." });
     _ = try capture(gpa, io, a, cwd, &.{ "git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "oversized" });
     const large_head = try capture(gpa, io, a, cwd, &.{ "git", "rev-parse", "HEAD" });
-    try std.testing.expectError(error.ReviewTooLarge, gather(gpa, io, a, cwd, head, large_head, "claim"));
+    // #1337: a diff over the budget on its own is reviewed as a marked excerpt.
+    const excerpt = try gather(gpa, io, a, cwd, head, large_head, "claim");
+    try std.testing.expect(excerpt.files[0].change_truncated and excerpt.files[0].after == null);
 }
 
 test "claim review uses committed context when changed head source exceeds the budget" {

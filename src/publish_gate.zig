@@ -49,6 +49,8 @@ fn observe(self: *Agent, cmd: []const u8) !?ExecResult {
             ev = .{ .head_sha = receipt.head, .head_status = receipt.status, .body = receipt.body };
         }
     }
+    // Reread a pending head (#1179). A create still pending after the wait
+    // proceeds (#1189): pr_publish.decide allows it and completion waits.
     if (!draft and ev.head_status == .pending) {
         var poll: PendingPoll = .{ .agent = self, .target = target, .creating = creating, .alternate_head = command.flag("--head", "-H"), .initial = ev, .started = std.Io.Timestamp.now(self.io, .awake) };
         ev = waitPending(&poll, ev) catch |err| return .{
@@ -57,11 +59,12 @@ fn observe(self: *Agent, cmd: []const u8) !?ExecResult {
             .cancelled = err == error.Interrupted,
         };
     }
+    ev.creating = creating; // a reread returns fresh evidence without it
     if (pr_publish.decide(draft, ev) != .allow) return .{ .text = pr_publish.refuseText(self.arena, cmd, ev), .is_error = true };
     if (!draft) {
         const review = @import("pr_claim_review.zig").review(self, target, command.flag("--base", "-B"), creating, ev.head_sha, ev.body, ev.head_status) catch |err|
             return .{ .text = if (err == error.ReviewTooLarge)
-                "PR publication preflight: claim review input exceeded its size limit (128 KiB committed source budget or 256 KiB review packet); write NOT performed. Narrow the change or provide smaller relevant evidence."
+                "PR publication preflight: the PR's own diff exceeds the claim review limit (128 KiB of changed hunks, 32 changed files, or a 256 KiB packet even with complete sources omitted); write NOT performed. Split the PR or keep it a draft. Large unchanged source around a small edit does not count toward this limit."
             else
                 "PR publication preflight: claim review could not establish readiness from the committed source and tests; write NOT performed. Keep a draft while evidence is unresolved.", .is_error = true };
         if (review.verdict != .supported) return .{ .text = try std.fmt.allocPrint(self.arena, "PR publication preflight: claim review is {s}: {s}. Write NOT performed; keep a draft or fix the unsupported claim and coverage.", .{ @tagName(review.verdict), review.reason }), .is_error = true };
@@ -77,6 +80,10 @@ fn headStatus(self: *Agent, target: @import("pr_evidence.zig").Target, head: []c
     return pr_publish.headStatusFromRunList(json);
 }
 
+/// How long publication rereads a pending head before deciding. 60 s by
+/// default; GRAFF_PUBLISH_PENDING_WAIT_MS is a fixture seam (#1189).
+pub var pending_wait_ms: i64 = 60_000;
+
 const PendingPoll = struct {
     agent: *Agent,
     target: @import("pr_evidence.zig").Target,
@@ -86,7 +93,7 @@ const PendingPoll = struct {
     started: std.Io.Timestamp,
 
     fn expired(self: *PendingPoll) bool {
-        return self.started.untilNow(self.agent.io, .awake).toMilliseconds() >= 60_000;
+        return self.started.untilNow(self.agent.io, .awake).toMilliseconds() >= pending_wait_ms;
     }
     fn cancelled(self: *PendingPoll) bool {
         return Agent.esc_cancel.load(.acquire) or if (self.agent.loop_deadline_ms) |deadline| @import("util.zig").unixMs(self.agent.io) >= deadline else false;

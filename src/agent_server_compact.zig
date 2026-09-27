@@ -168,6 +168,7 @@ fn installItems(self: *Agent, items: []const std.json.Value) !void {
     self.goal_note_fp = 0;
     self.history_rewrites +%= 1;
     session_prunes +|= 1; // manual compaction is not an A/B treatment exposure
+    @import("hot_context.zig").afterCompact(self); // #1333: the opaque item replaced history; fold latest keys
 }
 
 pub fn installCompactedOutput(self: *Agent, response: std.json.Value) !usize {
@@ -311,15 +312,18 @@ pub fn manualCompact(self: *Agent) anyerror!usize {
     if (!main_mod.json_mode and @import("repl.zig").g_debug) try self.say("[compacting ~{d} tokens with OpenAI…]\n", .{pending_tokens});
     var progress = @import("compact_status.zig").begin(self);
     defer progress.end(self);
+    var acp_run = @import("acp_compaction.zig").start(!self.sub and self.call_kind != .title);
     const result = switch (route) {
         .standalone => compactStandalone(self),
         .in_stream => compactInStream(self),
         .local => unreachable,
     } catch |err| {
         progress.end(self);
+        acp_run.finish(if (err == error.Interrupted or err == error.Canceled) .cancelled else .failed, null, @errorName(err));
         return fallbackLocal(self, err);
     };
     progress.end(self);
+    acp_run.finish(.completed, null, null);
     if (!main_mod.json_mode) try self.say("Compacted context.\n", .{});
     return result;
 }
@@ -386,6 +390,7 @@ pub fn pruneIf(self: *Agent, server_arm: bool) bool {
     self.goal_note_fp = 0;
     self.history_rewrites +%= 1; // breaks the codex chain → next request re-anchors
     notePrune(dropped);
+    @import("acp_compaction.zig").completedNow(!self.sub and self.call_kind != .title);
     if (!main_mod.json_mode) {
         if (@import("repl.zig").g_debug)
             self.say("[server compacted context: {d} earlier item(s) now carried by the model's compaction state]\n", .{dropped}) catch {}
@@ -464,6 +469,8 @@ pub fn explicitCompact(self: *Agent) bool {
     }
     const body = buildCompactBody(self) catch return false;
     defer self.gpa.free(body);
+    var acp_run = @import("acp_compaction.zig").start(!self.sub and self.call_kind != .title);
+    defer acp_run.finish(.failed, null, "server compaction was refused or failed");
     var cp = self.provider;
     cp.url = compact_url;
     if (!main_mod.json_mode and @import("repl.zig").g_debug) self.say("[compacting server-side: {d} item(s)…]\n", .{self.messages.items.len}) catch {};
@@ -474,7 +481,9 @@ pub fn explicitCompact(self: *Agent) bool {
         return false;
     };
     defer self.gpa.free(resp);
-    return installCompactionItem(self, resp);
+    if (!installCompactionItem(self, resp)) return false;
+    acp_run.finish(.completed, null, null);
+    return true;
 }
 
 /// Parse a compact-endpoint response and restart history from output[0].
