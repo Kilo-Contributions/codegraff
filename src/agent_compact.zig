@@ -287,7 +287,7 @@ fn rootHandoff(self: *Agent, summary: []const u8) ![]const u8 {
         \\
         \\{s}
         \\
-        \\Continue assisting the user based on this summary.
+        \\Continue assisting the user based on this summary. Messages after this one were kept verbatim from the most recent part of the conversation; where they differ from the summary (for example a next step they show as already done), trust them over the summary.
     , .{summary});
 }
 
@@ -307,7 +307,7 @@ fn childHandoff(self: *Agent, task_prompt: []const u8, summary: []const u8) ![]c
         \\
         \\{s}
         \\
-        \\Continue the assigned task above using this summary of the work already done, and report back as the task requires.
+        \\Continue the assigned task above using this summary of the work already done, and report back as the task requires. Messages after this one were kept verbatim from the most recent part of the conversation; where they differ from the summary (for example a next step they show as already done), trust them over the summary.
     , .{ capped, truncated_note, summary });
 }
 
