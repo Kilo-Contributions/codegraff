@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Offline: /compact over ACP reports compaction_update only to clients that
 advertise clientCapabilities.session.compaction (ACP v1)."""
-import json, os, queue, signal, subprocess, sys, tempfile, threading, time
+import json, os, queue, shutil, signal, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'eval'))
 from mock_model import ScriptedModel
@@ -10,14 +10,16 @@ from mock_model import ScriptedModel
 def run(binary, opted):
     script = [{'text': 'A hash map stores key/value pairs.'}, {'text': 'Summary: the user asked about hash maps; answered.'}]
     model = ScriptedModel(script)
-    with tempfile.TemporaryDirectory(prefix='acp-compaction-') as temp:
+    # Windows keeps a killed process's files open briefly; do not fail on cleanup.
+    temp = tempfile.mkdtemp(prefix='acp-compaction-')
+    try:
         env = {k: v for k, v in os.environ.items() if not k.endswith('_API_KEY')}
         config = Path(temp) / 'mcp.json'
         config.write_text('{"mcpServers":{}}')
         env.update(HOME=temp, AI_GATEWAY_API_KEY='local', GRAFF_MCP_CONFIG=str(config), GRAFF_NO_TELEMETRY='1', GRAFF_FLEET='off', GRAFF_NO_SMOLIFY='1', GRAFF_NO_CODEDB_GUARD='1')
         port = model.start(0)
         env['GRAFF_VERCEL_URL'] = f'http://127.0.0.1:{port}/v1/chat/completions'
-        proc = subprocess.Popen([binary, 'acp', '--model', 'vercel', '--old', '--no-lean', '--yolo'], cwd=temp, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, start_new_session=True)
+        proc = subprocess.Popen([binary, 'acp', '--model', 'vercel', '--old', '--no-lean', '--yolo'], cwd=temp, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, start_new_session=os.name == 'posix')
         messages = queue.Queue()
         threading.Thread(target=lambda: [messages.put(l) for l in proc.stdout] and messages.put(None), daemon=True).start()
 
@@ -55,9 +57,14 @@ def run(binary, opted):
             assert summary['type'] == 'text' and summary['text'].strip(), updates
             print('PASS ACP compaction: in_progress then completed with the summary', flush=True)
         finally:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.wait(timeout=3)
+            if os.name == 'posix':
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+            proc.wait(timeout=10)
             model.stop()
+    finally:
+        shutil.rmtree(temp, ignore_errors=True)
 
 
 if __name__ == '__main__':
