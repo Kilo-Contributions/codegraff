@@ -10,9 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
-## Unreleased
+## v0.0.302.7
 
 ### Safety
+
+- Functions an `rlm` script calls on the host (`bash`, `write_file`, `edit_file`, MCP tools) go through the same approval prompt, plan mode and subagent destructive-git block as direct tool calls; before, only the outer `rlm` call was gated.
+- Tool shells honor an explicit `git -c core.editor=…` or `-c sequence.editor=…` again, so scripted rebases and rewords work, and a user's own Git askpass helper is kept.
 
 - Shell commands called by the tool's current name (`shell`) now go through the approval prompt, the subagent destructive-git block and the publish gate. Only the legacy `bash` name was gated before; plan mode was already enforced separately. (#1292)
 - Commands the agent runs no longer inherit provider API keys from graff's environment, so `env` in a tool call can't copy them into transcripts. `GRAFF_TOOL_ENV_PASS` keeps named variables when a tool genuinely needs one. (#1267)
@@ -28,6 +31,10 @@ current is part of cutting a release.
 - Images read with `read_file` are downscaled to the provider-safe size, or refused with a reason, instead of failing the next request. (#1272)
 - When a reasoning model spends its whole reply reasoning without answering, the retry asks for brief thinking and a direct answer instead of repeating the identical request. (#1293)
 - Retry backoff adds bounded jitter so parallel workers don't retry in lockstep; a server's Retry-After is never shortened. (#1274)
+- Tool calls an OpenAI-compatible server leaves in the reply text as `<tool_call><function=…>` markup now run. A block runs only when it is wrapped in `<tool_call>`, sits outside backtick code, names a tool the request offered and its parameters parse; anything else stays text. The markup still appears while the reply streams. (#1247)
+- `ask_user` reads the question when a model names it `prompt` or `message`, sends a `questions` list, or JSON-encodes its arguments, instead of showing "(no question)" above the options. A call with no question text goes back to the model as an error. (#1308)
+- A router model whose provider has no credential reports the missing key instead of "unknown --model", and a transient macOS Keychain failure is retried once. (#1296)
+- The MCP result-shape cache is freed at session end. (#1196)
 
 ### ACP
 
@@ -35,6 +42,16 @@ current is part of cutting a release.
 - Permission requests include the tool's kind, input, locations and diff, so clients show what is being approved. (#1289)
 - A mistyped slash command is answered locally with a suggestion ("did you mean /resume?") in the terminal, the TUI and over ACP, instead of going to the model. (#1275)
 - An image block's `uri` no longer becomes a bare line in the prompt text.
+- Provider citation markers from hosted web search are stripped from ACP answer and reasoning text, including markers split across streamed chunks and replayed history.
+- `session/new` and `session/load` wait at most 3 seconds for the MCP servers a client passes. A server whose host cannot be resolved or reached keeps connecting in the background and joins on a later request, instead of holding the reply until DNS gives up. (#1291)
+
+### MCP
+
+- `graff mcp serve` answers MCP 2026-07-28 clients (`server/discover`, versioned requests without `initialize`) beside the legacy handshake.
+
+### Pull requests
+
+- Publication review charges changed hunks with committed context instead of whole unchanged head files against its budget, and loads test roots before broad workflow files.
 
 ## v0.0.302.6
 

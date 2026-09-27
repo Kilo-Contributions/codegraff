@@ -23,6 +23,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.7
+    \\  • tool shells: provider keys stay out, git and NUL-byte commands are safer
+    \\  • tool calls left as <tool_call> markup in a reply now run
+    \\  • ACP: diffs and locations on tool calls, richer approvals, faster session/new offline
+    \\  • graff mcp serve speaks MCP 2026-07-28
+    \\
     \\0.0.302.6
     \\  • ask_user over ACP uses standard elicitation and never freezes a client
     \\  • ACP subagents stream their work onto the parent tool call
