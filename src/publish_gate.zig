@@ -31,6 +31,7 @@ fn observe(self: *Agent, cmd: []const u8) !?ExecResult {
         if (self.publication_checks.unresolved(try @import("pr_local_checks.zig").repositoryRoot(self, target.cwd))) |command_text|
             return .{ .text = try std.fmt.allocPrint(self.arena, "PR publication preflight: observed local check has no successful completion: {s}. Rerun it successfully or publish a draft; write NOT performed.", .{command_text}), .is_error = true };
         if (creating) {
+            ev.creating = true;
             ev.head_sha = evmod.localHead(self.gpa, self.io, self.arena, target) catch "";
             // An explicit alternate head must be resolved independently of HEAD.
             if (command.flag("--head", "-H")) |head| {
@@ -49,7 +50,8 @@ fn observe(self: *Agent, cmd: []const u8) !?ExecResult {
             ev = .{ .head_sha = receipt.head, .head_status = receipt.status, .body = receipt.body };
         }
     }
-    if (!draft and ev.head_status == .pending) {
+    // A create proceeds while the head's runs are in flight (#1189); ready waits.
+    if (!draft and !creating and ev.head_status == .pending) {
         var poll: PendingPoll = .{ .agent = self, .target = target, .creating = creating, .alternate_head = command.flag("--head", "-H"), .initial = ev, .started = std.Io.Timestamp.now(self.io, .awake) };
         ev = waitPending(&poll, ev) catch |err| return .{
             .text = if (err == error.Interrupted) "PR publication preflight: waiting for CI was cancelled; write NOT performed." else "PR publication preflight: the head changed or readiness could not be refreshed while waiting; write NOT performed.",

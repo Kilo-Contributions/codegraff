@@ -21,6 +21,10 @@ pub const Evidence = struct {
     known_failures_disclosed: bool = false,
     body: []const u8 = "",
     coverage: Coverage = .{},
+    /// `gh pr create`: the push that preceded it started the head's runs, so a
+    /// pending run is evidence not yet arrived, not a failure (#1189). The
+    /// verification obligation armed at publication still gates completion.
+    creating: bool = false,
 };
 
 pub const Decision = enum { allow, block, draft_only };
@@ -196,7 +200,11 @@ pub fn decide(draft: bool, ev: Evidence) Decision {
     if (claimOverreach(ev.body, ev.coverage)) return .block;
     if (!hasVerificationSection(ev.body)) return .block;
     return switch (ev.head_status) {
-        .pending, .failed => if (ev.base_reproduced and (ev.known_failures_disclosed or knownFailuresDisclosed(ev.body)))
+        .pending => if (ev.creating) .allow else if (ev.base_reproduced and (ev.known_failures_disclosed or knownFailuresDisclosed(ev.body)))
+            .draft_only
+        else
+            .block,
+        .failed => if (ev.base_reproduced and (ev.known_failures_disclosed or knownFailuresDisclosed(ev.body)))
             .draft_only
         else
             .block,
@@ -320,6 +328,11 @@ test "#847 failed or pending head blocks non-draft create" {
     const body = "## Verification\nlocal: `zig build test` (pass)\nremote: pending";
     try std.testing.expectEqual(Decision.block, decide(false, .{ .head_status = .failed, .body = body }));
     try std.testing.expectEqual(Decision.block, decide(false, .{ .head_status = .pending, .body = body }));
+    // #1189: creating right after the push that started the runs is allowed;
+    // completion still waits for them. Failed and unreadable evidence still block.
+    try std.testing.expectEqual(Decision.allow, decide(false, .{ .head_status = .pending, .body = body, .creating = true }));
+    try std.testing.expectEqual(Decision.block, decide(false, .{ .head_status = .failed, .body = body, .creating = true }));
+    try std.testing.expectEqual(Decision.block, decide(false, .{ .head_status = .unknown, .body = body, .creating = true }));
     try std.testing.expectEqual(Decision.allow, decide(true, .{ .head_status = .failed, .body = body }));
     try std.testing.expectEqual(Decision.allow, decide(false, .{ .head_status = .passed, .body = body }));
 }

@@ -252,8 +252,10 @@ def main():
     handoff(args.graff)
     stream_and_mcp(args.graff)
     create = "gh pr create --title fixture --body-file notes.md"
-    for bad in ({"runs": "failure"}, {"runs": "pending"}, {"unavailable": True}, {"runs": "malformed"}):
+    for bad in ({"runs": "failure"}, {"unavailable": True}, {"runs": "malformed"}):
         run_case(args.graff, f"non-draft refuses {bad}", [tool(create), {"text": "Publication blocked."}], bad)
+    # #1189: the push started the head's runs; create proceeds, completion still waits.
+    run_case(args.graff, "non-draft create proceeds while the head run is pending", [tool(create), completion(), {"text": "CI is still running."}], {"runs": "pending"}, expected_mutations=1, refused=1, review=True)
     run_case(args.graff, "body flag cannot turn non-draft into draft", [tool("gh pr create --title fixture --body '--draft'"), {"text": "Blocked."}], {"runs": "failure"})
     run_case(args.graff, "local-only and repeated completion cannot pass PR CI", [tool(create), completion(), completion(), {"text": "CI remains unverified."}], {"runs": "none"}, expected_mutations=1, refused=2, resume_check=True, review=True)
     run_case(args.graff, "fresh passing remote head completes", [tool(create), completion()], {"checks": "SUCCESS"}, expected_mutations=1, expected_final="Verification complete.", review=True)
