@@ -60,7 +60,7 @@ pub const Command = struct {
                     if (takesValue(arg[0..eq])) continue;
                 }
                 var known = false;
-                for ([_][]const u8{ "--draft", "--draft=true", "--undo", "--help", "--web", "--force", "--delete-branch", "--squash", "--merge", "--rebase", "--auto", "--disable-auto", "--admin" }) |option| if (std.mem.eql(u8, arg, option)) {
+                for ([_][]const u8{ "--draft", "--draft=true", "--undo", "--help", "--web", "--force", "--delete-branch", "--squash", "--merge", "--rebase", "--auto", "--disable-auto", "--admin", "--remove-milestone", "--edit-last", "--delete-last", "--create-if-none", "--yes" }) |option| if (std.mem.eql(u8, arg, option)) {
                     known = true;
                     break;
                 };
@@ -76,6 +76,10 @@ pub const Command = struct {
 
 fn takesValue(arg: []const u8) bool {
     for ([_][]const u8{ "--body", "-b", "--body-file", "-F", "--title", "-t", "--head", "-H", "--base", "-B", "--repo", "-R", "--reviewer", "-r", "--assignee", "-a", "--label", "-l", "--milestone", "-m", "--project", "-p", "--template", "-T" }) |flag| if (std.mem.eql(u8, arg, flag)) return true;
+    // #1344: edit/close/comment/merge options; an unknown one used to make an
+    // explicit `gh pr edit N` unresolvable, so the claim gate blocked on any
+    // foreign claim.
+    for ([_][]const u8{ "--add-label", "--remove-label", "--add-reviewer", "--remove-reviewer", "--add-assignee", "--remove-assignee", "--add-project", "--remove-project", "--comment", "-c", "--subject", "-s", "--match-head-commit", "--author-email", "-A" }) |flag| if (std.mem.eql(u8, arg, flag)) return true;
     return false;
 }
 
@@ -169,4 +173,16 @@ test "PR selectors skip known option values and refuse ambiguous options" {
     try std.testing.expect(try body_only.selectorChecked() == null);
     const unknown = try parse(a, "gh pr edit --unknown 12");
     try std.testing.expectError(error.UnsupportedOption, unknown.selectorChecked());
+}
+
+test "#1344 edit and close options keep an explicit PR selector" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "gh pr edit 42 --repo owner/repo --add-label bug --remove-reviewer someone --body-file notes.md",
+        "gh pr close 42 --comment done --delete-branch",
+        "gh pr comment 42 --edit-last --body x",
+        "gh pr merge 42 --squash --subject s --match-head-commit abc",
+    }) |cmd| try std.testing.expectEqualStrings("42", (try (try parse(a, cmd)).selectorChecked()).?);
 }

@@ -13,7 +13,7 @@ const tools_mod = @import("tools.zig");
 const ExecResult = tools_mod.ExecResult;
 const presence = @import("presence.zig");
 const proc_identity = @import("proc_identity.zig");
-
+const unresolved_mod = @import("artifact_claim_unresolved.zig");
 const claim_ledger = @import("artifact_claim_ledger.zig");
 const claim_path = @import("artifact_claim_path.zig");
 const claim_stale = @import("artifact_claim_stale.zig");
@@ -189,15 +189,19 @@ pub fn gateCommandIn(arena: Allocator, io: Io, cmd: []const u8, key: []const u8,
             if (persistJson(scratch.allocator(), ledger)) |json| transaction.write(json) catch {} else |_| {}
         }
     }
-    // A failed `gh pr view` is unknown identity, not "PR N in no repo".
-    // explicit() would keep the number and skip a foreign publication claim.
-    var target: @import("artifact_claim_target.zig").Target = if (kind == .pull_request and !builtin.is_test)
-        resolved orelse .{ .kind = .pull_request, .key = "" }
+    // A failed `gh pr view` is unknown identity, not "PR N in no repo" (#1344).
+    const unresolved = kind == .pull_request and resolved == null and (!builtin.is_test or unresolved_mod.g_force_for_test);
+    var target: @import("artifact_claim_target.zig").Target = if (unresolved) unresolved_mod.target(cmd) else if (kind == .pull_request and !builtin.is_test)
+        resolved.?
     else
         resolved orelse @import("artifact_claim_target.zig").explicit(cmd, kind) orelse .{ .kind = if (kind == .issue) Kind.issue else Kind.branch, .key = key };
     if (target.kind == .branch and target.key.len == 0) target.key = key;
     for (ledger.slice()) |c| {
         if (!claimRelevant(c.kind, kind)) continue;
+        if (unresolved) {
+            if (sameOwner(c.owner, me) or !ownerLive(io, c.owner) or unresolved_mod.provablyUnrelated(c, target)) continue;
+            return unresolved_mod.refuseText(arena, c, target);
+        }
         const branch_claim = c.kind == .publication or c.kind == .branch;
         if (c.kind == .branch and claim_ledger.differentRepository(c.repo, target.head_repo)) continue;
         if (claim_ledger.differentRepository(c.repo, target.repo)) {
