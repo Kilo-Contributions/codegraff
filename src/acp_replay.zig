@@ -34,7 +34,10 @@ fn visibleText(arena: Allocator, value: Value) ![]const u8 {
     return result.items;
 }
 
-fn message(w: *Io.Writer, sid: []const u8, role: []const u8, text: []const u8) !void {
+fn message(w: *Io.Writer, sid: []const u8, role: []const u8, raw: []const u8) !void {
+    const cleaned = @import("acp_citations.zig").whole(raw);
+    defer cleaned.deinit();
+    const text = cleaned.text;
     if (text.len == 0) return;
     if (v2.on()) {
         // Full-content upserts need no `content: []` reset before them.

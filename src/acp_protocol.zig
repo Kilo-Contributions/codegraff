@@ -185,7 +185,12 @@ pub fn writeNotification(w: *Io.Writer, method: []const u8, params: anytype) !vo
 }
 
 /// One `agent_message_chunk` notification (the v0 final-text update).
-pub fn writeSessionUpdate(w: *Io.Writer, session_id: []const u8, text: []const u8) !void {
+/// Provider citation markers are removed on the way out (acp_citations.zig).
+pub fn writeSessionUpdate(w: *Io.Writer, session_id: []const u8, raw: []const u8) !void {
+    const cleaned = @import("acp_citations.zig").filter(session_id, .message, raw);
+    defer cleaned.deinit();
+    const text = cleaned.text;
+    if (text.len == 0 and raw.len != 0) return; // the chunk was all marker
     const v2 = @import("acp_v2.zig");
     if (v2.on()) return v2.writeChunk(w, session_id, false, text);
     try writeNotification(w, "session/update", .{

@@ -45,6 +45,7 @@ pub fn promptTurn(d: *engine.Dispatch, arena: Allocator, w: *Io.Writer, req: pro
 const Outcome = union(enum) { stop: []const u8, failed: []const u8 };
 
 fn run(d: *engine.Dispatch, arena: Allocator, w: *Io.Writer, sid: []const u8, text: []const u8, prompt: ?std.json.Value) Outcome {
+    @import("acp_citations.zig").endTurn(sid); // a failed turn must not leave a marker open
     if (d.slash) |slash| {
         const reply = slash(d.ctx, arena, text) catch |err| return failure(d, err);
         if (reply) |plain| {
