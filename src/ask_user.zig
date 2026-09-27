@@ -23,11 +23,17 @@ const vision = @import("vision.zig");
 const vision_queue = @import("vision_queue.zig");
 const acp_ask = @import("acp_ask.zig");
 const acp_elicit = @import("acp_elicit.zig");
+const ask_user_args = @import("ask_user_args.zig");
 const style = &@import("ansi.zig").style;
 
 /// Block the root agent for an ask_user reply; subagents have no stdin.
 pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
-    const question = if (tools_mod.json_args.object(call.input)) |o| (tools_mod.json_args.str(o, "question") orelse "(no question)") else "(no question)";
+    // #1308: aliases, a `questions` list, and double-encoded arguments all
+    // carry the question; a call with none goes back to the model, not a
+    // "(no question)" card.
+    const args = try ask_user_args.normalize(self.arena, call.input);
+    const question = args.question orelse return .{ .text = ask_user_args.missing_text, .is_error = true };
+    const input = args.input;
     if (main_mod.json_mode) {
         const call_id = if (call.id.len > 0) call.id else blk: {
             const id = try std.fmt.allocPrint(self.arena, "ask_user-{d}", .{self.next_ask_id});
@@ -38,13 +44,14 @@ pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
         // question must not leave the turn waiting on it (acp_elicit.zig).
         if (self.in == null and acp_elicit.mode == .none)
             return .{ .text = acp_elicit.unsupported_text, .is_error = true };
-        try emitAskUser(self, call_id, question, call.input);
+        try emitAskUser(self, call_id, question, input);
         // Answers arrive as the elicitation response or session/answer.
         if (self.in == null) {
             if (self.tracer) |tr| tr.note("ask_user_wait", @tagName(acp_elicit.mode));
             const got = try acp_ask.wait(self.arena);
             acp_elicit.finish();
-            if (got.cancelled) return .{ .text = "user cancelled the follow-up", .is_error = true };
+            if (self.tracer) |tr| tr.note("ask_user_outcome", @tagName(got.outcome));
+            if (got.outcome != .answered) return .{ .text = noAnswerText(got.outcome), .is_error = true };
             return finishAnswer(self, std.mem.trim(u8, got.text, " \t\r"));
         }
         const in = self.in.?;
@@ -71,7 +78,7 @@ pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
     // Named tool row even when the question streamed: announce is silent for
     // streamed args, and the result line used to skip this meta tool.
     try w.print("  {s}⚙{s} ask_user  {s}\n", .{ style.accent, style.reset, question });
-    if (tools_mod.json_args.object(call.input)) |o| if (tools_mod.json_args.arrayOf(o, "options")) |opts| {
+    if (tools_mod.json_args.object(input)) |o| if (tools_mod.json_args.arrayOf(o, "options")) |opts| {
         for (opts, 1..) |opt, n| try w.print("   {d}) {s}\n", .{ n, tools_mod.json_args.text(opt) orelse "(non-text option)" });
     };
     // Route the reply through the same full-line editor as the main prompt:
@@ -88,6 +95,25 @@ pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
         .is_error = true,
     };
     return finishAnswer(self, std.mem.trim(u8, raw, " \t\r"));
+}
+
+/// #1322: only a user's explicit cancel reads as a cancel. A question the
+/// client returned with nothing bound to it may never have been shown, so
+/// the model must not take it as a refusal and end the turn.
+pub fn noAnswerText(outcome: acp_ask.Outcome) []const u8 {
+    return switch (outcome) {
+        .answered => unreachable,
+        .dismissed => "user cancelled the follow-up",
+        .declined => "the user declined to answer this question. Continue without it and do not ask it again.",
+        .unanswered => "no answer came back: the client returned the question without a reply, so the user may not have seen it. This is not a refusal. Continue with a reasonable, reversible assumption and state it, or ask the question in your reply.",
+    };
+}
+
+test "noAnswerText keeps cancel as cancel and never calls a lost question a cancel (#1322)" {
+    try std.testing.expectEqualStrings("user cancelled the follow-up", noAnswerText(.dismissed));
+    try std.testing.expect(std.mem.indexOf(u8, noAnswerText(.unanswered), "cancel") == null);
+    try std.testing.expect(std.mem.indexOf(u8, noAnswerText(.unanswered), "not a refusal") != null);
+    try std.testing.expect(std.mem.indexOf(u8, noAnswerText(.declined), "declined") != null);
 }
 
 fn finishAnswer(self: *Agent, raw: []const u8) !ExecResult {

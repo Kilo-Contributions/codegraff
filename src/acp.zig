@@ -106,7 +106,7 @@ fn liveBind(ctx: *anyopaque, session_id: []const u8) void {
 fn liveMeter(ctx: *anyopaque) engine.Meter {
     const live: *LiveTurn = @ptrCast(@alignCast(ctx));
     const root = live.root;
-    return .{ .used = root.effectiveContextTokens(), .window = root.provider.context };
+    return .{ .used = root.effectiveContextTokens(), .window = root.provider.context, .cost_usd = @import("acp_context_meter.zig").knownCostUsd(root.io) };
 }
 
 /// The ACP user message: GUI `@[image]` attachments become native vision

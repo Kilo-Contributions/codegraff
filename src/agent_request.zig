@@ -101,7 +101,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     http.waitForClientReady(self.io);
     if (http.takeCaWarmFailure()) if (self.tracer) |tr| tr.note("ca_prewarm_failed", "CA bundle rescan failed; request will use lazy TLS initialization");
     if (self.registry) |reg| {
-        if (@import("mcp_boot.zig").joinBeforeRequest(reg)) {
+        if (@import("mcp_pages.zig").beforeRequest(reg)) { // joins deferred starts, re-lists changed servers
             self.invalidateRootTools();
             try self.ensureRootTools(self.provider.kind);
         }

@@ -191,23 +191,60 @@ pub fn queueStdio(reg: *Registry, name: []const u8, command: []const u8, args: [
     defer reg.mutex.unlock(reg.io);
     if (alreadyStartingLocked(reg, name)) return;
     const a = reg.arena();
-    const n = a.dupe(u8, name) catch return;
     var cfg: std.json.ObjectMap = .empty;
     cfg.put(a, "command", .{ .string = a.dupe(u8, command) catch return }) catch return;
     var argv = std.json.Array.init(a);
     for (args) |arg| argv.append(.{ .string = a.dupe(u8, arg) catch return }) catch return;
     cfg.put(a, "args", .{ .array = argv }) catch return;
+    _ = queueLocked(reg, name, cfg);
+}
+
+/// Queue any configured server (stdio or http) the same way (#1291). `cfg` is
+/// copied into the registry arena: the task reads it after the caller's
+/// request arena is gone. False when nothing was queued (no thread for the
+/// task, or out of memory); a server already live or queued counts as queued.
+pub fn queueConfig(reg: *Registry, name: []const u8, cfg: std.json.ObjectMap) bool {
+    reg.mutex.lockUncancelable(reg.io);
+    defer reg.mutex.unlock(reg.io);
+    if (alreadyStartingLocked(reg, name)) return true;
+    const owned = cloneValue(reg.arena(), .{ .object = cfg }) catch return false;
+    return queueLocked(reg, name, owned.object);
+}
+
+fn cloneValue(a: Allocator, v: std.json.Value) Allocator.Error!std.json.Value {
+    return switch (v) {
+        .string => |s| .{ .string = try a.dupe(u8, s) },
+        .number_string => |s| .{ .number_string = try a.dupe(u8, s) },
+        .array => |arr| blk: {
+            var out = std.json.Array.init(a);
+            try out.ensureTotalCapacity(arr.items.len);
+            for (arr.items) |item| out.appendAssumeCapacity(try cloneValue(a, item));
+            break :blk .{ .array = out };
+        },
+        .object => |obj| blk: {
+            var out: std.json.ObjectMap = .empty;
+            var it = obj.iterator();
+            while (it.next()) |e| try out.put(a, try a.dupe(u8, e.key_ptr.*), try cloneValue(a, e.value_ptr.*));
+            break :blk .{ .object = out };
+        },
+        else => v,
+    };
+}
+
+fn queueLocked(reg: *Registry, name: []const u8, cfg: std.json.ObjectMap) bool {
+    const a = reg.arena();
+    const n = a.dupe(u8, name) catch return false;
     // Reserve both paired arrays before spawning: allocation failure must not
     // abandon a task that still borrows registry configuration.
     const old = reg.pending_starts;
-    const next = reg.gpa.alloc(PendingStart, old.len + 1) catch return;
+    const next = reg.gpa.alloc(PendingStart, old.len + 1) catch return false;
     const names = a.alloc([]const u8, old.len + 1) catch {
         reg.gpa.free(next);
-        return;
+        return false;
     };
     const flag = reg.gpa.create(std.atomic.Value(bool)) catch {
         reg.gpa.free(next);
-        return;
+        return false;
     };
     flag.* = .init(false);
     var ctx = startCtx(reg);
@@ -215,7 +252,7 @@ pub fn queueStdio(reg: *Registry, name: []const u8, command: []const u8, args: [
     const fut = reg.io.concurrent(startServerTask, .{ ctx, n, cfg }) catch {
         reg.gpa.destroy(flag);
         reg.gpa.free(next);
-        return;
+        return false;
     };
     @memcpy(next[0..old.len], old);
     next[old.len] = .{ .future = fut, .ready = flag };
@@ -224,6 +261,27 @@ pub fn queueStdio(reg: *Registry, name: []const u8, command: []const u8, args: [
     if (old.len > 0) reg.gpa.free(old);
     reg.pending_starts = next;
     reg.pending_names = names;
+    return true;
+}
+
+/// Wait at most `budget_ms` for the named queued handshakes, then merge every
+/// finished one (#1291). A server that is still connecting stays queued and
+/// joins on a later request, like the rest of a deferred boot.
+pub fn joinNamedWithin(reg: *Registry, names: []const []const u8, budget_ms: u32) bool {
+    var waited: u32 = 0;
+    while (waited < budget_ms and anyNamedPending(reg, names)) : (waited += 20)
+        reg.io.sleep(.fromMilliseconds(20), .awake) catch break;
+    return joinReady(reg);
+}
+
+fn anyNamedPending(reg: *Registry, names: []const []const u8) bool {
+    reg.mutex.lockUncancelable(reg.io);
+    defer reg.mutex.unlock(reg.io);
+    for (reg.pending_starts, 0..) |*task, i| {
+        if (task.ready == null or task.finished() or i >= reg.pending_names.len) continue;
+        for (names) |n| if (std.mem.eql(u8, n, reg.pending_names[i])) return true;
+    }
+    return false;
 }
 
 fn mergeOutcomes(reg: *Registry, futures: []PendingStart) void {

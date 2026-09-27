@@ -261,9 +261,28 @@ fn runSleep(ctx: ToolCtx, args_json: []const u8) ToolOutput {
     };
     defer parsed.deinit();
     const ms = tools.intField(parsed.value, "ms") orelse 0;
-    const capped: i64 = @min(@max(ms, 0), 5_000);
+    const capped: i64 = @min(@max(ms, 0), sleep_cap_ms);
     ctx.io.sleep(.fromMilliseconds(capped), .awake) catch {};
-    return .{ .text = std.fmt.allocPrint(ctx.gpa, "slept {d}ms", .{capped}) catch ctx.gpa.dupe(u8, "slept") catch &.{} };
+    return .{ .text = sleepText(ctx.gpa, ms, capped) catch ctx.gpa.dupe(u8, "slept") catch &.{} };
+}
+
+const sleep_cap_ms: i64 = 5_000;
+
+/// A capped request says so: a model that asked for minutes and read
+/// "slept 5000ms" as done has waited 5 seconds, not the pause it narrated.
+fn sleepText(gpa: Allocator, requested: i64, slept: i64) ![]u8 {
+    if (requested <= slept) return std.fmt.allocPrint(gpa, "slept {d}ms", .{slept});
+    return std.fmt.allocPrint(gpa, "slept {d}ms, not the {d}ms requested: sleep_ms is capped at {d}ms and only overlaps short work. To wait for something, use a blocking wait (shell action=output with wait_ms, agent_output) or clock_sleep.", .{ slept, requested, sleep_cap_ms });
+}
+
+test "sleepText names the cap when a longer pause was requested" {
+    const plain = try sleepText(std.testing.allocator, 40, 40);
+    defer std.testing.allocator.free(plain);
+    try std.testing.expectEqualStrings("slept 40ms", plain);
+    const capped = try sleepText(std.testing.allocator, 300_000, 5_000);
+    defer std.testing.allocator.free(capped);
+    try std.testing.expect(std.mem.indexOf(u8, capped, "not the 300000ms requested") != null);
+    try std.testing.expect(std.mem.indexOf(u8, capped, "clock_sleep") != null);
 }
 
 fn evalStmt(

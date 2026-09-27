@@ -246,10 +246,7 @@ pub fn runOneshotPrompt(gpa: Allocator, io: Io, arena: Allocator, root: *agent_m
     // before finalizeSession, so retire + free its gpa-owned globals here or
     // they reach the exit-time leak check — and our record would linger in
     // the registry until a peer's liveness probe reaps it.
-    presence.retire(io);
-    @import("presence_accord.zig").stop(io);
-    presence.deinit(gpa);
-    @import("router_catalog.zig").shutdown(io);
+    @import("session_globals.zig").release(gpa, io);
     // #396: the run is over. The frontend hands the terminal back and latches
     // its reader shut before main()'s teardown — a terminal-ownership move the
     // sink owns now, in EVERY mode, exactly as the old unconditional call did.
@@ -474,12 +471,7 @@ pub fn finalizeSession(gpa: Allocator, io: Io, arena: Allocator, out: *Io.Writer
     // Task-outcome telemetry: a working goal that never completed counts as
     // abandoned. Before presence.retire so the event can't outlive the flush.
     @import("task_outcome.zig").noteSessionEnd(root);
-    // #469: our presence record leaves the registry with us; a crashed session
-    // skips this and gets reaped by the next reader's liveness probe instead.
-    presence.retire(io);
-    @import("presence_accord.zig").stop(io);
-    presence.deinit(gpa); // its gpa-owned globals must not reach the exit-time leak check
-    @import("router_catalog.zig").shutdown(io);
+    @import("session_globals.zig").release(gpa, io); // retire presence, free gpa-owned globals
     @import("workspace_switch.zig").deinitDisplay(gpa);
     if (!json_mode and root.messages.items.len > 0) {
         const sink = engine_sink.writerSink(out);

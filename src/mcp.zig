@@ -52,6 +52,15 @@ pub const Tool = struct {
     }
 };
 
+/// One server/tool for MRTR retries (mcp_mrtr.resolve).
+const McpCall = struct {
+    server: *Server,
+    name: []const u8,
+    fn send(self: McpCall, a: Allocator, params: []const u8) anyerror!Value {
+        return request(self.server, a, params, "tools/call", self.name);
+    }
+};
+
 pub const Registry = struct {
     last_app_path: ?[]const u8 = null,
     gpa: Allocator,
@@ -411,38 +420,14 @@ pub const Registry = struct {
                 },
             };
             const result_v = listed.object.get("result") orelse return error.BadMcpResponse;
-            if (result_v != .object) return error.BadMcpResponse;
-            const tv = result_v.object.get("tools") orelse return error.BadMcpResponse;
-            if (tv != .array) return error.BadMcpResponse;
-            listed_result = result_v;
-            break :blk tv;
+            // Every page of a paginated catalog, not only the first.
+            const all = try @import("mcp_pages.zig").complete(server, a, reg.io, result_v);
+            listed_result = all.result;
+            break :blk all.tools;
         };
-        for (tools_v.array.items) |t| {
-            if (t != .object) continue;
-            if (!@import("mcp_apps.zig").modelVisible(t)) continue;
-            const name_v = t.object.get("name") orelse continue;
-            if (name_v != .string) continue;
-            const orig = try a.dupe(u8, name_v.string);
-            const qualified = try @import("mcp_names.zig").qualify(a, name, orig);
-            // Prefer description; fall back to the 2025-06-18+ human-readable
-            // title so a metadata-only tool isn't blank to the model.
-            const desc = if (t.object.get("description")) |d| (if (d == .string) d.string else "") else if (t.object.get("title")) |ti| (if (ti == .string) ti.string else "") else "";
-            var schema = t.object.get("inputSchema") orelse Value{ .object = .empty };
-            try rewriteOneOf(a, &schema);
-            // ...then lower any TOP-LEVEL combinator: Anthropic rejects the
-            // whole request over one, so a single server advertising it would
-            // break every turn (codedbpro's `replace`, "path or paths").
-            try mcp_protocol.flattenTopLevel(a, &schema);
-            try tools.append(a, .{
-                .server_index = server_index,
-                .server_name = server.name,
-                .original_name = orig,
-                .qualified_name = qualified,
-                .description = try a.dupe(u8, desc),
-                .input_schema = schema,
-                .ui_resource_uri = if (@import("mcp_apps.zig").resourceUri(t)) |uri| try a.dupe(u8, uri) else null,
-            });
-        }
+        try @import("mcp_pages.zig").appendTools(a, tools, server_index, server, tools_v);
+        mcp_rpc.bindNotes(server);
+        @import("mcp_pages.zig").listen(server, a); // modern stdio: ask for tools/list_changed
         try servers.append(a, server);
         registry_owns_server = true;
         if (listed_result) |rv| mcp_cache.store(reg.io, a, reg.home, cache_key, server.era, server.protocol_version, rv, now_ms);
@@ -501,7 +486,7 @@ pub const Registry = struct {
         if (!server.initialized) try initializeServer(server, response_alloc, reg.arena(), null);
         server.elicit_source = params;
         defer server.elicit_source = "";
-        const resp = request(server, response_alloc, params, "tools/call", tool.original_name) catch |err| switch (err) {
+        const first_resp = request(server, response_alloc, params, "tools/call", tool.original_name) catch |err| switch (err) {
             // Streamable HTTP servers use 404 to expire a session. Re-run the
             // MCP handshake once, then retry the call without the stale ID.
             // A modern-era server never carries a session id in the first
@@ -516,6 +501,10 @@ pub const Registry = struct {
             },
             else => return err,
         };
+        // 2026-07-28 input_required: answer and retry (bounded) until complete.
+        const call_ctx: McpCall = .{ .server = server, .name = tool.original_name };
+        const resp = try @import("mcp_mrtr.zig").resolve(response_alloc, params, first_resp, call_ctx, McpCall.send);
+        if (resp != .object) return error.BadMcpResponse;
 
         if (resp.object.get("error")) |e| {
             // Protocol-level failure (unknown tool, invalid args, server
@@ -546,12 +535,10 @@ pub const Registry = struct {
         if (result_val != .object)
             return .{ .text = try out_alloc.dupe(u8, "MCP response result was not an object"), .is_error = true };
         const result = result_val.object;
-        // resultType absent MUST read as "complete" (every server graff has
-        // ever talked to). MRTR (inputRequests/inputResponses) is not
-        // implemented — surface a clear error instead of silently returning
-        // "" with is_error=false, which is what fell through here before.
+        // resultType absent MUST read as "complete". input_required was
+        // resolved above; any other type is surfaced, never returned as "".
         if (!mcp_protocol.resultIsComplete(result))
-            return .{ .text = try out_alloc.dupe(u8, "MCP server returned an input_required result (MRTR); codegraff does not implement it"), .is_error = true };
+            return .{ .text = try out_alloc.dupe(u8, "MCP server returned an unsupported resultType"), .is_error = true };
         const is_error = if (result.get("isError")) |v| (v == .bool and v.bool) else false;
 
         var ow: Io.Writer.Allocating = .init(out_alloc);

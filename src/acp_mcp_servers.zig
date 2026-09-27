@@ -73,20 +73,45 @@ fn pairs(arena: Allocator, value: ?Value) !?std.json.ObjectMap {
     return if (map.count() == 0) null else map;
 }
 
-/// The live ACP session's hook (engine.Dispatch.mcp_servers): connect what
-/// the client named, then re-render the root's tool catalog so the model sees
-/// the new tools on its next request, as `/mcp add` does.
+/// How long session/new and session/load wait on the client's servers
+/// (#1291). Local stdio servers handshake well inside it. One stuck on DNS or
+/// an unreachable host no longer holds the reply for minutes: it keeps
+/// connecting in the background and joins on a later model request.
+pub const attach_budget_ms: u32 = 3000;
+
+/// The live ACP session's hook (engine.Dispatch.mcp_servers): start what the
+/// client named, merge whatever connects within `attach_budget_ms`, then
+/// re-render the root's tool catalog so the model sees the new tools on its
+/// next request, as `/mcp add` does.
 pub fn attach(ctx: *anyopaque, arena: Allocator, params: ?Value) anyerror!void {
     const live: *@import("acp_live_turn.zig").LiveTurn = @ptrCast(@alignCast(ctx));
     const root = live.root;
     const reg = root.registry orelse return;
     const specs = try parse(arena, params);
     if (specs.len == 0) return;
-    if (connect(reg, specs, null) == 0) return;
+    if (!joinWithin(reg, arena, specs, attach_budget_ms)) return;
     root.invalidateRootTools();
     @import("prompt_cache_hud.zig").noteBust(.mcp);
     try root.ensureRootTools(root.provider.kind);
     root.rebaseContextMeter();
+}
+
+/// Queue every server's handshake, wait at most `budget_ms` for them, and
+/// merge the ones that finished. A server the thread pool cannot take is
+/// connected inline instead of dropped. True when anything joined.
+pub fn joinWithin(reg: *mcp.Registry, arena: Allocator, specs: []const Spec, budget_ms: u32) bool {
+    const mcp_boot = @import("mcp_boot.zig");
+    var queued: std.ArrayList([]const u8) = .empty;
+    var direct: std.ArrayList(Spec) = .empty;
+    for (specs) |spec| {
+        const list_ok = if (mcp_boot.queueConfig(reg, spec.name, spec.cfg)) queued.append(arena, spec.name) else direct.append(arena, spec);
+        list_ok catch return false;
+    }
+    const before = reg.servers.len;
+    _ = connect(reg, direct.items, null);
+    // Also consumes failed handshakes, which add nothing.
+    if (queued.items.len > 0) _ = mcp_boot.joinNamedWithin(reg, queued.items, budget_ms);
+    return reg.servers.len > before;
 }
 
 /// Connect each server the registry does not already have by name, in order.
@@ -177,6 +202,46 @@ test "connect: a server the registry already has by name is kept, not respawned"
     try std.testing.expectEqual(@as(usize, 0), connect(&reg, &specs, null));
     try std.testing.expectEqual(@as(usize, 1), reg.servers.len);
     reg.servers = &.{}; // not the registry's to free
+}
+
+fn stdioSpec(a: Allocator, name: []const u8, command: []const u8, args: []const []const u8) !Spec {
+    var cfg: std.json.ObjectMap = .empty;
+    try cfg.put(a, "command", .{ .string = command });
+    var argv = std.json.Array.init(a);
+    for (args) |arg| try argv.append(.{ .string = arg });
+    try cfg.put(a, "args", .{ .array = argv });
+    return .{ .name = name, .cfg = cfg };
+}
+
+test "joinWithin (#1291): a server that fails fast ends the wait early" {
+    const io = std.testing.io;
+    var reg = mcp.Registry.empty(std.testing.allocator, io);
+    defer reg.deinit();
+    var state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer state.deinit();
+    const a = state.allocator();
+    const specs = [_]Spec{try stdioSpec(a, "gone", "/nonexistent/graff-mcp-1291", &.{})};
+    const t0 = std.Io.Timestamp.now(io, .awake);
+    try std.testing.expect(!joinWithin(&reg, a, &specs, 10_000));
+    try std.testing.expect(t0.untilNow(io, .awake).toMilliseconds() < 5_000);
+    try std.testing.expectEqual(@as(usize, 0), reg.servers.len);
+}
+
+test "joinWithin (#1291): a stalled handshake returns at the budget and stays queued" {
+    if (@import("builtin").os.tag == .windows) return error.SkipZigTest; // needs /bin/sh
+    const io = std.testing.io;
+    var reg = mcp.Registry.empty(std.testing.allocator, io);
+    defer reg.deinit(); // joins the handshake once `sleep` exits
+    reg.stdio_probe = false;
+    var state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer state.deinit();
+    const a = state.allocator();
+    // Starts fine and never answers the initialize request.
+    const specs = [_]Spec{try stdioSpec(a, "stalled", "/bin/sh", &.{ "-c", "sleep 2" })};
+    const t0 = std.Io.Timestamp.now(io, .awake);
+    try std.testing.expect(!joinWithin(&reg, a, &specs, 100));
+    try std.testing.expect(t0.untilNow(io, .awake).toMilliseconds() < 1_500);
+    try std.testing.expect(@import("mcp_boot.zig").alreadyStarting(&reg, "stalled"));
 }
 
 test "handleLine: initialize advertises http MCP, session/new hands the hook its mcpServers first" {

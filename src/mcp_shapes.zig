@@ -27,6 +27,14 @@ pub fn reset(gpa: Allocator, io: Io) void {
     clearUnlocked(gpa);
 }
 
+/// Session teardown (#1196): free the cache with the allocator that filled it,
+/// before main()'s leak check. A no-op when nothing was stored.
+pub fn shutdown(io: Io) void {
+    store.mu.lockUncancelable(io);
+    defer store.mu.unlock(io);
+    clearUnlocked(store.gpa orelse return);
+}
+
 fn clearUnlocked(gpa: Allocator) void {
     var it = store.map.iterator();
     while (it.next()) |e| {
@@ -441,6 +449,22 @@ pub fn lookup(io: Io, name: []const u8) ?[]const u8 {
     store.mu.lockUncancelable(io);
     defer store.mu.unlock(io);
     return store.map.get(name);
+}
+
+test "shutdown frees a filled cache and is a no-op when empty (#1196)" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    shutdown(io);
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    store.mu.lockUncancelable(io);
+    putUnlocked(gpa, arena_state.allocator(), "linear_issues", "{\"type\":\"object\"}");
+    store.mu.unlock(io);
+    try std.testing.expectEqual(@as(usize, 1), store.map.count());
+    shutdown(io); // testing.allocator fails the test on anything left behind
+    try std.testing.expectEqual(@as(usize, 0), store.map.count());
+    try std.testing.expect(store.gpa == null);
+    shutdown(io);
 }
 
 test "infer strips values and keeps keys plus broad types" {
