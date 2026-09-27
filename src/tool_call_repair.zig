@@ -305,6 +305,71 @@ pub fn repairCalls(arena: Allocator, scratch: Allocator, message: *Value, tools_
     return true;
 }
 
+var inline_seq = std.atomic.Value(u64).init(0);
+
+/// #1247: a reply with no structured tool calls whose `content` carries
+/// `<tool_call><function=NAME>…</function></tool_call>` blocks, because the
+/// serving stack's parser missed them. Each block that is wrapped in
+/// `<tool_call>`, sits outside backtick code, names a tool in `tools_raw`,
+/// and has arguments that parse becomes a real call; its markup leaves
+/// `content`. Anything else stays text, so quoted markup never runs.
+pub fn recoverInlineCalls(arena: Allocator, scratch: Allocator, message: *Value, tools_raw: []const u8) !bool {
+    if (message.* != .object) return false;
+    const content = message.object.get("content") orelse return false;
+    if (content != .string or std.mem.indexOf(u8, content.string, "<tool_call>") == null) return false;
+    if (message.object.get("tool_calls")) |tcs| if (tcs == .array and tcs.array.items.len > 0) return false;
+    const found = try blocks(scratch, content.string);
+    if (found.len == 0) return false;
+    const catalog = std.json.parseFromSliceLeaky(Value, scratch, tools_raw, .{ .allocate = .alloc_always }) catch return false;
+    var calls = std.json.Array.init(arena);
+    for (found) |*b| {
+        const text = content.string;
+        if (!std.mem.startsWith(u8, text[b.start..], "<tool_call>") or !std.mem.endsWith(u8, text[0..b.end], "</tool_call>")) continue;
+        if (inCode(text[0..b.start])) continue;
+        const props = declared(catalog, b.name) orelse continue;
+        const args: std.json.ObjectMap = if (std.mem.trim(u8, b.body, ws).len == 0)
+            .empty
+        else
+            try argumentsFrom(scratch, b.body, props) orelse continue;
+        var function: std.json.ObjectMap = .empty;
+        try function.put(arena, "name", .{ .string = try arena.dupe(u8, b.name) });
+        try function.put(arena, "arguments", .{ .string = try std.json.Stringify.valueAlloc(arena, Value{ .object = args }, .{}) });
+        var call: std.json.ObjectMap = .empty;
+        try call.put(arena, "id", .{ .string = try std.fmt.allocPrint(arena, "call_inline_{d}", .{inline_seq.fetchAdd(1, .monotonic) + 1}) });
+        try call.put(arena, "type", .{ .string = "function" });
+        try call.put(arena, "function", .{ .object = function });
+        try calls.append(.{ .object = call });
+        b.state = .repaired;
+    }
+    if (calls.items.len == 0) return false;
+    const rest = try stripRepaired(arena, content.string, found);
+    try message.object.put(arena, "content", if (rest.len == 0) Value.null else Value{ .string = rest });
+    try message.object.put(arena, "tool_calls", .{ .array = calls });
+    return true;
+}
+
+/// Whether text ending here is inside a ``` fence or an inline `code` span.
+fn inCode(before: []const u8) bool {
+    const fences = std.mem.count(u8, before, "```");
+    if (fences % 2 == 1) return true;
+    return (std.mem.count(u8, before, "`") - 3 * fences) % 2 == 1;
+}
+
+/// The named tool's `properties` in a chat-completions catalog: an empty map
+/// for a tool without parameters, null when the catalog has no such tool.
+fn declared(catalog: Value, name: []const u8) ?std.json.ObjectMap {
+    if (catalog != .array) return null;
+    for (catalog.array.items) |tool| {
+        if (tool != .object) continue;
+        const f = tool.object.get("function") orelse tool;
+        if (f != .object) continue;
+        const n = f.object.get("name") orelse continue;
+        if (n != .string or !std.mem.eql(u8, n.string, name)) continue;
+        return properties(catalog, name) orelse .empty;
+    }
+    return null;
+}
+
 /// `schema` with nullable unions collapsed to the plain type, recursively.
 fn collapseNullable(arena: Allocator, schema: *Value) !void {
     if (schema.* != .object) return;
