@@ -248,6 +248,9 @@ pub const EventSink = struct {
     pending: std.ArrayList(u8),
     gpa: Allocator,
     next_tool: u32 = 0,
+    /// Called after each tool event, under the output lock: the live
+    /// context meter (acp_context_meter.zig).
+    step: ?@import("acp_context_meter.zig").Step = null,
     last_id: [64]u8 = @splat(0),
     buf: [4096]u8 = undefined,
     writer: Io.Writer = undefined,
@@ -304,7 +307,10 @@ pub const EventSink = struct {
                 self.saw_text.* = false;
                 self.streamed_any = true;
             },
-            .tool => self.saw_text.* = false,
+            .tool => {
+                self.saw_text.* = false;
+                if (self.step) |step| step.run(step.ctx, self.out);
+            },
             else => {},
         }
         self.out.flush() catch {};

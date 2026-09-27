@@ -36,10 +36,10 @@ pub const SlashFn = *const fn (ctx: *anyopaque, arena: Allocator, text: []const 
 pub const AfterUserFn = *const fn (ctx: *anyopaque, arena: Allocator, text: []const u8, prompt: ?std.json.Value) void;
 pub const BindSessionFn = *const fn (ctx: *anyopaque, session_id: []const u8) void;
 pub const LoadSessionFn = *const fn (ctx: *anyopaque, arena: Allocator, w: *Io.Writer, req: proto.Request) anyerror!void;
-/// Optional per-turn context meter: used and window tokens for the
-/// `gui_context_meter` update available to clients.
+/// Optional per-turn context meter: used and window tokens (plus the known
+/// session cost) for the standard `usage_update` (acp_context_meter.zig).
 /// Null when the embed has no live agent (pure in-process loop, tests).
-pub const Meter = struct { used: u64, window: u64 };
+pub const Meter = struct { used: u64, window: u64, cost_usd: ?f64 = null };
 pub const MeterFn = *const fn (ctx: *anyopaque) Meter;
 /// Vendor-method escape hatch: gets every request the core loop does not
 /// claim; returns true when it answered (false falls through to -32601).
@@ -211,15 +211,7 @@ pub fn emitMeter(d: *Dispatch, w: *Io.Writer, sid: []const u8) !void {
     if (d.meter) |meter| {
         // Report live occupancy independently of the model catalog.
         const m = meter(d.ctx);
-        if (m.window > 0 and v2.on()) return v2.writeUsage(w, sid, m.used, m.window);
-        if (m.window > 0) try proto.writeNotification(w, "session/update", .{
-            .sessionId = sid,
-            .update = .{
-                .sessionUpdate = "gui_context_meter",
-                .used = m.used,
-                .window = m.window,
-            },
-        });
+        if (m.window > 0) try @import("acp_context_meter.zig").write(w, sid, m.used, m.window, m.cost_usd);
     }
 }
 

@@ -53,7 +53,7 @@ test "live context occupancy precedes the terminal prompt reply" {
     w = .fixed(&buf);
     try handleLine(&d, a, &w, "{\"id\":2,\"method\":\"session/prompt\",\"params\":{\"prompt\":[{\"type\":\"text\",\"text\":\"hi\"}]}}");
     const output = w.buffered();
-    const occupancy = std.mem.indexOf(u8, output, "\"gui_context_meter\",\"used\":123,\"window\":1000") orelse return error.MissingMeter;
+    const occupancy = std.mem.indexOf(u8, output, "\"usage_update\",\"used\":123,\"size\":1000") orelse return error.MissingMeter;
     const terminal = std.mem.indexOf(u8, output, "\"stopReason\":\"end_turn\"") orelse return error.MissingTerminalReply;
     try std.testing.expect(occupancy < terminal);
 }
