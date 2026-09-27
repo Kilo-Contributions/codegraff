@@ -80,6 +80,11 @@ fn liveSlash(ctx: *anyopaque, arena: Allocator, text: []const u8) anyerror!?[]co
         return try engine.stripSgr(arena, aw.writer.buffered());
     }
     if (command_catalog.match(text) == null and command_catalog.commandWord(text) == null) return null;
+    // /compact reports compaction_update like an automatic one.
+    var lock: Io.Mutex = .init;
+    var compaction: @import("acp_compaction.zig").Sink = .{ .out = live.out, .output_lock = &lock, .io = live.root.io, .session_id = live.session_id };
+    @import("acp_compaction.zig").install(&compaction);
+    defer @import("acp_compaction.zig").uninstall();
     try main_mod.handleCommand(live.root, live.keys, arena, std.mem.trim(u8, text, " \t\r\n"), &aw.writer);
     return try engine.stripSgr(arena, aw.writer.buffered());
 }

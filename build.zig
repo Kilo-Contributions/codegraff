@@ -180,6 +180,9 @@ pub fn build(b: *std.Build) void {
     const acp_slash_typo_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-slash-typo.py" });
     acp_slash_typo_test.addArtifactArg(exe);
     test_step.dependOn(&acp_slash_typo_test.step);
+    const acp_compaction_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-compaction.py" });
+    acp_compaction_test.addArtifactArg(exe);
+    test_step.dependOn(&acp_compaction_test.step);
     const run_tool_budget_test = b.addSystemCommand(&.{ "python3", "scripts/test-run-tool-budget.py" });
     run_tool_budget_test.addArtifactArg(exe);
     test_step.dependOn(&run_tool_budget_test.step);

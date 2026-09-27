@@ -248,6 +248,7 @@ pub fn handlePreAuthLine(arena: Allocator, w: *Io.Writer, line: []const u8) !voi
     const req = parseRequest(arena, line) orelse return;
     if (std.mem.eql(u8, req.method, "initialize")) {
         v2.negotiate(req.params, 0);
+        @import("acp_compaction.zig").noteInitialize(req.params);
         return respondInitialize(w, req, false);
     }
     return respondError(w, req, err_auth_required, acp_auth.required_message);
@@ -258,6 +259,7 @@ pub fn handleLine(d: *Dispatch, arena: Allocator, w: *Io.Writer, line: []const u
     if (std.mem.eql(u8, req.method, "initialize")) {
         v2.negotiate(req.params, d.seed);
         @import("acp_elicit.zig").configure(req.params);
+        @import("acp_compaction.zig").noteInitialize(req.params);
         // The draft child-session RFD is a v1 shape; v2 gets tool-call progress.
         d.subagents = !v2.on() and supportsSubagents(req.params);
         d.background_subagents = supportsBackgroundSubagents(req.params);
