@@ -91,7 +91,7 @@ jobs:
           python3 scripts/test-claim-repository.py
           python3 scripts/test-claim-lifecycle.py
           python3 scripts/eval-tier2.py --only repository-scoped-claim-release
-          python3 scripts/eval-tier2.py --only draft-cannot-waive-pr-completion --only base-failure-cannot-waive-pr-completion --only user-authorized-draft-handoff --only draft-scope-does-not-waive-ready-pr-ci --only user-can-require-verified-pr-again --only current-head-passing-pr-completes
+          python3 scripts/eval-tier2.py --only passing-draft-is-still-unverified --only base-failure-cannot-waive-pr-completion --only draft-handoff-needs-no-user-command --only ready-pr-failing-ci-defers --only legacy-pr-acceptance-option-is-ignored --only current-head-passing-pr-completes
 
       - name: Title command result contract
         run: python3 scripts/test-title-result.py
