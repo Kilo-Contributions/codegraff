@@ -50,7 +50,8 @@ pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
             if (self.tracer) |tr| tr.note("ask_user_wait", @tagName(acp_elicit.mode));
             const got = try acp_ask.wait(self.arena);
             acp_elicit.finish();
-            if (got.cancelled) return .{ .text = "user cancelled the follow-up", .is_error = true };
+            if (self.tracer) |tr| tr.note("ask_user_outcome", @tagName(got.outcome));
+            if (got.outcome != .answered) return .{ .text = noAnswerText(got.outcome), .is_error = true };
             return finishAnswer(self, std.mem.trim(u8, got.text, " \t\r"));
         }
         const in = self.in.?;
@@ -94,6 +95,25 @@ pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
         .is_error = true,
     };
     return finishAnswer(self, std.mem.trim(u8, raw, " \t\r"));
+}
+
+/// #1322: only a user's explicit cancel reads as a cancel. A question the
+/// client returned with nothing bound to it may never have been shown, so
+/// the model must not take it as a refusal and end the turn.
+pub fn noAnswerText(outcome: acp_ask.Outcome) []const u8 {
+    return switch (outcome) {
+        .answered => unreachable,
+        .dismissed => "user cancelled the follow-up",
+        .declined => "the user declined to answer this question. Continue without it and do not ask it again.",
+        .unanswered => "no answer came back: the client returned the question without a reply, so the user may not have seen it. This is not a refusal. Continue with a reasonable, reversible assumption and state it, or ask the question in your reply.",
+    };
+}
+
+test "noAnswerText keeps cancel as cancel and never calls a lost question a cancel (#1322)" {
+    try std.testing.expectEqualStrings("user cancelled the follow-up", noAnswerText(.dismissed));
+    try std.testing.expect(std.mem.indexOf(u8, noAnswerText(.unanswered), "cancel") == null);
+    try std.testing.expect(std.mem.indexOf(u8, noAnswerText(.unanswered), "not a refusal") != null);
+    try std.testing.expect(std.mem.indexOf(u8, noAnswerText(.declined), "declined") != null);
 }
 
 fn finishAnswer(self: *Agent, raw: []const u8) !ExecResult {
