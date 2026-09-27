@@ -38,6 +38,9 @@ pub fn subAgent(a: std.mem.Allocator, sub: bool) Agent {
     agent.codex_prev_id = null;
     agent.codex_sent_upto = 0;
     agent.sys_override = null;
+    // #1333: hot_context.afterCompact skips agents that never went through
+    // the prompt funnel; an undefined base would read as a real one.
+    agent.sys_base = "";
     agent.sys_normal = "";
     agent.sys_strict = "";
     agent.strict = false;
