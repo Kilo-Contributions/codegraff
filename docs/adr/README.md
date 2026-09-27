@@ -233,6 +233,7 @@ record only when you need the evidence or the edge cases.
 | [0204](0204-kimi-platform-is-graff.md) | Kimi requests send `X-Msh-Platform: graff` and `graff/<version>` everywhere (OAuth and inference), never `kimi_code_cli`; a Kimi Code console key bills as plan quota. Supersedes 0027. |
 | [0205](0205-subagent-progress-is-standard-tool-content.md) | By default a subagent streams its work onto the parent tool call as content-only `tool_call_update` rows (rolling log + `_meta["graff/subagent"]`); the draft child-session stream only when both sides opt in; `GRAFF_ACP_SUBAGENT_PROGRESS=0` turns it off. |
 | [0206](0206-acp-v2-preview-behind-a-gate.md) | ACP v2 draft shapes behind `GRAFF_ACP_V2=1` plus a client `protocolVersion` >= 2; v1 stays the default and unchanged. Prompt is acknowledged with `messageId` on insertion, the outcome travels as `state_update`. |
+| [0207](0207-jev-file-retrieval-is-not-economical.md) | Rejected: no Jev file retrieval (`locate` tool, Jev rerank after `codedb context`, or jevgrep). A full Jev scan found answer files best (80% in top 5 vs 38% for `codedb context`) but costs one request per file and grows with repo size; `codedb` stays the retrieval path. |
 
 ## When to write one
 

@@ -28,6 +28,19 @@ pub const LiveTurn = struct {
     dispatch: ?*@import("acp_engine.zig").Dispatch = null,
     /// Launch `--model`: outranks a loaded session's saved model, as on CLI resume.
     model_override: ?provider_mod.Provider = null,
+    /// The context count the last mid-turn meter carried.
+    last_meter_used: u64 = 0,
+
+    /// Mid-turn `usage_update`, only when the count moved since the last one.
+    fn stepMeter(ctx: *anyopaque, w: *Io.Writer) void {
+        const self: *LiveTurn = @ptrCast(@alignCast(ctx));
+        const meter = @import("acp_context_meter.zig");
+        const used = self.root.effectiveContextTokens();
+        const window = self.root.provider.context;
+        if (window == 0 or used == self.last_meter_used) return;
+        self.last_meter_used = used;
+        meter.write(w, self.session_id, used, window, meter.knownCostUsd(self.root.io)) catch {};
+    }
 
     pub fn errorMessage(ctx: *anyopaque, err: anyerror) []const u8 {
         const self: *LiveTurn = @ptrCast(@alignCast(ctx));
@@ -77,6 +90,7 @@ pub const LiveTurn = struct {
         sink.init(self.root.gpa, self.out, &self.session_id, &self.saw_text);
         sink.output_lock = &output_lock;
         sink.output_io = self.root.io;
+        sink.step = .{ .ctx = self, .run = stepMeter };
         // Standard progress on the parent tool call by default; the draft
         // child-session stream only when both sides opted in (ADR 0194/0205).
         const draft = self.dispatch != null and self.dispatch.?.subagents and self.dispatch.?.draft_subagents_enabled;
