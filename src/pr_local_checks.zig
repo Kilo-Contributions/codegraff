@@ -74,7 +74,12 @@ pub fn record(root: anytype, call: ToolCall, result: ExecResult) !void {
     root.publication_checks.observation_mutex.lockUncancelable(root.io);
     defer root.publication_checks.observation_mutex.unlock(root.io);
     const parsed = @import("pr_command.zig").literal(root.arena, command) catch return;
-    if (!isCheck(try std.mem.join(root.arena, " ", parsed.argv))) return;
+    // One check, one key: the argv without a leading `cd` or extra spacing,
+    // matched with the effective directory below. Keying by the raw string
+    // made `cd app && zig build test` and `zig build test` run in app/ two
+    // outstanding checks, named to the model one spelling at a time.
+    const key = try std.mem.join(root.arena, " ", parsed.argv);
+    if (!isCheck(key)) return;
     const base = root.agent_cwd orelse ".";
     const path = if (parsed.cwd) |cwd| if (std.fs.path.isAbsolute(cwd)) cwd else try std.fs.path.join(root.arena, &.{ base, cwd }) else base;
     var dir = std.Io.Dir.cwd().openDir(root.io, path, .{}) catch try std.Io.Dir.cwd().openDir(root.io, base, .{});
@@ -82,7 +87,7 @@ pub fn record(root: anytype, call: ToolCall, result: ExecResult) !void {
     var buffer: [std.fs.max_path_bytes]u8 = undefined;
     const cwd = buffer[0..try dir.realPath(root.io, &buffer)];
     const repository = try repositoryRoot(root, cwd);
-    try root.publication_checks.observeKnown(root.arena, cwd, repository, command, result);
+    try root.publication_checks.observeKnown(root.arena, cwd, repository, key, result);
     const ev = @import("pr_evidence.zig");
     const target = ev.Target{ .cwd = cwd, .selector = "" };
     const head = ev.localHead(root.gpa, root.io, root.arena, target) catch "";
@@ -466,4 +471,35 @@ test "a check promoted to the background resolves when its job exits 0 (#1326)" 
     try resolveFinishedJobs(&root);
     try std.testing.expect(root.publication_checks.unresolved(repository) == null);
     job_notify.dismiss(io, 424244);
+}
+
+test "one check in one directory is one entry whatever its spelling" {
+    const io = std.testing.io;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var path: [std.fs.max_path_bytes]u8 = undefined;
+    const repo = path[0..try temp.dir.realPath(io, &path)];
+    const ev = @import("pr_evidence.zig");
+    _ = try ev.capture(std.testing.allocator, io, a, .{ .cwd = repo, .selector = "" }, &.{ "git", "init", "-q" });
+    try temp.dir.createDirPath(io, "app");
+    const app = try std.fs.path.join(a, &.{ repo, "app" });
+    var root: @import("agent.zig").Agent = undefined;
+    root.gpa = std.testing.allocator;
+    root.arena = a;
+    root.io = io;
+    root.sub = false;
+    root.agent_cwd = repo;
+    root.publication_checks = .{};
+    const repository = try repositoryRoot(&root, repo);
+    const failing = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"run\",\"command\":\"cd app && zig build test\"}", .{});
+    try record(&root, .{ .id = "a", .name = "shell", .input = failing }, .{ .text = "FAIL", .is_error = true });
+    try std.testing.expectEqualStrings("zig build test", root.publication_checks.unresolved(repository).?);
+    // The same check, spelled without the cd and with extra spaces, from app/.
+    root.agent_cwd = app;
+    const passing = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"run\",\"command\":\"zig  build   test\"}", .{});
+    try record(&root, .{ .id = "b", .name = "shell", .input = passing }, .{ .text = "All tests passed", .is_error = false });
+    try std.testing.expect(root.publication_checks.unresolved(repository) == null);
 }
