@@ -353,7 +353,10 @@ cwd and builds two arena-owned strings — `sys_normal` (= `main_system_prompt`
 + the file) and `sys_strict` (+ `strict_note`) — stored on the root `Agent`.
 `systemPrompt()` returns `sys_strict`/`sys_normal` for the root and the lean
 `sub_system_prompt` for subagents. Built once at startup, so there's no
-per-request cost and the prompt stays byte-stable for the KV cache.
+per-request cost and the prompt stays byte-stable for the KV cache. A
+mid-session edit to the file (or a date rollover) is appended as a keyed
+`<context>` update rather than rewriting that prefix; compaction folds the
+latest version back in (ADR 0208).
 
 ## ultracode codeword
 

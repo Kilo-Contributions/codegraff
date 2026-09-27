@@ -19,7 +19,8 @@ pub const origin_key = "_graff_origin";
 pub fn isNotice(m: std.json.Value) bool {
     if (m != .object) return false;
     const v = m.object.get(origin_key) orelse return false;
-    return v == .string and std.mem.eql(u8, v.string, "notification");
+    // #1333: hot-context updates are notices too, with their own origin.
+    return v == .string and (std.mem.eql(u8, v.string, "notification") or std.mem.eql(u8, v.string, "hot_context"));
 }
 pub fn message(a: std.mem.Allocator, text: []const u8) !std.json.Value {
     return mark(a, try @import("messages.zig").textMessage(a, "user", text));

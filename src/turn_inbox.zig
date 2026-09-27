@@ -16,6 +16,7 @@ pub fn deliver(self: *Agent) !void {
     @import("job_notify.zig").deliver(self);
     @import("schedule.zig").deliver(self);
     @import("channel_worker.zig").deliver(self);
+    @import("hot_context.zig").deliver(self); // #1333: changed ambient keys, before the prompt
     deliverSteer(self);
 }
 
