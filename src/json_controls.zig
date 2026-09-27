@@ -68,20 +68,10 @@ pub fn applyToolKnobs(obj: std.json.ObjectMap) void {
     }
 }
 
-/// User-request options: tool ceilings, native images, and explicit PR scope.
+/// User-request options: tool ceilings and native images.
 /// False means validation already emitted the request error.
 pub fn applyTurnOptions(root: *Agent, obj: std.json.ObjectMap) bool {
     if (!remote_images.stage(root, obj)) return false;
-    if (obj.get("prAcceptance")) |value| {
-        if (value != .string) {
-            root.emit(.{ .type = "error", .message = "prAcceptance must be verified or draft" });
-            return false;
-        }
-        @import("pr_acceptance.zig").set(root, value.string) catch {
-            root.emit(.{ .type = "error", .message = "prAcceptance must be verified or draft" });
-            return false;
-        };
-    }
     applyToolKnobs(obj);
     return true;
 }

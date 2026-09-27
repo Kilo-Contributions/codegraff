@@ -128,7 +128,7 @@ record only when you need the evidence or the edge cases.
 | [0116](0116-informational-turns-have-bounded-scope.md) | Summary turns gather bounded evidence; coding completion requirements apply to requested changes. |
 | [0118](0118-file-edits-check-target-worktree.md) | File edits checkpoint the target Git worktree; unresolved paths retain the caller checkpoint. |
 | [0119](0119-computer-tools-receive-caller-context.md) | Computer-use MCP requests receive opaque caller-owned session and turn context. |
-| [0120](0120-draft-publication-does-not-complete-verification.md) | Draft PRs cannot satisfy verified completion; only a user control scoped to this conversation and goal permits an unverified draft handoff. |
+| [0120](0120-draft-publication-does-not-complete-verification.md) | Draft PRs cannot satisfy verified completion. A draft completes as a labeled, unverified handoff with no user command; ready PRs need passing current-head checks. |
 | [0121](0121-claims-include-repository-identity.md) | Claims include repository identity; literal PR mutations compare the observed repository, PR number and branch, while unknown scopes stay conservative. |
 
 | [0122](0122-one-session-navigation-surface.md) | Open chats use the expanded sidebar or collapsed top tabs, preserving drafts and groups; focused mode keeps a compact composer and accessible settings. |
