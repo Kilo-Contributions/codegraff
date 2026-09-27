@@ -32,19 +32,15 @@ const Srv = struct {
     /// Drain the request head, send the SSE head plus one prose delta (plus
     /// the terminal event when `finish`). The socket then stays open with no
     /// further byte, so a client that gives up sees silence (a stall), never
-    /// EOF (a drop).
-    fn answer(io: Io, c: std.Io.net.Stream, finish: bool) void {
-        var rbuf: [8192]u8 = undefined;
-        var sr = std.Io.net.Stream.Reader.init(c, io, &rbuf);
-        while (true) {
-            const l = (sr.interface.takeDelimiter('\n') catch return) orelse return;
-            if (l.len == 0 or (l.len == 1 and l[0] == '\r')) break; // end of headers
-        }
+    /// EOF (a drop). False, with nothing sent, for anything but a POST.
+    fn answer(io: Io, c: std.Io.net.Stream, finish: bool) bool {
+        if (!takePostHead(io, c)) return false;
         var wbuf: [1024]u8 = undefined;
         var sw = std.Io.net.Stream.Writer.init(c, io, &wbuf);
-        sw.interface.writeAll("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n" ++ prose_line) catch return;
-        if (finish) sw.interface.writeAll(done_line) catch return;
-        sw.interface.flush() catch return;
+        sw.interface.writeAll("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n" ++ prose_line) catch return true;
+        if (finish) sw.interface.writeAll(done_line) catch return true;
+        sw.interface.flush() catch return true;
+        return true;
     }
 
     /// `conns` streams that go quiet, in turn (the #680 ladder). Every
@@ -53,10 +49,14 @@ const Srv = struct {
         var held: [3]?std.Io.net.Stream = @splat(null);
         defer for (held) |h| if (h) |c| c.close(io);
         var i: usize = 0;
-        while (i < conns) : (i += 1) {
+        while (i < conns) {
             const c = server.accept(io) catch return;
+            if (!answer(io, c, false)) {
+                c.close(io);
+                continue;
+            }
             held[i] = c;
-            answer(io, c, false);
+            i += 1;
         }
         while (!done.load(.acquire)) io.sleep(.fromMilliseconds(20), .awake) catch return;
     }
@@ -65,14 +65,34 @@ const Srv = struct {
     fn runTwo(io: Io, server: *std.Io.net.Server, done: *std.atomic.Value(bool)) void {
         var held: [2]?std.Io.net.Stream = @splat(null);
         defer for (held) |h| if (h) |c| c.close(io);
-        for (0..2) |i| {
+        var i: usize = 0;
+        while (i < 2) {
             const c = server.accept(io) catch return;
+            if (!answer(io, c, i == 0)) {
+                c.close(io);
+                continue;
+            }
             held[i] = c;
-            answer(io, c, i == 0);
+            i += 1;
         }
         while (!done.load(.acquire)) io.sleep(.fromMilliseconds(20), .awake) catch return;
     }
 };
+
+/// Drain one request head; true when it is the agent's POST. Another local
+/// process can probe any fresh loopback listener (#1303: `HEAD /` for
+/// `localhost`), and serving it would spend a connection the test counts on.
+fn takePostHead(io: Io, c: std.Io.net.Stream) bool {
+    var rbuf: [8192]u8 = undefined;
+    var sr = std.Io.net.Stream.Reader.init(c, io, &rbuf);
+    var post: ?bool = null;
+    while (true) {
+        const l = (sr.interface.takeDelimiter('\n') catch return false) orelse return false;
+        if (post == null) post = std.mem.startsWith(u8, l, "POST ");
+        if (l.len == 0 or (l.len == 1 and l[0] == '\r')) break; // end of headers
+    }
+    return post orelse false;
+}
 
 fn testProvider(url: []const u8) @import("provider.zig").Provider {
     return .{ .id = "test", .kind = .openai, .auth = .bearer, .url = url, .api_key = "k", .model = "m", .context = 0 };
@@ -216,14 +236,12 @@ const TrailerSrv = struct {
     const finish_line = "data: {\"choices\": [{\"index\":0, \"delta\": {}, \"finish_reason\": \"stop\"}]}\n\n";
     const usage_line = "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":2,\"total_tokens\":22}}\n\n";
     fn run(io: Io, server: *std.Io.net.Server, mode: Mode, done: *std.atomic.Value(bool)) void {
-        const c = server.accept(io) catch return;
+        const c = while (true) {
+            const conn = server.accept(io) catch return;
+            if (takePostHead(io, conn)) break conn;
+            conn.close(io);
+        };
         defer c.close(io);
-        var rbuf: [8192]u8 = undefined;
-        var sr = std.Io.net.Stream.Reader.init(c, io, &rbuf);
-        while (true) {
-            const line = (sr.interface.takeDelimiter('\n') catch return) orelse return;
-            if (line.len == 0 or (line.len == 1 and line[0] == '\r')) break;
-        }
         var wbuf: [1024]u8 = undefined;
         var sw = std.Io.net.Stream.Writer.init(c, io, &wbuf);
         sw.interface.writeAll("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n") catch return;

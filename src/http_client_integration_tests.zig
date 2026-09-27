@@ -31,39 +31,51 @@ const chat_sse_body =
     "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" ++
     "data: [DONE]\n\n";
 
-fn readRequest(reader: *std.Io.net.Stream.Reader) !void {
+/// Reads one request head and body; true when it is a POST.
+fn readRequest(reader: *std.Io.net.Stream.Reader) !bool {
     var content_length: usize = 0;
+    var post: ?bool = null;
     while (true) {
         const line = (try reader.interface.takeDelimiter('\n')) orelse return error.EndOfStream;
+        if (post == null) post = std.mem.startsWith(u8, line, "POST ");
         if (line.len == 0 or (line.len == 1 and line[0] == '\r')) break;
         if (std.ascii.startsWithIgnoreCase(line, "content-length:")) {
             content_length = try std.fmt.parseInt(usize, std.mem.trim(u8, line[15..], " \t\r"), 10);
         }
     }
     try reader.interface.discardAll(content_length);
+    return post orelse false;
 }
 
 pub fn serveReplies(io: Io, server: *std.Io.net.Server, replies: []const Reply, accepted: *std.atomic.Value(usize)) void {
-    for (replies) |reply| {
+    var served: usize = 0;
+    while (served < replies.len) {
         const conn = server.accept(io) catch return;
-        {
-            defer conn.close(io);
+        defer conn.close(io);
+        var read_buf: [16 * 1024]u8 = undefined;
+        var reader = std.Io.net.Stream.Reader.init(conn, io, &read_buf);
+        const post = readRequest(&reader) catch {
             _ = accepted.fetchAdd(1, .acq_rel);
-            var read_buf: [16 * 1024]u8 = undefined;
-            var reader = std.Io.net.Stream.Reader.init(conn, io, &read_buf);
-            readRequest(&reader) catch return;
-            var head_buf: [256]u8 = undefined;
-            const head = std.fmt.bufPrint(
-                &head_buf,
-                "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: close\r\n\r\n",
-                .{ reply.status, reply.content_type, reply.body.len },
-            ) catch return;
-            var write_buf: [4096]u8 = undefined;
-            var writer = std.Io.net.Stream.Writer.init(conn, io, &write_buf);
-            writer.interface.writeAll(head) catch return;
-            writer.interface.writeAll(reply.body) catch return;
-            writer.interface.flush() catch return;
-        }
+            return;
+        };
+        // #1303: every agent request is a POST. Another local process can
+        // probe any fresh loopback listener (seen: `HEAD /` for `localhost`
+        // with no User-Agent); counting that broke "no request was made".
+        if (!post) continue;
+        _ = accepted.fetchAdd(1, .acq_rel);
+        const reply = replies[served];
+        served += 1;
+        var head_buf: [256]u8 = undefined;
+        const head = std.fmt.bufPrint(
+            &head_buf,
+            "HTTP/1.1 {s}\r\ncontent-type: {s}\r\ncontent-length: {d}\r\nconnection: close\r\n\r\n",
+            .{ reply.status, reply.content_type, reply.body.len },
+        ) catch return;
+        var write_buf: [4096]u8 = undefined;
+        var writer = std.Io.net.Stream.Writer.init(conn, io, &write_buf);
+        writer.interface.writeAll(head) catch return;
+        writer.interface.writeAll(reply.body) catch return;
+        writer.interface.flush() catch return;
     }
 }
 

@@ -366,14 +366,18 @@ test "catalog HTTP/1.1 keeps auth, cursor pagination, and a valid prefix after a
 fn serveCatalogPages(io: std.Io, server: *std.Io.net.Server) void {
     const first = "{\"data\":[{\"id\":\"first\"}],\"has_more\":true,\"last_id\":\"first\"}";
     const second = "{\"data\":[{\"id\":\"second\"}],\"has_more\":false}";
-    for (0..6) |i| {
+    var i: usize = 0;
+    while (i < 6) {
         const stream = server.accept(io) catch return;
         defer stream.close(io);
         var read_buffer: [4096]u8 = undefined;
         var reader = std.Io.net.Stream.Reader.init(stream, io, &read_buffer);
-        const line = reader.interface.takeDelimiter('\n') catch return;
+        const line = (reader.interface.takeDelimiter('\n') catch return) orelse return;
+        // #1303: another local process can probe a fresh loopback listener;
+        // only the catalog's own GETs are pages.
+        if (!std.mem.startsWith(u8, line, "GET /v1/models")) continue;
         const expected = if (i % 2 == 0) "GET /v1/models?limit=1000 HTTP/1.1\r" else "GET /v1/models?limit=1000&after_id=first HTTP/1.1\r";
-        if (!std.mem.eql(u8, line orelse return, expected)) return;
+        if (!std.mem.eql(u8, line, expected)) return;
         var key = false;
         var version = false;
         while (reader.interface.takeDelimiter('\n') catch null) |header| {
@@ -387,6 +391,7 @@ fn serveCatalogPages(io: std.Io, server: *std.Io.net.Server) void {
         var writer = std.Io.net.Stream.Writer.init(stream, io, &write_buffer);
         writer.interface.print("HTTP/1.1 {s}\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n{s}", .{ if (i == 3) "500 Error" else "200 OK", body.len, body }) catch return;
         writer.interface.flush() catch return;
+        i += 1;
     }
 }
 
