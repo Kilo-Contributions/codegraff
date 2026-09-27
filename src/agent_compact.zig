@@ -199,6 +199,8 @@ pub fn compact(self: *Agent) anyerror!usize {
 
     var progress = @import("compact_status.zig").begin(self);
     defer progress.end(self);
+    var acp_run = @import("acp_compaction.zig").start(!self.sub and self.call_kind != .title);
+    defer acp_run.finish(.failed, null, "compaction did not complete; history unchanged"); // no-op after success
     // The handoff summary is internal — don't stream it to the terminal.
     const was_quiet = self.stream_quiet;
     const was_compaction_request = self.compaction_request;
@@ -236,6 +238,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     self.goal_note_fp = 0; // the injected goal note died with the old history - re-state in full (#318)
     self.history_rewrites +%= 1; // readers of pasted state (the /loop checklist gate) re-carry it (#318)
     installed_summary = true;
+    acp_run.finish(.completed, summary, null);
     // #445: the history the model was reading is gone and the durable file is
     // now the only place its exact wording survives, so THIS is where the #410
     // transcript line starts being worth its tokens. It rides this boundary
