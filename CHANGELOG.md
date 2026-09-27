@@ -23,6 +23,7 @@ current is part of cutting a release.
 - The ready-for-review claim review reserves every changed hunk before adding complete sources, keeps only the diffs when the packet would be too large, and reviews an oversized single-file diff (such as a new fixture) as a marked excerpt. A small edit in a large file no longer makes publication impossible. (#1341, #1343, #1345, #1337)
 - A local check that finished in the background resolves publication readiness, and checks are keyed by what they run, not how the command was spelled. (#1326, #1337)
 - A non-draft `gh pr create` right after pushing no longer falls back to a draft: the head's pending run is re-read for up to a minute, a run that fails meanwhile still refuses, and a create still pending afterwards proceeds while completion waits for the checks. (#1189)
+- Publication refusals state the rule plainly: a failure that also happens on the base still blocks non-draft publication; disclosure explains it but is not a way around it. (#1197)
 - The claim gate no longer blames an unrelated claim when an explicit `gh pr edit N` / `gh pr ready N` target can't be looked up: a different numbered PR claim does not block, a conservative refusal says what could not be resolved, and nobody is asked for a handoff. More `gh pr edit/close/comment/merge` options are recognized. (#1340, #1344)
 
 ### Shell jobs
