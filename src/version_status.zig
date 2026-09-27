@@ -78,8 +78,7 @@ fn isCleanReleaseVersion(s: []const u8) bool {
         else => return false,
     };
     // Releases are 3-part (0.0.301); CLI hotfixes add a fourth segment
-    // (0.0.300.1). Desktop bundles stay 3-part (see
-    // apps/native/electron/update-artifacts.cjs).
+    // (0.0.300.1).
     return dots == 2 or dots == 3;
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Offline browser regression for the bundled app in an opaque sandbox.
-const {chromium} = require('../apps/native/node_modules/@playwright/test');
+const {chromium} = require('@playwright/test');
 const {readFileSync} = require('node:fs');
 const assert = require('node:assert/strict');
 (async () => {
@@ -19,7 +19,7 @@ const assert = require('node:assert/strict');
         if(event.data.method==='ui/initialize')window.deliver({id:event.data.id,result:{protocolVersion:'2026-01-26',hostCapabilities:{},hostContext:{theme:'light'}}});
       });
       frame.srcdoc=html;
-    },readFileSync(require('node:path').join(__dirname,'../src/mcp_task_app.html'),'utf8').replace('/* CODEGRAFF_THEME */',readFileSync(require('node:path').join(__dirname,'../apps/native/app/ui-theme.css'),'utf8')));
+    },readFileSync(require('node:path').join(__dirname,'../src/mcp_task_app.html'),'utf8').replace('/* CODEGRAFF_THEME */',readFileSync(require('node:path').join(__dirname,'../src/ui_theme.css'),'utf8')));
     await page.waitForFunction(()=>window.received.some(m=>m.method==='ui/notifications/initialized'));
     const app=page.frames()[1];
     await page.evaluate(()=>{

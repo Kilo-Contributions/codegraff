@@ -120,8 +120,8 @@ pub fn build(b: *std.Build) void {
     unit_tests.root_module.addImport("tui", tui_mod);
     // spec/ fixtures live outside src/; importing them here makes @embedFile
     // legal and rebuilds the suite when the exported semantics change.
-    exe.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("apps/native/app/ui-theme.css") });
-    unit_tests.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("apps/native/app/ui-theme.css") });
+    exe.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("src/ui_theme.css") });
+    unit_tests.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("src/ui_theme.css") });
     unit_tests.root_module.addAnonymousImport("spec_tool_catalog", .{ .root_source_file = b.path("spec/kernels/tool_catalog.json") });
     unit_tests.root_module.addAnonymousImport("spec_transport", .{ .root_source_file = b.path("spec/kernels/transport.json") });
     unit_tests.root_module.addAnonymousImport("spec_providers", .{ .root_source_file = b.path("spec/kernels/providers.json") });

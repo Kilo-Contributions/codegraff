@@ -45,18 +45,6 @@ new load-bearing decision, add a record in the same branch.
 - **The font is not ours.** The terminal emulator owns the typeface — it loads the font, measures the cell grid, and rasterizes glyphs itself; the wire protocol has no sequence for an app to request a font. (xterm's legacy `OSC 50` is unimplemented by modern emulators and would hijack the user's whole terminal — do not emit it.) If a user asks to "change the REPL font," the answer is their terminal's config, e.g. `font-family = Geist Mono` (the site's typeface) in Ghostty — never a code change here.
 - **HDR/wide-gamut color is not ours either.** Truecolor SGR is 8-bit sRGB per channel — the protocol's ceiling; no sequence expresses Display P3 or EDR headroom, and macOS terminals clip app colors to SDR regardless of the panel. Pick values that look right on both P3 and sRGB displays (as `#059669` does); that's the whole lever.
 
-## Desktop UI: native is the reference
-
-The graphical app follows [docs/design.md](docs/design.md). Radii are tokens (`rounded-composer`, `rounded-window`, `rounded-card`, `rounded-control`, `rounded-chip`, `rounded-full`). Icon-only buttons are circles; labelled buttons are pills; the prompt bar is 32px. Do not invent `rounded-[Npx]` for chrome. Nested split panes stay 6px. The TUI is not this surface.
-
-## Packaged GUI installs `graff` on PATH
-
-First launch of a packaged desktop build must leave `graff` as a command the user can type in a new terminal. **This includes Developer ID signed and notarized `.app` / `.dmg` builds.** Notarization, stapling, Gatekeeper, and the release sign flow do not skip, stub, or replace that step. MCP client setup is a separate first-launch job and must not gate PATH install (a failed `graff mcp install` is not an excuse to skip the shim).
-
-`apps/native/electron/engine-launcher.cjs` writes `~/.local/bin/graff`, prepends that directory on zsh/bash **login and interactive** startup files (`.zprofile` and `.zshrc`, not only the GUI process’s `SHELL`), and shims `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` when writable. `HARNESS_NO_PATH=1` is the only skip — do not set it in notarized or release builds.
-
-Regression: `apps/native/electron/engine-launcher.test.cjs` (`login zsh finds graff without inheriting the app PATH` and `packaged first launch always installs graff on PATH, including notarized builds`).
-
 ## Driving the pager (no PTY, no Ghostty window)
 
 Do not spawn `graff tui` or a terminal emulator to inspect or click the pager.
@@ -101,17 +89,17 @@ click missed (overlay, prompt-origin, mid-origin).
 - If a touched file is already over 600 LOC, do not grow it; move it toward the limit before adding more behavior.
 - Generated files, vendored dependencies, lockfiles, and machine-produced artifacts are exempt; change their generator or source instead of hand-editing them.
 
-## Engine features are the same on REPL, TUI, and GUI
+## Engine features are the same on REPL, TUI, and ACP
 
 Messaging (`peer_message`, idle peer mail, Accord live wake) and other
 engine-side behavior (turns, tools, compaction, goals) must work the same on
-the line REPL, the fullscreen TUI, and the desktop GUI (`graff acp`). Surface
+the line REPL, the fullscreen TUI, and ACP clients such as Harness (`graff acp`). Surface
 chrome can differ; the engine path cannot. If you add a wake, a latch, or a
 delivery rule, wire it on all three in the same change.
 
-Worktrees and changes to the GUI must be 1:1 with ACP. A new-chat folder
-rule, a worktree handoff, or a session cwd that exists only in desktop chrome
-is not done — wire the same behavior through the ACP session in the same
+The desktop app is Harness, which lives in its own repository and drives
+graff over ACP. A new-chat folder rule, a worktree handoff, or a session cwd
+that exists only in a client is not done — wire the same behavior through the ACP session in the same
 change. The workspace the agent runs in is not chrome.
 
 ## Tests must be reachable
@@ -138,15 +126,9 @@ publishes. Older release branches and superseded commits cannot replace the
 latest beta.
 
 Beta releases are GitHub prereleases and must explicitly remain outside the
-stable `latest` pointer and desktop updater feed. The stable tag workflow is
-restricted to numeric stable tags. The beta CLI release has no installer;
-download the versioned tarball from the specific prerelease. CI can publish
-the CLI and unsigned Linux desktop package; macOS
-desktop distribution still requires the repository's Developer ID signing,
-provisioning profile, and notarization on a configured Mac. Its CI build is an
-intermediate artifact only. Attach a signed beta DMG to that same prerelease
-with `publish-beta-macos.sh` after `distribute.sh` passes its gates. Never upload
-an unsigned macOS app as a release download or add `latest-mac.yml` to a beta.
+stable `latest` pointer. The stable tag workflow is restricted to numeric
+stable tags. The beta CLI release has no installer; download the versioned
+tarball from the specific prerelease.
 
 ## Before you push
 
