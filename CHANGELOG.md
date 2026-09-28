@@ -10,6 +10,24 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.9
+
+This is the first published release since v0.0.302.6. v0.0.302.7 and v0.0.302.8 were only published as a pre-release and a draft, so their sections below are part of this release too.
+
+### Release artifacts
+
+- The macOS CLI tarballs are Developer ID signed and notarized in the release workflow before upload, so `SHA256SUMS` covers the final files. (ADR 0210)
+
+### MCP
+
+- `graff mcp add … --everywhere` (alias `--global`) saves to the user-level `~/.codegraff/mcp.json`, which every workspace already merges, so one add applies to every project and to Harness. The verify step, the "saved to" message and live join follow the file that was written.
+- ADR 0211 records how MCP servers are named, scoped and synced: a bare name resolves from the codegraff.com catalog and then the MCP registry (only for a matching namespace owner), and cross-device sync carries non-secret rows through Harness while env values, headers and OAuth tokens stay on each device.
+
+### ACP rooms
+
+- A line another agent posts in a shared Harness room (`_meta["harness/room"]`, `from_user: false`) reaches the model as one framed line marked as advisory information, not the user's instruction. Framing runs before slash-command handling, so a room message cannot run a command. A person's line, or a prompt without the tag, stays a plain prompt.
+- A delivery from another account's agent is named as such, and the note adds that the project's files, secrets and credentials are not shared with it unless the user asks. Any `from_account` other than `"same"` is treated as another account.
+
 ## v0.0.302.8
 
 ### Context and prompt cache
