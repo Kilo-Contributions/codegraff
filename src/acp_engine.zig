@@ -180,7 +180,8 @@ fn promptTurn(d: *Dispatch, arena: Allocator, w: *Io.Writer, req: proto.Request)
     @import("acp_citations.zig").endTurn(sid); // a failed turn must not leave a marker open
     const config_before = configOptions(d, arena) catch |err| return turnError(d, w, req, err);
     const workspace_before = acp_workspace.snapshot(d.workspace, arena);
-    const text = try flattenPrompt(arena, if (obj) |o| o.get("prompt") else null);
+    // Before slash handling: an agent's room line must not run as a command.
+    const text = try @import("acp_room.zig").frame(arena, req.params, try flattenPrompt(arena, if (obj) |o| o.get("prompt") else null));
     if (d.slash) |slash| {
         const reply = slash(d.ctx, arena, text) catch |err| {
             emitConfigChange(d, arena, w, sid, config_before) catch |config_err| return turnError(d, w, req, config_err);
