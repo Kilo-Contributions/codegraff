@@ -80,6 +80,16 @@ pub const Lookup = struct {
 /// One disk read: fresh `tools/list` if the TTL still holds, plus the era even
 /// when the catalog is stale (so Auto can skip the modern probe).
 pub fn lookup(io: Io, arena: Allocator, home: []const u8, key: []const u8, now_ms: i64) Lookup {
+    return lookupWith(io, arena, home, key, now_ms, false);
+}
+
+/// The last catalog regardless of TTL: enough to advertise a local server
+/// that starts on first use (mcp_lazy.zig), which refreshes it when it wakes.
+pub fn lookupAnyAge(io: Io, arena: Allocator, home: []const u8, key: []const u8) ?Hit {
+    return lookupWith(io, arena, home, key, 0, true).hit;
+}
+
+fn lookupWith(io: Io, arena: Allocator, home: []const u8, key: []const u8, now_ms: i64, any_age: bool) Lookup {
     var out: Lookup = .{};
     if (key.len == 0) return out;
     const data = readFile(io, arena, home) orelse return out;
@@ -98,8 +108,10 @@ pub fn lookup(io: Io, arena: Allocator, home: []const u8, key: []const u8, now_m
         (if (v == .integer and v.integer > 0) @as(u64, @intCast(v.integer)) else default_ttl_ms)
     else
         default_ttl_ms;
-    if (fetched <= 0 or now_ms < fetched) return out;
-    if (@as(u64, @intCast(now_ms - fetched)) > ttl) return out;
+    if (!any_age) {
+        if (fetched <= 0 or now_ms < fetched) return out;
+        if (@as(u64, @intCast(now_ms - fetched)) > ttl) return out;
+    }
     if (out.era == .unknown) return out;
     const ver = if (entry.object.get("protocol_version")) |v| (if (v == .string) v.string else "?") else "?";
     const tools = entry.object.get("tools") orelse return out;

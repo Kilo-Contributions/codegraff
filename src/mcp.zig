@@ -86,6 +86,9 @@ pub const Registry = struct {
     /// opted out of the probe by `GRAFF_MCP_PROBE=0` — the env var reaches
     /// only the config-file path.
     stdio_probe: bool = true,
+    /// Cached stdio servers start on first use (mcp_lazy.zig). Only
+    /// `Registry.init` reads `GRAFF_MCP_EAGER`; verification paths set false.
+    lazy_stdio: bool = true,
     /// An image an MCP tool returned, waiting for the next turn to collect it
     /// (#249). Written under `mutex` by `call`, drained by
     /// `vision.mcpImageHandoff` — the registry cannot reach the agent itself.
@@ -272,7 +275,7 @@ pub const Registry = struct {
     /// time: some legacy SDK servers close stdout on an unrecognized
     /// pre-`initialize` message (`server/discover`), and the only fix is a
     /// fresh process — the closed one can't be un-closed.
-    fn spawnStdio(reg: *Registry, a: Allocator, argv: []const []const u8, env_map: ?*std.process.Environ.Map, cwd: ?[]const u8) !Transport {
+    pub fn spawnStdio(reg: *Registry, a: Allocator, argv: []const []const u8, env_map: ?*std.process.Environ.Map, cwd: ?[]const u8) !Transport {
         var child = try std.process.spawn(reg.io, .{
             .argv = argv,
             .stdin = .pipe,
@@ -302,6 +305,15 @@ pub const Registry = struct {
         const command_v = cfg.get("command");
         const url_v = cfg.get("url");
         if ((command_v == null) == (url_v == null)) return error.BadMcpConfig;
+        const mcp_lazy = @import("mcp_lazy.zig");
+        if (reg.lazy_stdio) if (try mcp_lazy.dormantFromCache(reg.io, a, reg.home, name, cfg)) |d| {
+            const tools_before = tools.items.len;
+            errdefer tools.shrinkRetainingCapacity(tools_before);
+            try @import("mcp_pages.zig").appendTools(a, tools, servers.items.len, d.server, d.tools);
+            try servers.append(a, d.server);
+            if (reg.show_diagnostics) std.debug.print("  [mcp:{s}] ready — {d} tool(s), starts on first use\n", .{ name, d.tools.array.items.len });
+            return;
+        };
 
         const server = try a.create(Server);
         // Hoisted out of the `else` branch below (rather than local to it)
@@ -343,34 +355,10 @@ pub const Registry = struct {
                 } },
             };
         } else {
-            const command = if (command_v.? == .string) command_v.?.string else return error.BadMcpConfig;
-            try stdio_argv.append(a, command);
-            if (cfg.get("args")) |args| {
-                if (args != .array) return error.BadMcpConfig;
-                for (args.array.items) |arg| {
-                    if (arg != .string) return error.BadMcpConfig;
-                    try stdio_argv.append(a, arg.string);
-                }
-            }
-
-            if (cfg.get("cwd")) |cwd| {
-                if (cwd != .string or cwd.string.len == 0) return error.BadMcpConfig;
-                stdio_cwd = cwd.string;
-            }
-
-            // Optional per-server env overlaid on the parent environment.
-            if (cfg.get("env")) |env| {
-                if (env != .object) return error.BadMcpConfig;
-                const m = try a.create(std.process.Environ.Map);
-                m.* = std.process.Environ.Map.init(reg.gpa);
-                var env_it = env.object.iterator();
-                while (env_it.next()) |entry| {
-                    if (entry.value_ptr.* != .string) return error.BadMcpConfig;
-                    try m.put(entry.key_ptr.*, entry.value_ptr.*.string);
-                }
-                stdio_env_map = m;
-            }
-
+            const spec = try mcp_lazy.stdioSpec(reg.gpa, a, cfg);
+            try stdio_argv.appendSlice(a, spec.argv);
+            stdio_env_map = spec.env;
+            stdio_cwd = spec.cwd;
             server.* = .{ .name = name, .transport = try spawnStdio(reg, a, stdio_argv.items, stdio_env_map, stdio_cwd) };
         }
 
@@ -401,6 +389,7 @@ pub const Registry = struct {
             break :blk hit.tools;
         } else blk: {
             const listed = switch (server.transport) {
+                .dormant => unreachable, // only built above, from a cache hit
                 .http => try mcp_rpc.connectHttp(server, a, a, era_hint),
                 .stdio => stdio_listed: {
                     if (!reg.stdio_probe) break :stdio_listed try mcp_rpc.connectStdio(server, a, a, reg.io);
@@ -483,6 +472,8 @@ pub const Registry = struct {
         var response_arena_state = std.heap.ArenaAllocator.init(reg.gpa);
         defer response_arena_state.deinit();
         const response_alloc = response_arena_state.allocator();
+        if (server.transport == .dormant) @import("mcp_lazy.zig").wake(reg, server) catch |err|
+            return .{ .text = try std.fmt.allocPrint(out_alloc, "MCP server {s} failed to start: {t}", .{ server.name, err }), .is_error = true };
         if (!server.initialized) try initializeServer(server, response_alloc, reg.arena(), null);
         server.elicit_source = params;
         defer server.elicit_source = "";

@@ -170,6 +170,9 @@ def run_graff(graff: Path, fixture: Path, probe: bool) -> subprocess.CompletedPr
         # so explicitly — merely unsetting the variable ran scenario 1 with the
         # probe enabled and asserted nothing it claimed to.
         env["GRAFF_MCP_PROBE"] = "1" if probe else "0"
+        # The probe runs when a server connects. Keep the fixture from starting
+        # on first use (a cached catalog from the first scenario would).
+        env["GRAFF_MCP_EAGER"] = "1"
         return subprocess.run(
             [str(graff), "--json", "--yolo", "--model", "claude"],
             cwd=workspace,

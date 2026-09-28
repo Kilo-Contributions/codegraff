@@ -62,6 +62,7 @@ const StartCtx = struct {
     home: []const u8,
     show_diagnostics: bool,
     stdio_probe: bool,
+    lazy_stdio: bool = true,
     ready: ?*std.atomic.Value(bool) = null,
 };
 
@@ -80,6 +81,7 @@ fn startServerTask(ctx: StartCtx, name: []const u8, cfg: std.json.ObjectMap) Sta
         .home = ctx.home,
         .arena_state = std.heap.ArenaAllocator.init(ctx.gpa),
         .stdio_probe = ctx.stdio_probe,
+        .lazy_stdio = ctx.lazy_stdio,
         .show_diagnostics = ctx.show_diagnostics,
     };
     defer tmp.arena_state.deinit();
@@ -105,6 +107,7 @@ pub fn init(gpa: Allocator, io: Io, config_path: []const u8, global_path: ?[]con
         .home = home,
         .arena_state = std.heap.ArenaAllocator.init(gpa),
         .stdio_probe = if (environ_map.get("GRAFF_MCP_PROBE")) |v| !std.mem.eql(u8, v, "0") else true,
+        .lazy_stdio = environ_map.get("GRAFF_MCP_EAGER") == null,
         .show_diagnostics = show_diagnostics,
         .global_config_path = global_path,
         .global_is_override = mcp_config.isEnvOverride(environ_map),
@@ -174,13 +177,7 @@ fn alreadyStartingLocked(reg: *const Registry, name: []const u8) bool {
 }
 
 fn startCtx(reg: *const Registry) StartCtx {
-    return .{
-        .gpa = reg.gpa,
-        .io = reg.io,
-        .home = reg.home,
-        .show_diagnostics = reg.show_diagnostics,
-        .stdio_probe = reg.stdio_probe,
-    };
+    return .{ .gpa = reg.gpa, .io = reg.io, .home = reg.home, .show_diagnostics = reg.show_diagnostics, .stdio_probe = reg.stdio_probe, .lazy_stdio = reg.lazy_stdio };
 }
 
 /// Queue a stdio server onto `pending_starts` without waiting. Used by
