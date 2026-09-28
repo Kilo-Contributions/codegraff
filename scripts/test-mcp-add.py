@@ -150,6 +150,12 @@ def main():
         assert 'io.github.someone/lookalike-tools' in text and 'will not pick one' in text and 'lookalike' not in saved(names), text
         print('PASS mcp add <name>: the curated list first, the registry only for a publisher that owns the name', flush=True)
 
+        text = run(binary, names, env, 'add', 'kitty', '--name', 'everywhere-cat', '--everywhere')
+        global_servers = json.loads((Path(temp) / 'global.json').read_text())['mcpServers']
+        assert 'everywhere-cat' in global_servers and 'everywhere-cat' not in saved(names), (global_servers, saved(names))
+        assert '✓ everywhere-cat works' in text and 'global.json' in text, text
+        print('PASS mcp add --everywhere: the user-level file gets the entry, the project file does not', flush=True)
+
         live = Path(temp) / 'live'
         live.mkdir()
         add_cmd = f'{binary} mcp add livedemo --no-verify -- {sys.executable} {server}'
