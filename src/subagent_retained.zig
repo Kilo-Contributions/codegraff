@@ -15,6 +15,7 @@ pub const Record = struct {
     model: []const u8,
     context: u64 = 128000,
     text_only: bool = false,
+    read_only: bool = false,
     reasoning: @import("main.zig").ReasoningEffort = .medium,
     protocol: ?@import("provider.zig").Provider.Kind = null,
     deadline_ms: ?i64 = null,
@@ -144,6 +145,7 @@ pub fn restore(agent: *Agent, ctx: tools.ToolCtx) !void {
     dir.close(ctx.io);
     agent.agent_cwd = cwd;
     agent.text_only = record.text_only;
+    agent.read_only = record.read_only;
     agent.reasoning = record.reasoning;
     if (record.protocol) |kind| if (kind != agent.provider.kind) return error.RetainedWorkerProtocolChanged;
     if (record.deadline_ms) |deadline| agent.loop_deadline_ms = if (agent.loop_deadline_ms) |current| @min(current, deadline) else deadline;
@@ -158,6 +160,7 @@ pub fn checkpoint(agent: *Agent, ctx: tools.ToolCtx) !void {
     state.record.model = agent.provider.model;
     state.record.context = agent.provider.context;
     state.record.text_only = agent.text_only;
+    state.record.read_only = agent.read_only;
     state.record.reasoning = agent.reasoning;
     state.record.protocol = agent.provider.kind;
     state.record.deadline_ms = agent.loop_deadline_ms;
