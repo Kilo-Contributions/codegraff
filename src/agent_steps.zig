@@ -178,8 +178,8 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
     var calls: std.ArrayList(ToolCall) = .empty;
     defer calls.deinit(self.gpa);
     var final_text: []const u8 = "";
-    for (content.array.items) |block| {
-        if (block != .object) continue;
+    for (content.array.items) |*block| { // by pointer: the invalid-input marker is removed in place
+        if (block.* != .object) continue;
         const kind = if (block.object.get("type")) |t| (if (t == .string) t.string else "") else "";
         if (std.mem.eql(u8, kind, "text")) {
             if (block.object.get("text")) |tx| if (tx == .string) {
@@ -190,8 +190,9 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
             const name = if (block.object.get("name")) |n| (if (n == .string) n.string else "") else "";
             if (name.len == 0) continue;
             const id = if (block.object.get("id")) |x| (if (x == .string) x.string else "") else "";
+            const args_ok = !@import("tool_call_args.zig").takeInvalidMark(&block.object);
             const input = block.object.get("input") orelse Value{ .object = .empty };
-            try calls.append(self.gpa, .{ .id = id, .name = name, .input = input });
+            try calls.append(self.gpa, .{ .id = id, .name = name, .input = input, .args_ok = args_ok });
         }
     }
     self.pairContextMeterWithCurrentLocal();
@@ -426,10 +427,7 @@ pub fn assembleAnthropic(self: *Agent, body: []const u8) !?std.json.ObjectMap {
         if (b.text.items.len > 0) try b.obj.put(scratch, "text", .{ .string = b.text.items });
         if (b.thinking.items.len > 0) try b.obj.put(scratch, "thinking", .{ .string = b.thinking.items });
         if (b.signature.items.len > 0) try b.obj.put(scratch, "signature", .{ .string = b.signature.items });
-        if (b.json.items.len > 0) {
-            const input = std.json.parseFromSliceLeaky(Value, scratch, b.json.items, .{ .allocate = .alloc_always }) catch Value{ .object = .empty };
-            try b.obj.put(scratch, "input", input);
-        }
+        if (b.json.items.len > 0) try @import("tool_call_args.zig").putStreamedInput(scratch, &b.obj, b.json.items); // #1218
         try content.append(.{ .object = b.obj });
     }
     try r.put(scratch, "content", .{ .array = content });
