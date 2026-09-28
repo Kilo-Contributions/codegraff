@@ -355,7 +355,7 @@ pub const Registry = struct {
                 } },
             };
         } else {
-            const spec = try mcp_lazy.stdioSpec(reg.gpa, a, cfg);
+            const spec = try mcp_lazy.stdioSpec(reg.io, reg.gpa, a, cfg);
             try stdio_argv.appendSlice(a, spec.argv);
             stdio_env_map = spec.env;
             stdio_cwd = spec.cwd;

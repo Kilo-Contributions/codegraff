@@ -32,7 +32,7 @@ pub const Spec = struct {
     cwd: ?[]const u8 = null,
 };
 
-pub fn stdioSpec(gpa: Allocator, a: Allocator, cfg: ObjectMap) !Spec {
+pub fn stdioSpec(io: Io, gpa: Allocator, a: Allocator, cfg: ObjectMap) !Spec {
     const command_v = cfg.get("command") orelse return error.BadMcpConfig;
     if (command_v != .string) return error.BadMcpConfig;
     var argv: std.ArrayList([]const u8) = .empty;
@@ -45,6 +45,12 @@ pub fn stdioSpec(gpa: Allocator, a: Allocator, cfg: ObjectMap) !Spec {
         }
     }
     var spec: Spec = .{ .argv = argv.items };
+    // `"shared": true`: run through the per-machine broker (mcp_share.zig).
+    const share = @import("mcp_share.zig");
+    if (share.wantsShared(cfg)) {
+        const key = share.keyFor(cfg);
+        spec.argv = try share.attachArgv(a, try std.process.executablePathAlloc(io, a), try a.dupe(u8, &key), argv.items);
+    }
     if (cfg.get("cwd")) |cwd| {
         if (cwd != .string or cwd.string.len == 0) return error.BadMcpConfig;
         spec.cwd = cwd.string;
@@ -115,7 +121,7 @@ pub fn dormantFromCache(io: Io, a: Allocator, home: []const u8, name: []const u8
 pub fn wake(reg: anytype, server: *mcp_rpc.Server) !void {
     const cfg = server.transport.dormant.cfg;
     const a = reg.arena();
-    const spec = try stdioSpec(reg.gpa, a, cfg);
+    const spec = try stdioSpec(reg.io, reg.gpa, a, cfg);
     defer if (spec.env) |m| m.deinit();
     server.transport = try reg.spawnStdio(a, spec.argv, spec.env, spec.cwd);
     errdefer {
@@ -172,7 +178,7 @@ test "cloneMap survives the source arena" {
     defer dst.deinit();
     const copy = try cloneMap(dst.allocator(), original);
     src.deinit(); // the request arena an ACP client's config came from is gone
-    const spec = try stdioSpec(std.testing.allocator, dst.allocator(), copy);
+    const spec = try stdioSpec(std.testing.io, std.testing.allocator, dst.allocator(), copy);
     defer if (spec.env) |m| m.deinit();
     try std.testing.expectEqualStrings("node", spec.argv[0]);
     try std.testing.expectEqualStrings("9", spec.argv[3]);

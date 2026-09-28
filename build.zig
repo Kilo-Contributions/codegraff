@@ -156,6 +156,9 @@ pub fn build(b: *std.Build) void {
     const mcp_client_spec_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-client-spec.py" });
     mcp_client_spec_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_client_spec_test.step);
+    const mcp_shared_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-shared.py" });
+    mcp_shared_test.addArtifactArg(exe);
+    test_step.dependOn(&mcp_shared_test.step);
     const mcp_lazy_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-lazy.py" });
     mcp_lazy_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_lazy_test.step);

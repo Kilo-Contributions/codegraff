@@ -43,6 +43,10 @@ global one with the same name. Their tools reach the model as
   cached): the session lists its tools but spawns the process only when a tool
   is called. `"startup": "eager"` on an entry starts it with every session;
   `GRAFF_MCP_EAGER=1` does that for all of them.
+- `"shared": true` on a stateless local server (time, fetch, a docs search)
+  runs one process per machine for every session, through a broker graff
+  starts on demand and stops after a minute idle. Leave it off for servers that
+  keep per-agent state: a browser, a working directory, credentials. POSIX only.
 
 ## Prefer the CLI for writes
 
