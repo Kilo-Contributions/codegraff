@@ -3,6 +3,8 @@
 const std = @import("std");
 const interrupt = @import("agent_interrupt.zig");
 const main_mod = @import("main.zig");
+const repl_glue = @import("repl_glue.zig");
+const job_wait = @import("job_wait.zig");
 
 const page = std.heap.page_allocator;
 
@@ -29,12 +31,13 @@ const FakeInput = struct {
 fn resetGlobals() void {
     for (main_mod.g_steer_queue.items) |entry| page.free(entry.text);
     main_mod.g_steer_queue.clearRetainingCapacity();
-    main_mod.g_steer_buf.clearRetainingCapacity();
+    repl_glue.resetSteerPartial();
     main_mod.g_steer_echoed = false;
     main_mod.g_steer_visible.store(false, .release);
     main_mod.g_force_interrupt = false;
     main_mod.g_thinking_fold_request = false;
     main_mod.g_thinking_open = false;
+    job_wait.followup_pending.store(false, .release);
 }
 
 test "same-read ESC DEL edits steering without interrupting" {
@@ -103,4 +106,38 @@ test "lone ESC still interrupts" {
     try std.testing.expect(interrupt.escPressedFrom(&input, false));
     try std.testing.expectEqual(@as(usize, 1), input.poll_calls);
     try std.testing.expect(!main_mod.g_force_interrupt);
+}
+
+test "mid-turn bracketed multiline paste queues once only after Enter, not on pasted blank lines" {
+    resetGlobals();
+    defer resetGlobals();
+
+    var begin = FakeInput{ .chunks = &.{"\x1b[20"} };
+    try std.testing.expect(!interrupt.escPressedFrom(&begin, false));
+    var body = FakeInput{ .chunks = &.{"0~first\n\n"} };
+    try std.testing.expect(!interrupt.escPressedFrom(&body, false));
+    const many: [256]u8 = @splat('x');
+    var middle = FakeInput{ .chunks = &.{many[0..]} };
+    try std.testing.expect(!interrupt.escPressedFrom(&middle, false));
+    var end_head = FakeInput{ .chunks = &.{"\r\nlast\x1b"} };
+    try std.testing.expect(!interrupt.escPressedFrom(&end_head, false));
+    try std.testing.expectEqual(@as(usize, 0), main_mod.g_steer_queue.items.len);
+    var end_tail = FakeInput{ .chunks = &.{"[201~"} };
+    try std.testing.expect(!interrupt.escPressedFrom(&end_tail, false));
+    try std.testing.expectEqual(@as(usize, 0), main_mod.g_steer_queue.items.len);
+
+    var submit = FakeInput{ .chunks = &.{"\r\n"} };
+    try std.testing.expect(!interrupt.escPressedFrom(&submit, false));
+    try std.testing.expectEqual(@as(usize, 1), main_mod.g_steer_queue.items.len);
+    const entry = main_mod.g_steer_queue.items[0];
+    try std.testing.expect(!entry.force);
+    try std.testing.expect(std.mem.startsWith(u8, entry.text, "first\n\n"));
+    try std.testing.expect(std.mem.endsWith(u8, entry.text, "\nlast"));
+    try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, entry.text, "\n"));
+    try std.testing.expectEqual(@as(usize, 7 + 256 + 1 + 4), entry.text.len);
+
+    var force = FakeInput{ .chunks = &.{"\r"} };
+    try std.testing.expect(interrupt.escPressedFrom(&force, false));
+    try std.testing.expect(main_mod.g_steer_queue.items[0].force);
+    try std.testing.expect(main_mod.g_force_interrupt);
 }

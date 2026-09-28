@@ -92,13 +92,21 @@ pub fn afterServerErrorOrParseReject(self: *Agent, etype: []const u8, code: ?[]c
     // A structured terminal code outranks transient wording in the message.
     // In particular, do not retry a model the gateway cannot serve even if
     // its diagnostic also mentions capacity or a request-body parse error.
-    if (isModelUnavailable(code)) return false;
+    if (isModelUnavailable(code) or isStructuredOverflow(code)) return false;
     if (try retryTransientServerError(self, etype, code, msg, server_retries)) return true;
     if (try retryShortGatewayFlake(self, etype, code, msg, server_retries)) return true;
     return retryBodyParseAfterTimeouts(self, msg, state);
 }
 
 pub const max_short_flake_retries: usize = 2;
+
+fn isStructuredOverflow(code: ?[]const u8) bool {
+    const c = code orelse return false;
+    return std.mem.eql(u8, c, "context_length_exceeded") or
+        std.mem.eql(u8, c, "context_window_exceeded") or
+        std.mem.eql(u8, c, "model_context_window_exceeded") or
+        std.mem.eql(u8, c, "request_too_large");
+}
 
 fn isModelUnavailable(code: ?[]const u8) bool {
     return if (code) |c| std.mem.eql(u8, c, "model_unavailable") else false;
@@ -111,7 +119,7 @@ fn isModelUnavailable(code: ?[]const u8) bool {
 pub fn isShortGatewayFlake(etype: []const u8, code: ?[]const u8, msg: []const u8) bool {
     // Gateway 110-byte follow-up. etype is often invalid_request_error, which
     // would otherwise hard-fail on the "invalid" needle. Auth/quota still die.
-    if (isModelUnavailable(code)) return false;
+    if (isModelUnavailable(code) or isStructuredOverflow(code)) return false;
     if (isBodyParseRejection(msg)) return true;
     const hard = [_][]const u8{ "invalid", "authentication", "unauthorized", "insufficient", "quota", "permission", "tool_choice", "not found" };
     for (hard) |n| {
@@ -307,6 +315,14 @@ test "isShortGatewayFlake: internal/empty api_error retry; invalid/auth/quota do
     try std.testing.expect(isShortGatewayFlake("invalid_request_error", null, "Body must be valid JSON"));
     try std.testing.expect(isShortGatewayFlake("api_error", null, "Malformed JSON in request body"));
     try std.testing.expect(!isShortGatewayFlake("invalid_request_error", null, "invalid prompt"));
+}
+
+test "structured context overflow wins over gateway flake wording" {
+    const msg = "context window exceeded; please try again";
+    try std.testing.expect(!isShortGatewayFlake("api_error", "context_length_exceeded", msg));
+    try std.testing.expect(!isShortGatewayFlake("api_error", "context_window_exceeded", "Body must be valid JSON"));
+    try std.testing.expect(isShortGatewayFlake("api_error", null, "try again"));
+    try std.testing.expect(isShortGatewayFlake("invalid_request_error", null, "Body must be valid JSON"));
 }
 
 test "isTransientServerError (#opencode-parity): overload/server_error retry; quota/invalid/auth do not" {

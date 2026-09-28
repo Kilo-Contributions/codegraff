@@ -237,6 +237,7 @@ record only when you need the evidence or the edge cases.
 | [0208](0208-hot-context-keyed-updates-keep-the-prefix.md) | A mid-session instruction-file edit or date rollover is appended before the next prompt as a keyed `<context>` message (developer role on Responses, system on Chat Completions, user elsewhere), and the system prompt is left as is. Compaction drops those messages and folds the latest values into the new system prompt. |
 | [0209](0209-desktop-app-has-no-computer-use.md) | The desktop app has no computer use: the `computer` tool, endpoint and menu toggle are removed; the native input bridge remains a test-only driver. Supersedes the `computer` half of 0071. |
 | [0210](0210-macos-cli-is-signed-in-ci-before-upload.md) | Tag releases sign and notarize the macOS CLI tarballs on a macOS runner before anything is uploaded, gated on all five signing secrets; without them the job no-ops and docs/notarization.md is the fallback. `SHA256SUMS` is computed once from the uploaded bytes. The desktop DMG stays a local `distribute.sh` step. |
+| [0212](0212-line-repl-paste-is-framed-and-typed.md) | Keep line-REPL paste framed through active turns; submit one draft on Enter, and stage or reject bounded image data URIs before text expansion. |
 
 ## When to write one
 

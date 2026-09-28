@@ -509,7 +509,7 @@ test "#396 firewall: the idle prompt read is job-control aware and gives the tty
     // ORDER: hand the terminal back BEFORE the note and the session save, so a
     // process that has already lost the foreground stops holding raw mode at
     // once rather than after disk I/O.
-    const release_at = std.mem.indexOf(u8, window, "tty.releaseTerminal();").?;
+    const release_at = std.mem.indexOf(u8, window, "line_repl_terminal.zig\").release(out);").?;
     const note_at = std.mem.indexOf(u8, window, "tty.noteFromBackground(").?;
     const save_at = std.mem.indexOf(u8, window, "saveSession(root").?;
     try std.testing.expect(release_at < note_at);
@@ -536,7 +536,7 @@ test "#396 firewall: both completion paths release the terminal" {
     // slower telemetry/learning phases main() owns.
     const loop = @embedFile("mainloop.zig");
     const flush_at = std.mem.indexOf(u8, loop, "defer session.flushSavesAtExit();").?;
-    const loop_release_at = std.mem.indexOf(u8, loop, "defer terminal.tty.releaseTerminal();").?;
+    const loop_release_at = std.mem.indexOf(u8, loop, "defer @import(\"line_repl_terminal.zig\").release(ctx.out);").?;
     try std.testing.expect(flush_at < loop_release_at);
 }
 

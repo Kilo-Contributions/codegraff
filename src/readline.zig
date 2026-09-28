@@ -43,6 +43,7 @@ const editByte = input_util.editByte; // #396: job-control-aware continuation re
 const addMark = input_util.addMark;
 const readline_commit = @import("readline_commit.zig");
 const rl_image = @import("readline_image.zig");
+const data_uri = @import("readline_data_uri.zig");
 const rl_keys = @import("readline_keys.zig");
 const util = @import("util.zig");
 
@@ -79,7 +80,7 @@ pub fn readLine(
     var cur: usize = 0; // cursor index within buf
     var nav: HistoryNav = .init(history.items.len); // history + unsent-draft nav (#101)
     defer if (nav.draft) |d| gpa.free(d);
-    out.writeAll(rl_keys.enable_seq) catch {}; // bracketed paste + distinct Cmd/Option Backspace
+    @import("line_repl_terminal.zig").enable(out); // paste stays framed during the turn
     defer out.writeAll(rl_keys.restore_seq) catch {};
     out.flush() catch {};
     // Ask the terminal (DSR 6) where input starts; the renderer treats those columns as a fixed prefix
@@ -156,14 +157,11 @@ pub fn readLine(
     var comp_idx: usize = 0;
     var comp_active = false;
 
-    // Long pastes are semantic spans: their labels render as attachment chips,
-    // move atomically, and cannot be recreated by typing the same display text.
+    // Long pastes render as semantic chips, not text lookalikes.
     var pastes: PasteStore = .{};
     defer pastes.deinit(gpa);
 
-    // File paths inserted by the @ picker or a drag-and-drop (plus the
-    // "[Image]" attachment marker): redraw renders these spans highlighted.
-    // Editing inside a span just drops its highlight — the text stays.
+    // Highlight picker/drop paths and image markers until edited.
     var marks: std.ArrayList([]const u8) = .empty;
     defer {
         for (marks.items) |m| gpa.free(m);
@@ -210,7 +208,7 @@ pub fn readLine(
                 // still held raw mode. Give the tty back FIRST, then quit like ^Z.
                 .background => {
                     shutdown_trace.mark("readline-background: releasing the tty");
-                    tty.releaseTerminal();
+                    @import("line_repl_terminal.zig").release(out);
                     tty.noteFromBackground("graff: no longer the foreground job — terminal released, session saved, exiting\n");
                     saveSession(root, root.arena, root.session_name) catch {};
                     return null;
@@ -237,9 +235,7 @@ pub fn readLine(
                 redraw(out, buf.items, cur, marks.items, &pastes, &rstate, prompt_col);
             },
             '\r', '\n' => {
-                // Replace the manually wrapped editor block with one logical
-                // terminal line. Soft wraps can then reflow after a resize;
-                // authored newlines remain hard and the blank gutter remains.
+                // Commit manual soft wraps as one logical line.
                 readline_commit.commit(out, buf.items, marks.items, &pastes, rstate.rows, rstate.crow, prompt_col, main_mod.use_color);
                 // Expand live semantic paste spans; typed lookalikes stay text.
                 try pastes.expand(gpa, buf);
@@ -452,28 +448,37 @@ pub fn readLine(
                         if (std.mem.eql(u8, ps, "200")) { // bracketed paste start
                             var blob: std.ArrayList(u8) = .empty;
                             defer blob.deinit(gpa);
-                            while (true) { // read until the ESC[201~ end marker
-                                const x = editByte(in) orelse break; // #396: guarded
-                                blob.append(gpa, x) catch break;
-                                if (std.mem.endsWith(u8, blob.items, "\x1b[201~")) {
-                                    blob.shrinkRetainingCapacity(blob.items.len - 6);
+                            var tail: [6]u8 = @splat(0);
+                            var truncated = false;
+                            while (true) { // consume through the end marker even past the image limit
+                                const x = editByte(in) orelse break;
+                                std.mem.copyForwards(u8, tail[0..5], tail[1..6]);
+                                tail[5] = x;
+                                if (std.mem.eql(u8, &tail, "\x1b[201~")) {
+                                    if (!truncated) blob.shrinkRetainingCapacity(blob.items.len - 5);
                                     break;
                                 }
+                                if (data_uri.isCandidate(blob.items) and blob.items.len >= data_uri.max_paste_bytes) {
+                                    truncated = true;
+                                } else if (!truncated) blob.append(gpa, x) catch break;
                             }
-                            const pasted = blob.items; // preserve the complete draft, including trailing LF/CRLF (#737)
+                            const pasted = blob.items;
+                            const uri = data_uri.stagePaste(root, gpa, buf, &cur, &marks, &pastes, pasted, truncated);
                             const lines = std.mem.count(u8, pasted, "\n") + 1;
-                            const dropped = cleanDroppedPath(gpa, root.home, pasted);
+                            const dropped = if (uri == .not_uri) cleanDroppedPath(gpa, root.home, pasted) else null;
                             defer if (dropped) |dp| gpa.free(dp);
                             const drop_exists = if (dropped) |dp| blk: {
                                 Io.Dir.cwd().access(root.io, dp, .{}) catch break :blk false;
                                 break :blk true;
                             } else false;
-                            if (drop_exists) {
-                                // Drag-and-dropped file: terminals paste the path
-                                // escaped/quoted with a trailing space. An image on a
-                                // vision model is staged as an attachment (like /image
-                                // and Ctrl-V); anything else inlines the cleaned full
-                                // path however long it is.
+                            if (uri != .not_uri) {
+                                if (uri != .staged) {
+                                    if (rstate.rows - 1 > rstate.crow) out.print("\x1b[{d}B", .{rstate.rows - 1 - rstate.crow}) catch {};
+                                    out.print("\r\n{s}· {s}{s}", .{ style.dim, data_uri.feedback(uri), style.reset }) catch {};
+                                    root.prompt() catch {};
+                                    rstate = .{};
+                                }
+                            } else if (drop_exists) {
                                 var staged = false;
                                 var dmsg: ?[]const u8 = null;
                                 var dbuf: [224]u8 = undefined;
@@ -485,7 +490,6 @@ pub fn readLine(
                                     } else if (r == .no_vision) {
                                         dmsg = "this model can't see images — ✓ in /models' vision column shows ones that can; path inlined instead";
                                     } else {
-                                        // Real numbers, not "missing or >5MB" (#349).
                                         dmsg = vision.stageMessage(&dbuf, r, "that image");
                                     }
                                 }
@@ -515,7 +519,7 @@ pub fn readLine(
                                     pastes.edited(gpa, at, at, pasted.len);
                                     cur += pasted.len;
                                 }
-                            } else { // multi-line/long: semantic chip, expanded on submit
+                            } else {
                                 pastes.insert(gpa, buf, &cur, pasted, lines) catch {};
                             }
                             redraw(out, buf.items, cur, marks.items, &pastes, &rstate, prompt_col);
@@ -583,15 +587,12 @@ pub fn readLine(
     }
 
     const trimmed = std.mem.trim(u8, buf.items, " \t\r");
-    // The staged image is part of the entry's identity, so the same words with
-    // a different attachment are not a duplicate (#108). root.pending_image is
-    // still set here — mainloop consumes it after readLine returns.
+    // Pending image distinguishes duplicate text; mainloop consumes it (#108).
     const images = rl_history.g_history_images.slice();
     if (trimmed.len > 0 and util.rememberInput(buf.items) and !rl_history.repeatsLast(history.items, images, buf.items, root.pending_image)) {
         const dup = gpa.dupe(u8, buf.items) catch return buf.items;
         history.append(gpa, dup) catch return buf.items;
-        // Session-arena backed, like the base64 payload it points at, so this
-        // outlives the entry without a free of its own (#108).
+        // Session arena keeps the image live for history (#108).
         rl_history.g_history_images.record(root.arena, history.items.len - 1, root.pending_image);
     }
     return buf.items;

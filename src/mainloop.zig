@@ -71,7 +71,7 @@ pub fn run(ctx: *Ctx) !void {
     defer recap_jobs.deinit(ctx);
     defer session.flushSavesAtExit(); // #273: the turn-path autosaves write in the background — no queued one may outlive this loop, on ANY exit (#364 stamps this teardown phase)
     defer ctx.root.closeCodexWs(); // #424: the held WS + response-id anchor deliberately span turns, so only loop exit may free them — without this they are the gpa's only exit leaks
-    defer terminal.tty.releaseTerminal(); // #396: registered LAST so LIFO runs it FIRST — the tty goes back before the save/telemetry/learning phases that can take seconds
+    defer @import("line_repl_terminal.zig").release(ctx.out); // #396: registered LAST so LIFO runs it FIRST — the tty goes back before the save/telemetry/learning phases that can take seconds
     var prev_turn_id: u64 = 0;
     var prev_prompt_fp: [16]u8 = scoring.promptFingerprint(ctx.root.systemPrompt());
     // Armed only after a clean /loop turn and consumed by the next read (#226).

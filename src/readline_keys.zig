@@ -7,7 +7,7 @@
 const std = @import("std");
 
 pub const enable_seq = "\x1b[?2004h\x1b[>4;2m";
-pub const restore_seq = "\x1b[>4;0m\x1b[?2004l";
+pub const restore_seq = "\x1b[>4;0m"; // paste mode stays on through the active turn
 
 pub const ModifiedDelete = enum {
     delete_word,
@@ -118,9 +118,9 @@ fn fieldEvent(field: []const u8) ?u32 {
     return std.fmt.parseInt(u32, tail, 10) catch null;
 }
 
-test "line REPL keyboard protocol setup and restore are balanced (#981)" {
+test "line REPL restores modified keys but keeps paste framed during active turns" {
     try std.testing.expectEqualStrings("\x1b[?2004h\x1b[>4;2m", enable_seq);
-    try std.testing.expectEqualStrings("\x1b[>4;0m\x1b[?2004l", restore_seq);
+    try std.testing.expectEqualStrings("\x1b[>4;0m", restore_seq);
 }
 
 test "legacy ESC Delete remains Option word-delete (#981)" {
