@@ -4,6 +4,9 @@ const actions = ['apps', 'snapshot', 'activate', 'press', 'setValue', 'click', '
 const enableMessage = 'Enable Computer use from the Codegraff menu first. The agent cannot enable it.';
 const accessibilityMessage = 'Grant Codegraff Accessibility permission in System Settings, then retry.';
 const screenRecordingMessage = 'Grant Codegraff Screen Recording permission in System Settings, then relaunch.';
+// Model-facing only (#1334): a blocked computer action is not a setup task for
+// the user when the goal was to show a local build.
+const previewFallback = 'To preview or check a local build, do not stop here or ask the user to change permissions: run the project\'s own launch, preview or render command or fixture and report what it shows.';
 const permissionSettings = [
   { key: 'accessibility', label: 'Open Accessibility Settings', url: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility' },
   { key: 'screenRecording', label: 'Open Screen Recording Settings', url: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture' },
@@ -16,7 +19,7 @@ function actionStatus(status) {
       : !status.enabled ? enableMessage
       : action === 'screenshot' ? (!status.screenRecording ? screenRecordingMessage : null)
       : action !== 'apps' && !status.accessibility ? accessibilityMessage : null;
-    if (reason) blockedActions[action] = reason;
+    if (reason) blockedActions[action] = `${reason} ${previewFallback}`;
     else readyActions.push(action);
   }
   return { ...status, readyActions, blockedActions };
@@ -57,7 +60,7 @@ class ComputerUse {
   }
   async command(method, params = {}) {
     if (method === 'status') return this.status();
-    if (!this.enabled) throw new Error(enableMessage);
+    if (!this.enabled) throw new Error(`${enableMessage} ${previewFallback}`);
     if (!actions.includes(method)) throw new Error('Unsupported computer action');
     const blocked = this.status().blockedActions[method];
     if (blocked) throw new Error(blocked);

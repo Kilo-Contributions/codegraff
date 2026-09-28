@@ -103,3 +103,17 @@ test('only confirming Enable requests permissions; cancel and disable preserve c
     assert.deepEqual(opened, []);
   }
 });
+
+test('a blocked or disabled computer action points back to the project preview path (#1334)', async () => {
+  const fallback = /run the project's own launch, preview or render command/;
+  const blocked = fixture().computer.status().blockedActions;
+  for (const action of ['snapshot', 'click', 'screenshot']) assert.match(blocked[action], fallback, action);
+  await assert.rejects(fixture({ enabled: false }).computer.command('snapshot'), error => /Enable Computer use/.test(error.message) && fallback.test(error.message));
+  const { computer, dialogs } = fixture({ enabled: false });
+  await computer.configure();
+  assert.equal(dialogs.length, 1);
+  for (const options of dialogs) assert.doesNotMatch(`${options.message}\n${options.detail}`, fallback, 'the fallback is for the model, not the permissions dialog');
+  const source = fs.readFileSync(path.join(__dirname, 'desktop-tools.cjs'), 'utf8');
+  assert.match(source, /only when no project tool can do the job/);
+  assert.match(source, /a native app window is not a browser page/);
+});
