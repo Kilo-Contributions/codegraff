@@ -17,8 +17,8 @@
 //!
 //! Global entries are NOT more trusted than project ones: they flow through the
 //! same untrusted-server consent gate at startup and the same in-session
-//! `/mcp trust`. Writes (`graff mcp add`, `/mcp add`) stay project-local — this
-//! module only ever reads.
+//! `/mcp trust`. Writes (`graff mcp add`, `/mcp add`) stay project-local unless
+//! `graff mcp add … --everywhere` is asked for — this module only ever reads.
 
 const std = @import("std");
 const Io = std.Io;
