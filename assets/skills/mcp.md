@@ -27,7 +27,9 @@ graff mcp add <name> --env KEY=VALUE -- <command> [args...]
    MCP registry, where graff only picks a publisher that owns the name. If it
    lists registry candidates instead, show them to the user; do not pick one.
    `--name <name>` overrides the inferred name. Add `--everywhere` only
-   when the user wants it in every project (it writes ~/.codegraff/mcp.json). Do not put secrets in the chat.
+   when the user wants it in every project (it writes ~/.codegraff/mcp.json).
+   On a device enrolled with `graff keys enable`, that file also syncs to the
+   user's other devices (`graff mcp sync` forces it now). Do not put secrets in the chat.
 
 2. Read the result line:
    - `✓ <name> works: N tool(s) — …`: done.

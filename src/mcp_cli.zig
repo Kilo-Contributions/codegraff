@@ -27,6 +27,12 @@ const companion_servers = skills.companion_servers;
 /// Where `graff mcp add` writes: the project file, or with `--everywhere` the
 /// user-level file every workspace reads (Harness included, through graff).
 var write_path: []const u8 = mcp_config_path;
+var everywhere = false;
+
+/// After an `--everywhere` add: carry it to this person's other devices.
+fn syncEverywhere(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, environ_map: anytype, out: *Io.Writer) void {
+    if (everywhere) @import("mcp_sync.zig").afterAdd(io, gpa, arena, home, environ_map, write_path, out);
+}
 
 fn trustedMcpEntry(name: []const u8, cfg: Value) bool {
     if (cfg != .object) return false;
@@ -212,6 +218,7 @@ fn mcpCliUsage(w: *Io.Writer) !void {
         \\  graff mcp add <url | @scope/package | uvx:package | '{json}' | ->   infer, save, then connect to check it
         \\  graff mcp add <name> [--env K=V] [--header K=V]   look up a server (codegraff.com/mcp, then the MCP registry)
         \\  graff mcp add … --everywhere   save to ~/.codegraff/mcp.json (every project) instead of ./.mcp.json
+        \\  graff mcp sync                 sync ~/.codegraff/mcp.json with your other devices (graff keys vault)
         \\  graff mcp add <name> --url <https://...> [--header KEY=VALUE ...]
         \\  graff mcp login <name>        OAuth login for a remote server
         \\  graff mcp add <name> [--env KEY=VALUE ...] -- <command> [args...]
@@ -270,6 +277,7 @@ fn addInferred(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, envir
         }
         if (verify_after) try checkSaved(io, gpa, arena, home, e.name, out);
     }
+    syncEverywhere(io, gpa, arena, home, environ_map, out);
     try out.writeAll("  a running session connects new servers before its next request.\n");
     try out.flush();
     return true;
@@ -343,6 +351,13 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         return;
     }
 
+    if (std.mem.eql(u8, args[0], "sync")) {
+        const path = mcp_config.globalPath(arena, home, environ_map) orelse std.process.fatal("mcp sync: needs a home directory", .{});
+        try @import("mcp_sync.zig").command(io, gpa, arena, home, environ_map, path, &out.interface);
+        try out.interface.flush();
+        return;
+    }
+
     if (std.mem.eql(u8, args[0], "login")) {
         if (args.len != 2) {
             try out.interface.writeAll("usage: graff mcp login <name>\n");
@@ -389,6 +404,7 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
             } else if (std.mem.eql(u8, args[k], "--everywhere") or std.mem.eql(u8, args[k], "--global")) {
                 write_path = mcp_config.globalPath(arena, home, environ_map) orelse
                     std.process.fatal("mcp add: --everywhere needs a home directory", .{});
+                everywhere = true;
                 if (std.fs.path.dirname(write_path)) |dir| Io.Dir.cwd().createDirPath(io, dir) catch {};
             } else if (std.mem.eql(u8, args[k], "--name") and k + 1 < args.len) {
                 k += 1;
@@ -431,6 +447,7 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         if (!persistMcpUrl(io, arena, name, url, headers.items)) std.process.fatal("could not write {s}", .{write_path});
         try out.interface.print("saved Streamable HTTP MCP server '{s}' to {s}\n", .{ name, write_path });
         if (verify_after) try checkSaved(io, gpa, arena, home, name, &out.interface);
+        syncEverywhere(io, gpa, arena, home, environ_map, &out.interface);
         try out.interface.flush();
         return;
     }
@@ -473,6 +490,7 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         std.process.fatal("mcp add: failed to write {s}", .{write_path});
     try out.interface.print("✓ added MCP server {s} to {s}\n", .{ name, write_path });
     if (verify_after) try checkSaved(io, gpa, arena, home, name, &out.interface);
+    syncEverywhere(io, gpa, arena, home, environ_map, &out.interface);
     try out.interface.writeAll("  a running session connects it before its next request; otherwise `/mcp trust` if startup is waiting for consent.\n");
     try out.interface.flush();
 }
