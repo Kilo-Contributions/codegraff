@@ -17,11 +17,13 @@ test('desktop tools transport chat context, report errors, and preserve native i
   try {
     await callTool('browser', { action: 'tabs' }, env);
     assert.equal(requests[0].body.chat, 'page:7'); assert.equal(requests[0].token, 'Bearer test');
-    const image = await callTool('computer', { action: 'screenshot' }, env);
-    assert.equal(requests[1].url, '/computer'); assert.equal(image.content[0].type, 'image');
+    const image = await callTool('browser', { action: 'screenshot' }, env);
+    assert.equal(requests[1].url, '/command'); assert.equal(image.content[0].type, 'image');
     assert.match(image.content[1].text, /imageSize/);
-    await assert.rejects(callTool('computer', { action: 'click' }, env), /Disabled/);
-    await assert.rejects(callTool('computer', { action: 'requestPermissions' }, env), /Unknown/);
-    assert.equal(tools.length, 4);
+    await assert.rejects(callTool('browser', { action: 'click', selector: '#x' }, env), /Disabled/);
+    // Codegraff has no computer use: the tool is not in the catalog and never reaches the app.
+    await assert.rejects(callTool('computer', { action: 'status' }, env), /Unknown desktop tool/);
+    assert.equal(requests.length, 3);
+    assert.deepEqual(tools.map(t => t.name), ['create_html', 'profiler', 'browser']);
   } finally { server.close(); }
 });

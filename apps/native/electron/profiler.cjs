@@ -1,7 +1,7 @@
 const { performance } = require('node:perf_hooks');
 const { accelerationStatus } = require('./hardware-profile.cjs');
 const OPTIONAL = ['lcpMs', 'fcpMs', 'interactionMaxMs', 'layoutShift', 'rendererHeapMiB', 'domNodes', 'gpuProcessCpuPercent', 'gpuProcessRssMiB'];
-const EVENTS = new Set(['ui-ready', 'page-navigation', 'page-loaded', 'renderer-crash', 'browser-action', 'computer-action', 'action-failed', 'renderer-long-task']);
+const EVENTS = new Set(['ui-ready', 'page-navigation', 'page-loaded', 'renderer-crash', 'browser-action', 'action-failed', 'renderer-long-task']);
 const finite = value => Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
 class Profiler {
   constructor(sample, notify = () => {}, hardware = () => ({})) { this.sample = sample; this.hardware = hardware; this.notify = notify; this.timer = null; this.samples = []; this.events = []; this.phase = 'baseline'; this.started = 0; this.busy = false; this.generation = 0; this.agentSlots = new Map(); }

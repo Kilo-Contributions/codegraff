@@ -8,7 +8,6 @@ const { BrowserTabs } = require('./browser-tabs.cjs');
 const { startAutomation } = require('./automation.cjs');
 const { installExternalLinks } = require('./external-links.cjs');
 const { startServer } = require('./server.cjs');
-const { ComputerUse } = require('./computer.cjs');
 const { desktopConfig } = require('./desktop-config.cjs');
 const { browserAction } = require('./browser-actions.cjs');
 const { Profiler } = require('./profiler.cjs');
@@ -28,7 +27,7 @@ const appName = developmentBuild ? 'Codegraff Dev' : 'Codegraff';
 app.setName(appName);
 app.setPath('userData', process.env.GRAFF_ELECTRON_PROFILE || (process.env.GRAFF_ELECTRON_SMOKE ? (process.env.GRAFF_SMOKE_PROFILE || path.join(require('node:os').tmpdir(), `codegraff-smoke-${process.pid}`)) : path.join(app.getPath('appData'), developmentBuild ? 'Codegraff Dev' : 'Codegraff Electron')));
 if (process.env.GRAFF_ELECTRON_SMOKE) process.env.GRAFF_THEMES_DIR = path.join(app.getPath('userData'), 'themes');
-let win, browser, backend, automation, computer, profiler;
+let win, browser, backend, automation, profiler;
 let terminals;
 const workspaceRequests = require('./workspace-open.cjs').workspaceOpen(target => {
   if (win && !win.isDestroyed()) win.webContents.send('workspace-open', target);
@@ -119,7 +118,6 @@ app.whenReady().then(async () => {
   win.webContents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
     if (mainFrame && !inPlace) { workspaceRequests.loading(); browser.closeAll(); terminals.closeAll(); }
   });
-  computer = new ComputerUse(resources, win);
   if (process.platform === 'darwin') {
     try {
       const native = require(path.join(resources, 'native/activity.node'));
@@ -177,7 +175,7 @@ app.whenReady().then(async () => {
     const owned = event.sender === win.webContents || [...browser.tabs.values()].some(tab => tab.view?.webContents === event.sender);
     if (owned && Number.isFinite(duration) && duration >= 0 && duration <= 600000) profiler.record('renderer-long-task', duration);
   });
-  automation = await startAutomation(browser, computer, profiler);
+  automation = await startAutomation(browser, profiler);
   const handle = automation.handle('');
   backend = await startServer(resources, root, token, app.getPath('logs'), {
     GRAFF_DESKTOP_ENDPOINT: `http://127.0.0.1:${handle.port}`, GRAFF_DESKTOP_SECRET: handle.token,
@@ -243,7 +241,7 @@ app.whenReady().then(async () => {
   win.on('restore', () => win.webContents.send('browser-event', { type: 'layout' }));
   const updateMenu = require('./updates.cjs').installUpdates({ app, win, ipcMain, trusted, resources, preflight });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: appName, submenu: [{ role: 'about' }, ...updateMenu, { type: 'separator' }, { label: 'Activity…', accelerator: 'CmdOrCtrl+,', click: () => void activity().catch(error => dialog.showErrorBox('Activity', error.message)) }, { label: 'Computer use…', visible: process.platform === 'darwin', click: () => void computer.configure().catch(error => dialog.showErrorBox('Computer use', error.message)) }, { type: 'separator' }, { role: 'quit' }] },
+    { label: appName, submenu: [{ role: 'about' }, ...updateMenu, { type: 'separator' }, { label: 'Activity…', accelerator: 'CmdOrCtrl+,', click: () => void activity().catch(error => dialog.showErrorBox('Activity', error.message)) }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'File', submenu: [
       ['New chat', 'CmdOrCtrl+N', 'new'], ['New tab', 'CmdOrCtrl+T', 'new'],
       ['Close chat', 'CmdOrCtrl+W', 'close'], ['Reopen closed chat', 'CmdOrCtrl+Shift+T', 'reopen'],
@@ -295,5 +293,5 @@ app.whenReady().then(async () => {
   }
   if (testDesktop) testDesktop.present(win); else win.show();
   profiler.record('ui-ready');
-  if (process.env.GRAFF_ELECTRON_SMOKE) require(process.env.GRAFF_SMOKE_SERVER_LIFECYCLE ? './smoke-server-lifecycle.cjs' : process.env.GRAFF_SMOKE_LAUNCH_ONLY ? './smoke-launch.cjs' : './smoke.cjs').run({ win, browser, automation, backend, metrics, activity, computer, profiler, token }).then(() => app.quit()).catch(async error => { console.error(error); await stop(); app.exit(1); });
+  if (process.env.GRAFF_ELECTRON_SMOKE) require(process.env.GRAFF_SMOKE_SERVER_LIFECYCLE ? './smoke-server-lifecycle.cjs' : process.env.GRAFF_SMOKE_LAUNCH_ONLY ? './smoke-launch.cjs' : './smoke.cjs').run({ win, browser, automation, backend, metrics, activity, nativeInput: new (require('./native-input.cjs').NativeInput)(resources), profiler, token }).then(() => app.quit()).catch(async error => { console.error(error); await stop(); app.exit(1); });
 }).catch(async error => { console.error(error); await stop(); app.exit(1); });

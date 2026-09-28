@@ -69,7 +69,7 @@ test('#832: all GUI test modules use the shared window and input policy', () => 
         if (method === 'sendInputEvent' || (['show', 'showInactive', 'focus', 'restore', 'maximize'].includes(method) && /^(win|fixtureWindow|app)$/.test(owner))) {
           bypasses.push(`${name}: ${owner}.${method}`);
         }
-        if (method === 'setFullScreen' || (owner === 'computer' && method === 'command' && node.arguments[0]?.text === 'type')) {
+        if (method === 'setFullScreen' || (owner === 'nativeInput' && method === 'command' && node.arguments[0]?.text === 'type')) {
           let parent = node.parent, guarded = false;
           while (parent) {
             if (ts.isIfStatement(parent) && /testDesktop.foreground|checkedFullscreen|^foreground &&/.test(parent.expression.getText(source))) guarded = true;

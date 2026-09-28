@@ -81,7 +81,7 @@ record only when you need the evidence or the edge cases.
 | [0068](0068-background-agent-handles-survive-interrupt.md) | Background-agent ids are a session ledger; an interrupted parent turn must not report them as never started (#753). |
 | [0069](0069-cache-affinity-is-the-git-root.md) | Prompt-cache affinity is the git root (or a shared scratch seed), not the leaf cwd. |
 | [0070](0070-electron-browser-and-native-panels.md) | The local Electron desktop renders browser pages directly, keeps coding in graff ACP, and hosts narrow SwiftUI panels through a native bridge. |
-| [0071](0071-desktop-tools-and-macos-computer-use.md) | Desktop MCP controls embedded Chromium and a user-enabled native macOS bridge; coding stays in graff. |
+| [0071](0071-desktop-tools-and-macos-computer-use.md) | Desktop MCP controls embedded Chromium; coding stays in graff. The native macOS `computer` tool was removed (0209). |
 | [0072](0072-gui-profiler-exports-measurements-only.md) | GUI profiling is bounded and off by default; feedback exports contain allowlisted measurements with no automatic upload. |
 | [0073](0073-acp-stream-and-shared-review.md) | One ACP stdout reader routes responses; shared review reads Git working trees without inferring edit authorship. |
 | [0074](0074-gui-skills-and-portable-themes.md) | Explicit desktop skills and validated themes live in the GUI; selected instructions travel over ACP. |
@@ -235,6 +235,7 @@ record only when you need the evidence or the edge cases.
 | [0206](0206-acp-v2-preview-behind-a-gate.md) | ACP v2 draft shapes behind `GRAFF_ACP_V2=1` plus a client `protocolVersion` >= 2; v1 stays the default and unchanged. Prompt is acknowledged with `messageId` on insertion, the outcome travels as `state_update`. |
 | [0207](0207-jev-file-retrieval-is-not-economical.md) | Rejected: no Jev file retrieval (`locate` tool, Jev rerank after `codedb context`, or jevgrep). A full Jev scan found answer files best (80% in top 5 vs 38% for `codedb context`) but costs one request per file and grows with repo size; `codedb` stays the retrieval path. |
 | [0208](0208-hot-context-keyed-updates-keep-the-prefix.md) | A mid-session instruction-file edit or date rollover is appended before the next prompt as a keyed `<context>` message (developer role on Responses, system on Chat Completions, user elsewhere), and the system prompt is left as is. Compaction drops those messages and folds the latest values into the new system prompt. |
+| [0209](0209-desktop-app-has-no-computer-use.md) | The desktop app has no computer use: the `computer` tool, endpoint and menu toggle are removed; the native input bridge remains a test-only driver. Supersedes the `computer` half of 0071. |
 
 ## When to write one
 

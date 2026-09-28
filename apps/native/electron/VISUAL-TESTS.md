@@ -89,7 +89,7 @@ job with `GRAFF_ELECTRON_FOREGROUND=1`. It runs on pull requests and pushes to
 `main` and release branches. Its windows and fullscreen transitions belong to
 the CI machine's desktop, not the developer's desktop.
 
-`bun run test:native` compiles the production Activity/Computer Use bridge and
+`bun run test:native` compiles the production Activity module (including the test-only native input bridge) and
 a test-only AppKit observer. It requires a usable display and native window
 focus, then opens, dismisses with Return, and reopens the real SwiftUI Activity
 sheet. The foreground visual suite separately verifies fullscreen entry,
