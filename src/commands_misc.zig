@@ -286,6 +286,7 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
                 try out.flush();
                 return true;
             };
+            @import("mcp_watch.zig").arm(reg, mcp_config_path); // later additions join live
             if (n == 0) {
                 try out.writeAll("no untrusted MCP server(s) left to connect.\n");
             } else {

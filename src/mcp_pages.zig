@@ -107,7 +107,8 @@ pub fn listen(server: *Server, a: Allocator) void {
 /// Before each model request: merge finished deferred handshakes, then
 /// re-list servers whose tools changed. True when the catalog must rebuild.
 pub fn beforeRequest(reg: *mcp.Registry) bool {
-    const joined = @import("mcp_boot.zig").joinBeforeRequest(reg);
+    const added = @import("mcp_watch.zig").poll(reg); // servers added mid-session
+    const joined = @import("mcp_boot.zig").joinBeforeRequest(reg) or added;
     const refreshed = refreshStale(reg);
     return joined or refreshed;
 }

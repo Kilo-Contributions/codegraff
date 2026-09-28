@@ -532,6 +532,7 @@ pub fn initRegistryConsent(io: Io, gpa: Allocator, arena: Allocator, out: *Io.Wr
     registry.global_config_path = global_path;
     registry.global_is_override = mcp_config.isEnvOverride(environ_map);
     registry.show_diagnostics = json_mode or flags.oneshot_prompt != null or environ_map.get("GRAFF_REPL_DEBUG") != null;
+    if (connect_mcp and !skip_imported) @import("mcp_watch.zig").arm(&registry, mcp_config_path); // live join
     if (!json_mode and flags.oneshot_prompt == null) {
         const ms = @max(0, mcp_t0.untilNow(io, .awake).toMilliseconds());
         if (ms >= 80)
