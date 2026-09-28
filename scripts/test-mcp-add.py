@@ -6,6 +6,8 @@
 - a missing command is saved but reported with an actionable hint
 - a server that answers 401 points at `graff mcp login` (no TTY here)
 - a server added by the agent mid-session is callable on its next request
+- a bare name resolves from the curated list, then from the registry only
+  when the publisher owns the name; needs and limitations stop the save
 """
 import json, os, shutil, subprocess, sys, tempfile, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -46,6 +48,42 @@ class Unauthorized(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
 
+def directory(server_py):
+    """codegraff.com/mcp.json and the MCP registry search, served locally."""
+    catalog = {"version": 1, "servers": [
+        {"slug": "demo-cat", "name": "Demo Cat", "aliases": ["kitty"], "config": {"command": sys.executable, "args": [server_py]}},
+        {"slug": "keyed", "name": "Keyed", "config": {"command": sys.executable, "args": [server_py]},
+         "needs": [{"env": "DEMO_KEY", "hint": "a demo key"}]},
+        {"slug": "blocked", "name": "Blocked", "config": {"url": "https://example.invalid/mcp"}, "limitation": "sign-in is not supported yet."},
+    ]}
+    registry = {
+        "acme": [{"server": {"name": "io.github.acme/acme", "packages": [
+            {"registryType": "npm", "identifier": "@acme/mcp", "version": "2.1.0", "transport": {"type": "stdio"}}]}}],
+        "lookalike": [{"server": {"name": "io.github.someone/lookalike-tools", "packages": [
+            {"registryType": "npm", "identifier": "lookalike-tools"}]}}],
+    }
+
+    class Directory(BaseHTTPRequestHandler):
+        def do_GET(self):
+            path, _, query = self.path.partition('?')
+            if path == '/mcp.json':
+                body = catalog
+            else:
+                search = dict(p.split('=', 1) for p in query.split('&') if '=' in p).get('search', '')
+                body = {"servers": registry.get(search, []), "metadata": {}}
+            data = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        def log_message(self, *a): pass
+
+    httpd = ThreadingHTTPServer(('127.0.0.1', 0), Directory)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd
+
+
 def run(binary, cwd, env, *args, stdin=None):
     r = subprocess.run([binary, 'mcp', *args], cwd=cwd, env=env, input=stdin, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
     return r.stdout + r.stderr
@@ -64,6 +102,9 @@ def main():
         env = {k: v for k, v in os.environ.items() if not k.endswith('_API_KEY')}
         env.update(HOME=temp, GRAFF_NO_TELEMETRY='1', GRAFF_FLEET='off', GRAFF_MCP_CONFIG=str(Path(temp) / 'global.json'))
         (Path(temp) / 'global.json').write_text('{"mcpServers":{}}')
+        lookup = directory(str(server))
+        base = f'http://127.0.0.1:{lookup.server_address[1]}'
+        env.update(GRAFF_MCP_CATALOG_URL=f'{base}/mcp.json', GRAFF_MCP_REGISTRY_URL=f'{base}/v0.1/servers')
         work = Path(temp) / 'proj'
         work.mkdir()
 
@@ -91,6 +132,23 @@ def main():
         finally:
             httpd.shutdown()
         print('PASS mcp add: a URL is named from its host; a 401 points at graff mcp login', flush=True)
+
+        names = Path(temp) / 'names'
+        names.mkdir()
+        text = run(binary, names, env, 'add', 'kitty')
+        assert 'found Demo Cat via codegraff.com/mcp' in text and '✓ demo-cat works: 2 tool(s)' in text, text
+        text = run(binary, names, env, 'add', 'keyed')
+        assert 'DEMO_KEY: a demo key' in text and 'nothing was saved' in text and 'keyed' not in saved(names), text
+        text = run(binary, names, env, 'add', 'keyed', '--env', 'DEMO_KEY=abc')
+        assert saved(names)['keyed']['env'] == {'DEMO_KEY': 'abc'} and '✓ keyed works' in text, text
+        text = run(binary, names, env, 'add', 'blocked')
+        assert 'sign-in is not supported yet' in text and 'blocked' not in saved(names), text
+        text = run(binary, names, env, 'add', 'acme', '--no-verify')
+        assert 'found io.github.acme/acme via the MCP registry' in text, text
+        assert saved(names)['acme'] == {'command': 'npx', 'args': ['-y', '@acme/mcp@2.1.0']}, saved(names)
+        text = run(binary, names, env, 'add', 'lookalike')
+        assert 'io.github.someone/lookalike-tools' in text and 'will not pick one' in text and 'lookalike' not in saved(names), text
+        print('PASS mcp add <name>: the curated list first, the registry only for a publisher that owns the name', flush=True)
 
         live = Path(temp) / 'live'
         live.mkdir()

@@ -123,7 +123,7 @@ pub fn infer(a: Allocator, token: []const u8, name_override: ?[]const u8) !?Name
 }
 
 /// Keep only what graff's config reads; map the URL spellings other clients use.
-fn normalize(a: Allocator, raw: Value) !std.json.ObjectMap {
+pub fn normalize(a: Allocator, raw: Value) !std.json.ObjectMap {
     if (raw != .object) return error.UnsupportedEntry;
     var cfg: std.json.ObjectMap = .empty;
     const o = raw.object;

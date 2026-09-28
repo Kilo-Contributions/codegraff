@@ -15,6 +15,7 @@ only when you need field-level detail. Do the add here.
    and lists the tools:
 
 ```sh
+graff mcp add linear                                # a name → codegraff.com/mcp, then the MCP registry
 graff mcp add https://mcp.deepwiki.com/mcp          # URL → HTTP, named "deepwiki"
 graff mcp add @playwright/mcp                       # npm package → npx -y
 graff mcp add uvx:mcp-server-fetch                  # Python package → uvx
@@ -22,6 +23,9 @@ graff mcp add '{"mcpServers":{...}}'                # a pasted Claude/Cursor/VS 
 graff mcp add <name> --env KEY=VALUE -- <command> [args...]
 ```
 
+   A name is looked up in the list at codegraff.com/mcp, then in the official
+   MCP registry, where graff only picks a publisher that owns the name. If it
+   lists registry candidates instead, show them to the user; do not pick one.
    `--name <name>` overrides the inferred name. Never write the global file
    unless the user said "every project". Do not put secrets in the chat.
 
@@ -29,6 +33,8 @@ graff mcp add <name> --env KEY=VALUE -- <command> [args...]
    - `✓ <name> works: N tool(s) — …`: done.
    - `needs sign-in: run graff mcp login <name>`: ask the user to run it
      (it opens a browser; you cannot finish it for them).
+   - `<server> needs KEY: …` / `nothing was saved`: ask the user for that key
+     or token, then re-run with the `--env KEY=…` / `--header "K=…"` it shows.
    - `✗ saved <name>, but it did not connect (…): <hint>`: follow the hint
      (install Node or uv, add `--env`, fix the package name), then re-run
      the same `graff mcp add`.
@@ -60,4 +66,4 @@ User: "using the MCP skill, add this MCP: https://mcp.deepwiki.com/mcp"
 
 User: "add playwright MCP"
 
-- `graff mcp add @playwright/mcp`
+- `graff mcp add playwright`

@@ -205,6 +205,7 @@ fn mcpCliUsage(w: *Io.Writer) !void {
         \\  graff mcp                      list servers in .mcp.json + ~/.codegraff/mcp.json
         \\  graff mcp import               copy Claude/Cursor MCP + skills into graff folders
         \\  graff mcp add <url | @scope/package | uvx:package | '{json}' | ->   infer, save, then connect to check it
+        \\  graff mcp add <name> [--env K=V] [--header K=V]   look up a server (codegraff.com/mcp, then the MCP registry)
         \\  graff mcp add <name> --url <https://...> [--header KEY=VALUE ...]
         \\  graff mcp login <name>        OAuth login for a remote server
         \\  graff mcp add <name> [--env KEY=VALUE ...] -- <command> [args...]
@@ -222,10 +223,15 @@ fn mcpCliUsage(w: *Io.Writer) !void {
 
 /// `add <url|package|json|->` and `add <name> <url|package>`. False when the
 /// arguments are an explicit form for the caller to parse.
-fn addInferred(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, add_args: []const []const u8, name_flag: ?[]const u8, verify_after: bool, out: *Io.Writer) !bool {
+fn addInferred(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, environ_map: anytype, add_args: []const []const u8, name_flag: ?[]const u8, verify_after: bool, out: *Io.Writer) !bool {
     const add = @import("mcp_add.zig");
+    const catalog = @import("mcp_catalog.zig");
     var entries: []const add.Named = &.{};
-    if (add_args.len == 2) {
+    const given = if (add_args.len >= 2 and catalog.isBareName(add_args[1])) try catalog.parseGiven(arena, add_args[2..]) else null;
+    if (given) |g| {
+        // `add linear`, `add brave-search --env BRAVE_API_KEY=…`: look the name up.
+        entries = try arena.dupe(add.Named, &.{try catalog.resolve(io, gpa, arena, environ_map, add_args[1], name_flag, g, out)});
+    } else if (add_args.len == 2) {
         const token = add_args[1];
         if (std.mem.eql(u8, token, "-") or std.mem.startsWith(u8, std.mem.trimStart(u8, token, " \t\r\n"), "{")) {
             const text = if (std.mem.eql(u8, token, "-")) blk: {
@@ -381,7 +387,7 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         }
     }
     const add_args = kept.items;
-    if (try addInferred(io, gpa, arena, home, add_args, name_flag, verify_after, &out.interface)) return;
+    if (try addInferred(io, gpa, arena, home, environ_map, add_args, name_flag, verify_after, &out.interface)) return;
     if (add_args.len < 3) {
         try mcpCliUsage(&out.interface);
         try out.interface.flush();
