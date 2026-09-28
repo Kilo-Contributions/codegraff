@@ -40,9 +40,98 @@ const ws = " \t\r\n";
 
 /// True when `cmd` looks like it keeps running until stopped.
 pub fn looksPersistent(cmd: []const u8) bool {
-    var segments = std.mem.tokenizeAny(u8, cmd, ";&|\n");
+    var buf: [16 * 1024]u8 = undefined;
+    var out: Surface = .{ .buf = &buf };
+    out.scan(cmd);
+    var segments = std.mem.tokenizeAny(u8, out.buf[0..out.len], ";&|\n");
     while (segments.next()) |segment| if (segmentPersistent(segment)) return true;
     return false;
+}
+
+/// The part of a command the shell runs as commands (#1361). Heredoc bodies
+/// and quoted multi-word strings are inline scripts or prose, so a Python
+/// batch whose lines mention `postgres` or `--watch` is not read as a server.
+/// A shell's own `-c '…'` script is still shell and is scanned.
+const Surface = struct {
+    buf: []u8,
+    len: usize = 0,
+
+    fn put(s: *Surface, bytes: []const u8) void {
+        const n = @min(bytes.len, s.buf.len - s.len);
+        @memcpy(s.buf[s.len..][0..n], bytes[0..n]);
+        s.len += n;
+    }
+
+    fn scan(s: *Surface, cmd: []const u8) void {
+        var heredocs: [4][]const u8 = undefined;
+        var pending: usize = 0;
+        var i: usize = 0;
+        while (i < cmd.len) {
+            const c = cmd[i];
+            if (c == '\\' and i + 1 < cmd.len) {
+                s.put(cmd[i .. i + 2]);
+                i += 2;
+            } else if (c == '\n') {
+                s.put("\n");
+                i += 1;
+                for (heredocs[0..pending]) |delim| i = skipHeredocBody(cmd, i, delim);
+                pending = 0;
+            } else if (c == '<' and std.mem.startsWith(u8, cmd[i..], "<<") and !std.mem.startsWith(u8, cmd[i..], "<<<")) {
+                i += 2;
+                if (i < cmd.len and cmd[i] == '-') i += 1;
+                while (i < cmd.len and (cmd[i] == ' ' or cmd[i] == '\t')) i += 1;
+                const start = i;
+                while (i < cmd.len and std.mem.indexOfScalar(u8, " \t\n;&|<>()", cmd[i]) == null) i += 1;
+                const delim = std.mem.trim(u8, cmd[start..i], "\"'\\");
+                if (delim.len > 0 and pending < heredocs.len) {
+                    heredocs[pending] = delim;
+                    pending += 1;
+                }
+                s.put(" ");
+            } else if (c == '\'' or c == '"') {
+                var end = i + 1;
+                while (end < cmd.len and cmd[end] != c) : (end += 1) {
+                    if (c == '"' and cmd[end] == '\\') end += 1;
+                }
+                const body = cmd[i + 1 .. @min(end, cmd.len)];
+                if (std.mem.indexOfAny(u8, body, ws) == null) {
+                    s.put(body);
+                } else if (s.afterShellDashC()) {
+                    s.put("\n"); // the script's first word is a command
+                    s.scan(body);
+                } else {
+                    s.put(" ");
+                }
+                i = end + 1;
+            } else {
+                s.put(cmd[i .. i + 1]);
+                i += 1;
+            }
+        }
+    }
+
+    /// The text so far ends in `sh -c`, `bash -c`, `zsh -c` or `dash -c`.
+    fn afterShellDashC(s: *const Surface) bool {
+        var words = std.mem.splitBackwardsAny(u8, std.mem.trimEnd(u8, s.buf[0..s.len], ws), ws);
+        const flag = words.next() orelse return false;
+        if (!std.mem.eql(u8, flag, "-c")) return false;
+        const program = std.fs.path.basename(words.next() orelse return false);
+        for ([_][]const u8{ "sh", "bash", "zsh", "dash" }) |shell| if (std.mem.eql(u8, program, shell)) return true;
+        return false;
+    }
+};
+
+/// Index just past the heredoc body that starts at `i` and ends with a line
+/// equal to `delim` (leading tabs allowed, as `<<-` strips them).
+fn skipHeredocBody(cmd: []const u8, i: usize, delim: []const u8) usize {
+    var at = i;
+    while (at < cmd.len) {
+        const eol = std.mem.indexOfScalarPos(u8, cmd, at, '\n') orelse cmd.len;
+        const line = std.mem.trimStart(u8, std.mem.trimEnd(u8, cmd[at..eol], "\r"), "\t");
+        at = @min(eol + 1, cmd.len);
+        if (std.mem.eql(u8, line, delim)) return at;
+    }
+    return cmd.len;
 }
 
 fn segmentPersistent(segment: []const u8) bool {
@@ -119,6 +208,12 @@ test "finite commands from the reports stay finite (#1324, #1325, #1331)" {
         "tail -n 20 build.log",
         "grep -rn nginx deploy/",
         "echo postgres is up",
+        // #1361: inline scripts and prose are not the command being run.
+        "python3 - <<'PY'\nimport subprocess\npostgres = connect()\nair = 1\nsubprocess.run(['tsc', '--watch'])\nPY\necho done",
+        "python3 -c \"import os\nollama = os.environ.get('X')\nprint('npm start')\"",
+        "cat <<-EOF > notes.md\n\ttail -f app.log\n\tEOF",
+        "git commit -m 'run npm run dev and tail -f logs'",
+        "echo 'docker compose up'",
     }) |cmd| {
         if (looksPersistent(cmd)) {
             std.debug.print("classified as persistent: {s}\n", .{cmd});
@@ -150,6 +245,10 @@ test "servers, watchers and followed logs park as persistent" {
         "PORT=3000 nohup uvicorn app:app",
         "python -m uvicorn app:app",
         "journalctl -u api -f",
+        "bash -c 'cd web && npm run dev'",
+        "sh -c \"uvicorn app:app --port 8000\"",
+        "npm run \"dev\"",
+        "cat > run.sh <<'EOF'\necho hi\nEOF\nnpm run dev",
     }) |cmd| {
         if (!looksPersistent(cmd)) {
             std.debug.print("classified as finite: {s}\n", .{cmd});
