@@ -29,6 +29,38 @@ pub fn parse(alloc: Allocator, s: []const u8) Parsed {
     return .{ .input = value, .valid = true };
 }
 
+/// Anthropic streams `tool_use.input` as partial_json. A fragment that is not
+/// a JSON object (a cut-off stream, #1218) used to become `{}` and run as an
+/// empty call (`missing or non-string argument: path`). It is stored as `{}`
+/// so history replays, with a marker the step removes before refusing it.
+const invalid_mark = "graff_invalid_input";
+
+pub fn putStreamedInput(alloc: Allocator, block: *std.json.ObjectMap, json: []const u8) !void {
+    const parsed = parse(alloc, json);
+    try block.put(alloc, "input", parsed.input);
+    if (!parsed.valid) try block.put(alloc, invalid_mark, .{ .bool = true });
+}
+
+/// True, with the marker removed, when putStreamedInput flagged this block.
+pub fn takeInvalidMark(block: *std.json.ObjectMap) bool {
+    return block.orderedRemove(invalid_mark);
+}
+
+test "a cut-off Anthropic tool input is refused, not run as {} (#1218)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var cut: std.json.ObjectMap = .empty;
+    try putStreamedInput(arena, &cut, "{\"path\":\"src/ma");
+    try std.testing.expectEqual(@as(usize, 0), cut.get("input").?.object.count());
+    try std.testing.expect(takeInvalidMark(&cut));
+    try std.testing.expect(cut.get(invalid_mark) == null); // never replayed
+    var whole: std.json.ObjectMap = .empty;
+    try putStreamedInput(arena, &whole, "{\"path\":\"src/main.zig\"}");
+    try std.testing.expect(!takeInvalidMark(&whole));
+    try std.testing.expectEqualStrings("src/main.zig", whole.get("input").?.object.get("path").?.string);
+}
+
 /// `gpa` must free (session arena is bump-only). Used only to validate.
 pub fn isObjectString(gpa: Allocator, s: []const u8) bool {
     const t = std.mem.trim(u8, s, &std.ascii.whitespace);
