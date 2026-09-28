@@ -120,23 +120,17 @@ check on the signed bundle, run the packaged smoke test with
 `GRAFF_SMOKE_LAUNCH_ONLY=1 GRAFF_SMOKE_WEBAUTHN=1`; this checks production startup,
 not registration or biometric consent.
 
-## macOS computer use and agent browser tools
+## Agent browser tools
 
-**Codegraff → Computer use…** enables or disables laptop control for this launch
-and requests macOS Accessibility and Screen Recording permissions. Grant those
-to Codegraff in System Settings; a relaunch may be needed. The agent cannot
-enable this switch. App snapshots, screenshots and input are requested on demand.
-There is no background screen recorder. Native snapshots use expiring element
-IDs and actions target an explicit foreground app. Secure fields need user input.
+With workspace MCP enabled, graff discovers `mcp__codegraff_desktop__browser`
+through the bundled Bun MCP adapter. This works without a browser pin. The
+browser tool uses the embedded page for snapshots, images, form input,
+selections, hover, keys, scrolling, navigation, find and zoom. The toolbar also
+provides find and zoom.
 
-With workspace MCP enabled, graff discovers
-`mcp__codegraff_desktop__browser` and `mcp__codegraff_desktop__computer` through the
-bundled Bun MCP adapter. This works without a browser pin. The browser tool uses
-the embedded page for snapshots, images, form input, selections, hover, keys,
-scrolling, navigation, find and zoom. The toolbar also provides find and zoom.
-The computer tool discovers running apps, inspects Accessibility trees, activates
-apps, presses elements, sets values, clicks, types, sends shortcuts, scrolls and
-captures screens. Screen captures include display bounds and image dimensions.
+Codegraff has no computer use (ADR 0209): the agent cannot control other macOS
+apps from the desktop app. The native Accessibility/input bridge is used only by
+the GUI test suites (`native-input.cjs`) to drive Codegraff's own window.
 
 Legacy browser routes return 410. The embedded desktop browser is exposed
 through the desktop bridge. Independently configured project/plugin tools are

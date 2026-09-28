@@ -8,7 +8,7 @@
 //! - read-only `get_app_state` (especially `disableDiff: true`) is accepted
 //!   with schema defaults — inspect is not a confirmation prompt;
 //! - URL mode and mutating sky input are declined with an actionable fallback
-//!   (desktop `computer` tool, reconnect MCP). Do not embed V8 or spoof Codex.
+//!   (reconnect MCP). Do not embed V8 or spoof Codex.
 
 const std = @import("std");
 const Io = std.Io;
@@ -35,7 +35,7 @@ pub const fallback =
     \\
     \\For a read-only accessibility inspect, call sky.get_app_state({ app: "<name>", disableDiff: true }). Graff advertises MCP form elicitation and accepts that inspect without a form prompt. Reconnect MCP (`/mcp trust`) if this session started before that capability existed.
     \\
-    \\If you need a snapshot without the Codex node_repl bridge, use the desktop `computer` tool (action: snapshot or apps) after Computer use is enabled in the Codegraff app menu. Do not use the plugin's raw Computer Use MCP client or synthesize OS events.
+    \\Do not use the plugin's raw Computer Use MCP client or synthesize OS events. If the inspect still cannot run, tell the user what you could not inspect.
 ;
 
 const mutating = [_][]const u8{
@@ -334,8 +334,8 @@ test "looksUnavailable / surface rewrite the node_repl form-elicitation crash (#
     const rewritten = try surface(testing.allocator, raw);
     defer testing.allocator.free(rewritten);
     try testing.expect(contains(rewritten, "disableDiff: true"));
-    try testing.expect(contains(rewritten, "computer"));
-    try testing.expect(contains(rewritten, "snapshot"));
+    try testing.expect(contains(rewritten, "/mcp trust"));
+    try testing.expect(!contains(rewritten, "desktop `computer`")); // removed (ADR 0209)
     try testing.expect(!contains(rewritten, "createElicitation is unavailable"));
 
     const passthrough = try surface(testing.allocator, "other MCP error");

@@ -28,6 +28,7 @@ pub const changelog_text =
     \\  • no more /pr-acceptance: a draft PR completes as an unverified handoff
     \\  • PR review budget fits small edits in large files; finite jobs stay awaitable
     \\  • MCP client: pagination, list_changed, progress, cancellation, MRTR
+    \\  • graff mcp add infers, checks and hot-joins a server; desktop computer use removed
     \\
     \\0.0.302.7
     \\  • tool shells: provider keys stay out, git and NUL-byte commands are safer

@@ -19,7 +19,7 @@ async function testInput(wc, event) {
   await focusTestPage(wc);
   // Await Chromium dispatch in both window modes. sendInputEvent returns before
   // the renderer has handled it, letting subsequent layout assertions race it.
-  // Real macOS pointer/keyboard coverage uses ComputerUse in the native suite.
+  // Real macOS pointer/keyboard coverage uses the test-only NativeInput driver in the native suite.
   attachTestDebugger(wc);
   const modifiers = modifierBits(event.modifiers);
   if (event.type === 'char') return wc.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'char', text: event.keyCode, modifiers });

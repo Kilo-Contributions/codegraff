@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const path = require('node:path');
-async function smokeDesktop({ automation, computer, win, browser }) {
+async function smokeDesktop({ automation, nativeInput, win, browser }) {
   const handle = automation.handle('smoke');
   const child = spawn(path.join(process.resourcesPath, 'bun'), [path.join(__dirname, 'desktop-mcp.cjs')], {
     env: { ...process.env, GRAFF_DESKTOP_ENDPOINT: `http://127.0.0.1:${handle.port}`, GRAFF_DESKTOP_SECRET: handle.token, GRAFF_DESKTOP_CHAT: 'smoke' },
@@ -26,7 +26,7 @@ async function smokeDesktop({ automation, computer, win, browser }) {
   try {
     assert.ok((await rpc('initialize', {})).capabilities.tools);
     const catalog = await rpc('tools/list');
-    assert.deepEqual(catalog.tools.map(t => t.name), ['profiler', 'browser', 'computer']);
+    assert.deepEqual(catalog.tools.map(t => t.name), ['create_html', 'profiler', 'browser']);
     const invoke = (name, args) => rpc('tools/call', { name, arguments: args });
     const snapshot = await invoke('browser', { action: 'snapshot' });
     assert.match(snapshot.content[0].text, /Browser fixture/);
@@ -37,35 +37,32 @@ async function smokeDesktop({ automation, computer, win, browser }) {
       assert.ok(screenshot.content[0].data.length > 100);
       pageCapture = 'browser image response passed';
     }
-    const status = await invoke('computer', { action: 'status' });
-    assert.equal(JSON.parse(status.content[0].text).enabled, false);
-    assert.equal((await invoke('computer', { action: 'apps' })).isError, true);
-    assert.equal((await invoke('computer', { action: 'requestPermissions' })).isError, true);
+    // Codegraff has no computer use: the tool and its endpoint are gone.
+    assert.equal((await invoke('computer', { action: 'status' })).isError, true);
     // Native discovery is read-only; never request OS permission from an automated test.
-    const apps = computer.native('apps');
+    const apps = nativeInput.native('apps');
     assert.equal(apps.apps.some(app => app.pid === process.pid), require('./test-window.cjs').testWindowMode() === 'foreground', 'Only regular foreground apps appear in native app discovery');
     assert.equal(await win.webContents.executeJavaScript(`fetch('/api/browser').then(r=>r.status)`), 410);
-    const permissions = computer.status();
+    const permissions = nativeInput.status();
     const foreground = require('./test-window.cjs').foregroundCheck('native keyboard injection and screen capture');
     let nativeInput = !foreground || process.env.GRAFF_SMOKE_SKIP_INPUT ? 'Skipped: native input requires foreground opt-in and OS permissions' : 'OS permission unavailable';
     if (foreground && !process.env.GRAFF_SMOKE_SKIP_INPUT && permissions.accessibility && permissions.screenRecording) {
-      computer.enabled = true;
-      try {
+      {
         const wc = browser.tabs.get('smoke').view.webContents;
         testDesktop.present(win); await testDesktop.focusTestPage(wc);
         await wc.executeJavaScript("document.querySelector('#name').focus();document.querySelector('#name').select()");
         await new Promise(resolve => setTimeout(resolve, 300));
-        const tree = await computer.command('snapshot', { pid: process.pid });
+        const tree = await nativeInput.command('snapshot', { pid: process.pid });
         assert.ok(tree.elements.length > 0);
-        await computer.command('type', { pid: process.pid, text: 'native-input' });
+        await nativeInput.command('type', { pid: process.pid, text: 'native-input' });
         await new Promise(resolve => setTimeout(resolve, 300));
         assert.equal(await wc.executeJavaScript("document.querySelector('#name').value"), 'native-input');
-        const screen = await computer.command('screenshot');
+        const screen = await nativeInput.command('screenshot');
         assert.ok(screen.data.length > 100); assert.ok(screen.bounds);
         nativeInput = 'native AX snapshot, CGEvent typing into test page, and screen capture passed';
-      } finally { computer.enabled = false; }
+      }
     }
-    return { mcp: 'stdio discovery, browser snapshot, disabled computer gate passed', pageCapture, permissions, nativeApps: apps.apps.length, nativeInput };
+    return { mcp: 'stdio discovery, browser snapshot, no computer tool passed', pageCapture, permissions, nativeApps: apps.apps.length, nativeInput };
   } finally { child.stdin.end(); child.kill(); for (const waiter of waiters.values()) clearTimeout(waiter.timer); }
 }
 module.exports = { smokeDesktop };

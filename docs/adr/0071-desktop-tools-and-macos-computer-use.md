@@ -1,6 +1,6 @@
 # 0071. Desktop tools use the app's browser and a native macOS bridge
 
-Status: accepted for the local desktop trial
+Status: accepted for the local desktop trial; the `computer` tool is superseded by ADR 0209 (removed)
 
 ## Decision
 

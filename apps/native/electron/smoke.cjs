@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function run({ win, browser, automation, backend, metrics, activity, computer, profiler }) {
+async function run({ win, browser, automation, backend, metrics, activity, nativeInput, profiler }) {
   const report = {};
   const fixture = http.createServer((_req, res) => {
     res.setHeader('content-type', 'text/html');
@@ -46,7 +46,7 @@ async function run({ win, browser, automation, backend, metrics, activity, compu
     assert.match((await request('snapshot')).text, /Clicked/);
     const wc = browser.tabs.get('smoke').view.webContents;
     report.pinInput = await require('./smoke-browser-pin.cjs').smokeBrowserPin({ browser, win });
-    report.desktop = await require('./smoke-desktop.cjs').smokeDesktop({ automation, computer, win, browser });
+    report.desktop = await require('./smoke-desktop.cjs').smokeDesktop({ automation, nativeInput, win, browser });
     await request('zoom', { factor: 1.2 });
     assert.equal(wc.getZoomFactor(), 1.2);
     await request('zoom', { factor: 1 });

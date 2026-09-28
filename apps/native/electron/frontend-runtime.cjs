@@ -138,14 +138,14 @@ app.whenReady().then(async () => {
   assert.equal(await js(`!!document.querySelector('[aria-label="Close browser"]')`), false, 'Browser starts closed');
   report.passed.push('Browser starts closed on initial load');
   if (process.env.GRAFF_CLI_TEST) await until(async () => (await projects.load())?.active === fs.realpathSync(workspace), 'startup CLI folder after project restoration');
-  let computer;
+  let nativeInput;
   if (process.env.GRAFF_FRONTEND_OS_INPUT === '1') {
     assert.ok(desktop.foreground, 'OS input requires explicit foreground opt-in');
-    const { ComputerUse } = require('./computer.cjs');
-    computer = new ComputerUse(path.join(repo, 'zig-out/native-tests/build'), win);
-    if (computer.status().accessibility) { computer.enabled = true; report.input = 'native macOS click and type'; }
-    else { report.skipped.push('native OS input: Accessibility permission unavailable'); computer = null; }
-    if (process.env.GRAFF_NATIVE_REQUIRE_OS_INPUT === '1') assert.ok(computer, 'Native OS input is required on this runner');
+    const { NativeInput } = require('./native-input.cjs');
+    nativeInput = new NativeInput(path.join(repo, 'zig-out/native-tests/build'));
+    if (nativeInput.status().accessibility) report.input = 'native macOS click and type';
+    else { report.skipped.push('native OS input: Accessibility permission unavailable'); nativeInput = null; }
+    if (process.env.GRAFF_NATIVE_REQUIRE_OS_INPUT === '1') assert.ok(nativeInput, 'Native OS input is required on this runner');
   }
   const click = async selector => {
     // Follow the same visible navigation entry point on small desktops.
@@ -165,7 +165,7 @@ app.whenReady().then(async () => {
       }, `stable pointer target: ${selector}`, 5000);
     };
     await stableTarget();
-    if (computer) {
+    if (nativeInput) {
       const bounds = win.getContentBounds();
       // Moving the system pointer can shift a small chat layout before mouse-down.
       // Retry only a missed composer click; duplicate clicks on buttons are unsafe.
@@ -184,7 +184,7 @@ app.whenReady().then(async () => {
         })()`);
         let missed = false;
         try {
-          await computer.command('click', { pid: process.pid, x: bounds.x+p.x, y: bounds.y+p.y });
+          await nativeInput.command('click', { pid: process.pid, x: bounds.x+p.x, y: bounds.y+p.y });
           try {
             await until(()=>js(`window.__nativeClickTrace.events.some(event=>event.type==='click'&&event.matches)`), `native click delivery: ${selector}`, attempt + 1 < attempts ? 1000 : 3000);
           } catch (error) {
@@ -231,7 +231,7 @@ app.whenReady().then(async () => {
   const send = async text => {
     await click('textarea[aria-label="Prompt"]');
     await until(() => js(`document.activeElement === document.querySelector('textarea[aria-label="Prompt"]')`), 'native composer focus before typing', 5000);
-    if (computer) await computer.command('type', { pid: process.pid, text });
+    if (nativeInput) await nativeInput.command('type', { pid: process.pid, text });
     else for (const keyCode of text) await desktop.testInput(wc, { type: 'char', keyCode });
     await until(() => js(`document.querySelector('textarea[aria-label="Prompt"]').value === ${JSON.stringify(text)} && !document.querySelector('[aria-label="Send"]').disabled`), 'typed prompt ready');
     await click('[aria-label="Send"]');

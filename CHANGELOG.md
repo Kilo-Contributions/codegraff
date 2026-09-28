@@ -30,6 +30,12 @@ current is part of cutting a release.
 
 - A finite command that outlives the foreground wait, or is started with `run_in_background`, stays awaitable: `action=output` with `wait_ms>0` waits for exit. Only server-like commands (dev servers, watchers, tunnels, followed logs) are parked as persistent. (#1324, #1349)
 - `rlm` says when a `sleep_ms` was capped and points to blocking waits.
+- Deciding whether a job is a server reads only the command the shell runs, not heredoc bodies or quoted strings, so an inline script that mentions a server program or `--watch` stays awaitable. (#1361)
+
+### Subagents and tools
+
+- A subagent given an informational task (read-only, investigate, summarize) keeps its read, search and read-only shell tools and is refused only writes. It used to get no tools at all and finish without inspecting anything. (#1360)
+- On the Anthropic wire, a tool call whose streamed input was cut off is refused with the truncated-arguments error instead of running with empty arguments. (#1218)
 
 ### Sessions
 
@@ -44,6 +50,12 @@ current is part of cutting a release.
 ### MCP
 
 - The MCP client follows `tools/list` pagination, refreshes on `list_changed` (including `subscriptions/listen`), relays `notifications/progress`, sends `notifications/cancelled` when a call is interrupted, answers input-required (MRTR) rounds, and resumes a Streamable HTTP stream with `Last-Event-ID`.
+- `graff mcp add <x>` works out the entry: a URL becomes Streamable HTTP named from its host, `@scope/pkg` runs through `npx -y`, `uvx:pkg` through uvx, and a pasted Claude/Cursor/VS Code JSON block (or `-` for stdin) saves every server in it. A bare name is looked up in codegraff.com's curated list, then the official MCP registry, where only a server whose verified namespace owner matches the name is picked; anything else is listed to choose from. An entry that needs an env var or header saves nothing until it is given.
+- Every add connects and lists the server's tools; OAuth signs in on the spot at a terminal, and a failure keeps the entry with what to fix (`--no-verify` skips the check). A server added while a session runs is connected before its next request.
+
+### Desktop
+
+- The desktop app no longer has computer use: the `computer` tool, the **Computer use…** menu item and its permission prompt are removed. Previews go through the project's own launch or preview command, or the browser pane for localhost pages. graff's bridge for the Codex Computer Use plugin is unchanged. (ADR 0209, #1334)
 
 ### Constraints
 

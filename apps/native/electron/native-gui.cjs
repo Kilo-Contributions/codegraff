@@ -1,6 +1,6 @@
 const testDesktop = require('./test-desktop.cjs');
 const { app, screen } = require('electron');
-const { ComputerUse } = require('./computer.cjs');
+const { NativeInput } = require('./native-input.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const resources = process.argv[2];
@@ -79,11 +79,10 @@ app.whenReady().then(async () => {
   native.hideNotch();
   await wait(() => !JSON.parse(native.inspectNotch()).visible, 'The observer notch did not hide');
   report.passed.push('SwiftUI observer notch stays non-activating and visible while unfocused');
-  const computer = new ComputerUse(resources, win);
-  const permissions = computer.status();
+  const nativeInput = new NativeInput(resources);
+  const permissions = nativeInput.status();
   report.permissions = { accessibility: permissions.accessibility, screenRecording: permissions.screenRecording };
-  computer.enabled = true;
-  try {
+  {
     if (permissions.accessibility) {
       testDesktop.present(win);
       const point = await wc.executeJavaScript(`(() => {
@@ -92,20 +91,20 @@ app.whenReady().then(async () => {
         return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
       })()`);
       const bounds = win.getContentBounds();
-      await computer.command('click', { pid: process.pid, x: bounds.x + point.x, y: bounds.y + point.y });
+      await nativeInput.command('click', { pid: process.pid, x: bounds.x + point.x, y: bounds.y + point.y });
       await wait(() => wc.executeJavaScript('document.activeElement === document.querySelector("input")'), 'Native OS click did not focus the test input');
-      const tree = await computer.command('snapshot', { pid: process.pid });
+      const tree = await nativeInput.command('snapshot', { pid: process.pid });
       assert.ok(tree.elements.length > 0);
-      await computer.command('type', { pid: process.pid, text: 'native-input' });
+      await nativeInput.command('type', { pid: process.pid, text: 'native-input' });
       await wait(() => wc.executeJavaScript('document.querySelector("input").value === "native-input"'), 'Native OS typing did not reach the test window');
       report.passed.push('native Accessibility snapshot, OS click and typing');
     } else report.skipped.push('native Accessibility snapshot, OS click and typing: Accessibility permission unavailable');
     if (permissions.screenRecording) {
-      const capture = await computer.command('screenshot');
+      const capture = await nativeInput.command('screenshot');
       assert.ok(capture.data.length > 100);
       report.passed.push('native display capture');
     } else report.skipped.push('native display capture: Screen Recording permission unavailable');
-  } finally { computer.enabled = false; }
+  }
   for (const reason of report.skipped) console.log(`SKIP: ${reason}`);
   if (process.env.GRAFF_NATIVE_REQUIRE_OS_INPUT === '1') assert.deepEqual(report.skipped, [], 'This runner must have preconfigured OS permissions');
   console.log('Native GUI checks:', JSON.stringify(report));
