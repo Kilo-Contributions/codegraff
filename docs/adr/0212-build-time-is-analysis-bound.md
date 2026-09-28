@@ -44,8 +44,8 @@ Tried and rejected:
   invocations, so each edit still re-analyzes everything. Under
   `zig build --watch -fincremental`, a comment edit took 15 s to rebuild and a
   one-function change 70 s: slower than a cold build.
-- `-fno-llvm -fno-lld` (self-hosted backend without lld): memory grew without
-  bound, past 150 GB, and took the host down. Do not use it on this codebase.
+- `-fno-llvm -fno-lld` (self-hosted backend without lld): did not converge;
+  see the second decision below.
 
 ## Decision
 
@@ -59,10 +59,26 @@ Tried and rejected:
 - Run build-time experiments one at a time, never in parallel, and watch
   memory.
 
+### The self-hosted backend without lld is not a supported build path
+
+While measuring cold-build variants, a Debug build of `graff` with
+`-fno-llvm -fno-lld` did not converge: its memory grew without bound past
+100 GB until the host stopped responding. The default and `-fllvm` builds of
+the same tree peak around 1.7 GB.
+
+- Build graff only with the default backend (or `-fllvm` where a release
+  step needs it). Do not pass `-fno-llvm` / `-fno-lld` in `build.zig`,
+  scripts, CI, or build-time measurements.
+- Run cold-build measurements one at a time, never in parallel. A variant
+  that dies or is killed is recorded as a failure, not retried.
+
 ## Consequences
 
 A cold build stays around 16 s and each edit re-analyzes the whole binary.
 Faster iteration comes from filtered test builds, not from build flags.
+Build-time comparisons cover only the backends graff actually builds with.
 Revisit when a Zig upgrade makes `-fincremental` persist across invocations,
-or makes `--watch` rebuilds faster than cold ones, and re-check the
-self-hosted backend's memory before trying it again.
+or makes `--watch` rebuilds faster than cold ones. Revisit the self-hosted
+backend when upstream Zig can build graff within normal memory limits, and
+re-test it in isolation, under an external memory limit, before it goes back
+into any measurement.
