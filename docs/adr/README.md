@@ -236,6 +236,7 @@ record only when you need the evidence or the edge cases.
 | [0207](0207-jev-file-retrieval-is-not-economical.md) | Rejected: no Jev file retrieval (`locate` tool, Jev rerank after `codedb context`, or jevgrep). A full Jev scan found answer files best (80% in top 5 vs 38% for `codedb context`) but costs one request per file and grows with repo size; `codedb` stays the retrieval path. |
 | [0208](0208-hot-context-keyed-updates-keep-the-prefix.md) | A mid-session instruction-file edit or date rollover is appended before the next prompt as a keyed `<context>` message (developer role on Responses, system on Chat Completions, user elsewhere), and the system prompt is left as is. Compaction drops those messages and folds the latest values into the new system prompt. |
 | [0209](0209-desktop-app-has-no-computer-use.md) | The desktop app has no computer use: the `computer` tool, endpoint and menu toggle are removed; the native input bridge remains a test-only driver. Supersedes the `computer` half of 0071. |
+| [0210](0210-macos-cli-is-signed-in-ci-before-upload.md) | Tag releases sign and notarize the macOS CLI tarballs on a macOS runner before anything is uploaded, gated on all five signing secrets; without them the job no-ops and docs/notarization.md is the fallback. `SHA256SUMS` is computed once from the uploaded bytes. The desktop DMG stays a local `distribute.sh` step. |
 
 ## When to write one
 
