@@ -148,6 +148,39 @@ fn gateHarnessPolicyWrite(self: *Agent, call: ToolCall) !?ExecResult {
     };
 }
 
+/// An informational child keeps its read, search and read-only shell tools
+/// (#1360); withholding the whole catalog left audits with nothing to inspect.
+/// Writes are refused the way plan mode refuses them at the root.
+fn readOnlyChildAllows(call: ToolCall) bool {
+    for ([_][]const u8{ "write_file", "edit_file", "imagegen", "peer_message", "learn_candidate" }) |name|
+        if (std.mem.eql(u8, call.name, name)) return false;
+    if (mcp.Registry.isMcp(call.name)) return companionReadOnly(call.name, call.input);
+    if (!shell_tool.runsCommand(call.name)) return true;
+    const args = json_args.object(call.input) orelse return true;
+    const cmd_val = args.get("command") orelse return true; // action=output / kill
+    if (cmd_val != .string) return true;
+    const cmd = std.mem.trim(u8, cmd_val.string, " \t");
+    return Approvals.readOnlyAllowed(cmd) or Approvals.readOnlyExternal(cmd);
+}
+
+test "a read-only child keeps reads and read-only shell, not writes (#1360)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const call = struct {
+        fn f(al: std.mem.Allocator, name: []const u8, input: []const u8) ToolCall {
+            const v = std.json.parseFromSliceLeaky(std.json.Value, al, input, .{}) catch unreachable;
+            return .{ .id = "c", .name = name, .input = v };
+        }
+    }.f;
+    try std.testing.expect(readOnlyChildAllows(call(a, "read_file", "{\"path\":\"src/main.zig\"}")));
+    try std.testing.expect(readOnlyChildAllows(call(a, "bash", "{\"command\":\"ls src\"}")));
+    try std.testing.expect(readOnlyChildAllows(call(a, "bash", "{\"action\":\"output\",\"id\":3}")));
+    try std.testing.expect(!readOnlyChildAllows(call(a, "write_file", "{\"path\":\"a\",\"content\":\"b\"}")));
+    try std.testing.expect(!readOnlyChildAllows(call(a, "edit_file", "{}")));
+    try std.testing.expect(!readOnlyChildAllows(call(a, "bash", "{\"command\":\"rm -rf build\"}")));
+}
+
 pub fn gateTool(self: *Agent, call: ToolCall) !?ExecResult {
     if (try gateHarnessPolicyWrite(self, call)) |blocked| return blocked; // #366: before the sub branch — children are exactly who must not widen approvals
     if (self.sub) {
@@ -164,6 +197,10 @@ pub fn gateTool(self: *Agent, call: ToolCall) !?ExecResult {
                 };
             };
         }
+        if (self.read_only and !readOnlyChildAllows(call)) return .{
+            .text = try self.arena.dupe(u8, "this subagent is read-only (an informational task) — read, search and run read-only commands, and report the change instead of making it"),
+            .is_error = true,
+        };
         return null;
     }
     if (try gateSmolifySecrets(self.arena, call)) |blocked| return blocked;
