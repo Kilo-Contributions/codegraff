@@ -1,21 +1,63 @@
-# Notarizing a macOS release — the working runbook
+# Notarizing a macOS release
 
-This is the exact procedure used for v0.0.273 and v0.0.274, end to end.
-It exists because half of these steps are machine-local (a keychain
-profile, a Developer ID identity) and the other half are ordering rules
-that are easy to get subtly wrong. Follow it top to bottom.
+The macOS CLI tarballs are signed and notarized in CI when the signing
+secrets are configured (ADR 0210). The manual runbook below is the fallback:
+it was the exact procedure used for v0.0.273 and v0.0.274, and it is still
+the path whenever CI ran without the secrets. Half of its steps are
+machine-local (a keychain profile, a Developer ID identity) and the other
+half are ordering rules that are easy to get subtly wrong.
 
 ## What signs what
 
 | Artifact | Signed by | Where |
 |---|---|---|
 | Linux / Windows tarballs | nobody | CI (`release.yml`) builds and uploads them |
-| macOS tarballs | Developer ID Application, then Apple notarized | **locally**, after CI's draft exists |
+| macOS CLI tarballs | Developer ID Application, then Apple notarized | CI `macos-sign` job when the secrets exist; otherwise **locally**, after CI's draft exists |
+| macOS desktop app (DMG + update ZIP) | Developer ID Application, then Apple notarized and stapled | **locally**: `distribute.sh` + `publish-updates.sh` (see `apps/native/electron/README.md`) |
 
-CI cannot sign: the signing identity is not on GitHub runners. So every
-release ships unsigned from CI and gets its macOS halves finished by hand.
+## The CI path
 
-## Prerequisites (one-time, this machine)
+`release.yml` runs `build` (cross-compile on Linux) → `macos-sign` (macOS
+runner) → `release` (checksums + draft) → `desktop-linux`. Nothing is uploaded
+until `macos-sign` has finished, so a release never holds unsigned macOS
+tarballs next to signed ones, and `SHA256SUMS` is computed once from the
+exact bytes that are uploaded. There is no replace-in-place step to race a
+maintainer who publishes early.
+
+`macos-sign` needs all five repository secrets:
+
+| Secret | Contents |
+|---|---|
+| `MACOS_CERT_P12` | base64 of a `.p12` holding only the Developer ID Application certificate and its private key |
+| `MACOS_CERT_PASSWORD` | the `.p12` export password |
+| `AC_API_KEY_P8` | raw contents of the App Store Connect API key (`AuthKey_<KEYID>.p8`) |
+| `AC_API_KEY_ID` | that key's id |
+| `AC_API_ISSUER_ID` | the App Store Connect issuer UUID |
+
+With all five, the job does steps 1 to 4 below on the runner: imports the
+certificate into a temporary keychain, signs each bare `graff` with
+`--options runtime --timestamp`, submits a `ditto` zip with
+`notarytool --key/--key-id/--issuer --wait`, and **fails unless the JSON
+status is `Accepted`** (notarytool exits 0 on `Invalid`; the job prints the
+notary log instead). It skips stapling (step 3), re-tars with the original
+`graff-<target>/` layout, checks the members, signature, Developer ID
+authority and hardened runtime from the new tarball, and hands the tarballs to
+`release`. The submission ids are in the job summary.
+
+If any secret is missing, `macos-sign` logs a notice and succeeds without
+doing anything; the draft gets the unsigned macOS tarballs and the job
+summary says so. Finish that release with the manual runbook.
+
+If notarization fails with the secrets present, the release job does not run
+and no draft is created. Fix the cause and re-run the failed jobs; do not
+ship a signed but unnotarized binary (`install.sh` notes that hardened runtime
+without notarization gets SIGKILLed on Apple silicon).
+
+Do not run the manual runbook on a release CI already signed: re-signing
+changes the bytes Apple scanned. Step 5 (verify like a user) applies to
+either path.
+
+## Manual runbook: prerequisites (one-time, this machine)
 
 1. **Developer ID Application certificate** in the login keychain:
    ```bash
@@ -37,7 +79,7 @@ release ships unsigned from CI and gets its macOS halves finished by hand.
    lost (keychain reset / new machine) and must be re-stored — see the
    v0.0.273 session, where `codedb-notary`/`codedb-local` had both vanished.
 
-## Per-release procedure
+## Manual runbook: per-release procedure
 
 ```bash
 VER=v0.0.274                     # tag already pushed; release.yml has run green

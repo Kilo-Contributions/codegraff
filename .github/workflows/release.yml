@@ -1,8 +1,19 @@
 name: release
 
-# Pushing a tag like v0.2.0 cross-compiles harness for the four desktop
-# targets and publishes a GitHub Release with tarballs + checksums. The
+# Pushing a tag like v0.2.0 cross-compiles harness for the six release
+# targets and publishes a draft GitHub Release with tarballs + checksums. The
 # version baked into `--version` comes from the tag via -Dversion.
+#
+# The two macOS CLI binaries are Developer ID signed and notarized on a macOS
+# runner BEFORE anything is uploaded (ADR 0210), so the release only ever
+# receives final bytes and SHA256SUMS is computed once from them. That needs
+# all five repository secrets:
+#   MACOS_CERT_P12 / MACOS_CERT_PASSWORD - base64 "Developer ID Application"
+#     certificate + private key (.p12) and its export password.
+#   AC_API_KEY_P8 / AC_API_KEY_ID / AC_API_ISSUER_ID - App Store Connect API
+#     key (raw .p8 contents) for notarytool.
+# Without them the signing job succeeds as a no-op, the release carries the
+# unsigned macOS tarballs, and docs/notarization.md is the manual fallback.
 on:
   push:
     tags: ["v*", "!v*-*"]
@@ -11,7 +22,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,7 +54,189 @@ jobs:
             tar -czf "$name.tar.gz" "$name"
             rm -r "$name"
           done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cli-tarballs
+          path: graff-*.tar.gz
+          if-no-files-found: error
+
+  # Sign + notarize the macOS CLI binaries, exactly as docs/notarization.md
+  # does by hand. No-op (success) unless all five secrets are configured.
+  macos-sign:
+    needs: build
+    runs-on: macos-latest
+    timeout-minutes: 60
+    outputs:
+      signed: ${{ steps.signing.outputs.enabled }}
+    steps:
+      - name: Select signed distribution path
+        id: signing
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
+        run: |
+          if [[ -n "$MACOS_CERT_P12" && -n "$MACOS_CERT_PASSWORD" && \
+                -n "$AC_API_KEY_P8" && -n "$AC_API_KEY_ID" && \
+                -n "$AC_API_ISSUER_ID" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            msg='macOS signing secrets are not all set; the release keeps the unsigned macOS tarballs. Sign them by hand per docs/notarization.md.'
+            echo "::notice::$msg"
+            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/download-artifact@v7
+        if: steps.signing.outputs.enabled == 'true'
+        with:
+          name: cli-tarballs
+          path: dist
+
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/release.keychain-db"
+          pass="$(openssl rand -hex 16)"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 -d >"$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # Allow codesign to use the imported key without a UI prompt.
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)"
+          [ -n "$identity" ] || { echo "p12 contains no Developer ID Application identity" >&2; exit 1; }
+          echo "Signing as: $identity"
+          echo "CODESIGN_IDENTITY=$identity" >>"$GITHUB_ENV"
+
+      - name: Sign and notarize the macOS CLI
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          # No AppleDouble (._*) members when re-tarring on macOS.
+          export COPYFILE_DISABLE=1
+          key="$RUNNER_TEMP/ac_api_key.p8"
+          printf '%s' "$AC_API_KEY_P8" >"$key"
+          notary=(--key "$key" --key-id "$AC_API_KEY_ID" --issuer "$AC_API_ISSUER_ID")
+          work="$RUNNER_TEMP/notarize"
+          mkdir -p "$work" signed
+          for target in aarch64-macos x86_64-macos; do
+            name="graff-$target"
+            case "$target" in aarch64-*) arch=arm64 ;; *) arch=x86_64 ;; esac
+            tar -xzf "dist/$name.tar.gz" -C "$work"
+            bin="$work/$name/graff"
+            [ "$(lipo -archs "$bin")" = "$arch" ] || { echo "$name: expected $arch, got $(lipo -archs "$bin")" >&2; exit 1; }
+            xattr -cr "$work/$name"
+            # Hardened runtime + secure timestamp are required by the notary service.
+            codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$bin"
+            codesign --verify --strict --verbose=2 "$bin"
+
+            # ditto, not zip: keep the signed bytes and metadata exact.
+            ditto -c -k --keepParent "$work/$name" "$work/$name.notarize.zip"
+            # notarytool exits 0 even when the submission is Invalid, so the
+            # status field is the gate, not the exit code.
+            xcrun notarytool submit "$work/$name.notarize.zip" "${notary[@]}" \
+              --wait --timeout 30m --output-format json >"$work/$name.notary.json"
+            id="$(plutil -extract id raw -o - "$work/$name.notary.json")"
+            status="$(plutil -extract status raw -o - "$work/$name.notary.json")"
+            echo "$name: notarization $id -> $status"
+            echo "- \`$name\`: notarization \`$id\` $status" >>"$GITHUB_STEP_SUMMARY"
+            if [ "$status" != Accepted ]; then
+              xcrun notarytool log "$id" "${notary[@]}" || true
+              echo "$name: notarization was not Accepted; refusing to ship a signed but unnotarized binary" >&2
+              exit 1
+            fi
+            # Bare CLIs cannot be stapled (stapler error 73); the ticket is
+            # bound to the cdhash and checked online. Ship the accepted bytes.
+            (cd "$work" && tar -czf "$GITHUB_WORKSPACE/signed/$name.tar.gz" "$name")
+          done
+          rm -f "$key"
+
+      - name: Verify like a user
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          check="$(mktemp -d)"
+          for target in aarch64-macos x86_64-macos; do
+            name="graff-$target"
+            # Same member layout as the Linux-built tarball, no AppleDouble files.
+            members="$(tar -tzf "signed/$name.tar.gz" | sed 's:/$::' | LC_ALL=C sort | tr '\n' ' ')"
+            [ "$members" = "$name $name/LICENSE $name/README.md $name/graff " ] \
+              || { echo "$name: unexpected tarball members: $members" >&2; exit 1; }
+            tar -xzf "signed/$name.tar.gz" -C "$check"
+            codesign --verify --strict "$check/$name/graff"
+            info="$(codesign -dv --verbose=2 "$check/$name/graff" 2>&1)"
+            grep -q 'Authority=Developer ID Application' <<<"$info"
+            grep -q 'flags=.*runtime' <<<"$info"
+          done
+          shasum -a 256 signed/*.tar.gz
+
+      - uses: actions/upload-artifact@v7
+        if: steps.signing.outputs.enabled == 'true'
+        with:
+          name: cli-macos-signed
+          path: signed/*.tar.gz
+          if-no-files-found: error
+
+      - name: Remove signing keychain
+        if: always() && steps.signing.outputs.enabled == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/release.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/ac_api_key.p8"
+
+  release:
+    needs: [build, macos-sign]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: cli-tarballs
+          path: .
+
+      - uses: actions/download-artifact@v7
+        if: needs.macos-sign.outputs.signed == 'true'
+        with:
+          name: cli-macos-signed
+          path: signed-macos
+
+      - name: Assemble final assets and checksums
+        env:
+          SIGNED: ${{ needs.macos-sign.outputs.signed }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGNED" = true ]; then
+            for target in aarch64-macos x86_64-macos; do
+              mv -f "signed-macos/graff-$target.tar.gz" "graff-$target.tar.gz"
+            done
+            echo 'macOS CLI tarballs: Developer ID signed and notarized in CI.' >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo 'macOS CLI tarballs: UNSIGNED. Finish them with docs/notarization.md before publishing.' >>"$GITHUB_STEP_SUMMARY"
+          fi
+          for target in aarch64-macos x86_64-macos x86_64-linux aarch64-linux x86_64-windows aarch64-windows; do
+            test -f "graff-$target.tar.gz" || { echo "missing graff-$target.tar.gz" >&2; exit 1; }
+          done
+          # Computed once, from the exact bytes being uploaded.
           sha256sum graff-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Create GitHub release
         env:
@@ -82,9 +275,10 @@ jobs:
             }
           done
 
-  # Linux desktop package. macOS stays a notarized upload from a Mac
-  # (publish-updates.sh). This runner can build the unsigned .deb the
-  # packager already writes; signing is not a gate (ADR 0157).
+  # Linux desktop package. The macOS desktop app stays a notarized upload
+  # from a configured Mac (distribute.sh + publish-updates.sh, ADR 0210).
+  # This runner can build the unsigned .deb the packager already writes;
+  # signing is not a gate (ADR 0157).
   desktop-linux:
     needs: release
     runs-on: ubuntu-latest
