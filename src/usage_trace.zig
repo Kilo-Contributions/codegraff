@@ -54,7 +54,7 @@ pub fn note(self: *const Agent, ordinary: i64, cache_read: i64, cache_write: i64
         // Sent as previous_response_id + the new items on a held socket.
         .chained = self.codex_prev_id != null,
         .gap_ms = gap,
-        .cache_ttl = if (cache_ttl.longTtl(self.provider.id, gap)) "1h" else null,
+        .cache_ttl = if (cache_ttl.longTtl(self.provider.id, self.provider.model, gap)) "1h" else null,
         .prefix_changed = !snap.same,
         .prefix_bust = if (snap.same) null else hud.bustLabel(snap.last_bust),
         .cache_miss = cache_ttl.missReason(cache_read, input, !snap.same, gap),
