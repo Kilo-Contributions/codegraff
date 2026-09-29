@@ -161,7 +161,9 @@ def archive_local(rev, dest, paths=None):
     """A historical tree straight from this checkout's git history (ADR 0214:
     mined tasks). Recent parents build on the pinned toolchain as they are."""
     os.makedirs(dest, exist_ok=True)
-    wanted = list(paths or DEFAULT_SPARSE)
+    # The repository's own instructions come along: a real graff session reads
+    # them (for example, that a new test file must be registered to run).
+    wanted = list(paths or DEFAULT_SPARSE) + ["AGENTS.md", "CLAUDE.md"]
     # Whatever that revision's build.zig embeds or builds from (for example a
     # stylesheet under apps/ before the desktop app left) must come along.
     build = subprocess.run(["git", "-C", REPO, "show", f"{rev}:build.zig"],

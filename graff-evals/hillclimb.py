@@ -389,18 +389,29 @@ def cmd_round(args) -> None:
     noise_file = os.path.join(LOG_DIR, f"noise-{args.suite}-{args.champion}-{args.model}.json")
     min_effect = args.min_effect
     reps = args.reps
-    if min_effect is None:
+    if min_effect is None and not args.noise_from_round:
         if not os.path.exists(noise_file):
-            raise SystemExit(f"no noise measurement ({noise_file}); run hillclimb.py noise first or pass --min-effect")
+            raise SystemExit(f"no noise measurement ({noise_file}); run hillclimb.py noise first, "
+                             "pass --min-effect, or use --noise-from-round")
         with open(noise_file) as f:
             noise = json.load(f)
         min_effect = noise["sets"]["train"][args.goal]["band"]
         reps = reps or noise["reps"]
-    reps = reps or 3
+    reps = reps or (2 if args.noise_from_round else 3)
+    if args.noise_from_round and reps < 2:
+        raise SystemExit("--noise-from-round needs at least 2 repetitions")
     path = run_eval(f"{args.champion},{args.candidate}", args.model, args.suite,
                     split["train"] + split["test"], reps, args.jobs)
     rows = load_jsonl(path)
     pick = lambda h, s: [r for r in rows if r.get("harness") == h and r.get("task") in split[s]]
+    if min_effect is None:
+        # The champion's own repetitions in this round give the noise band.
+        noise = noise_summary(rows, args.champion, split, reps)
+        min_effect = noise["sets"]["train"][args.goal]["band"]
+        print(f"noise from this round's champion repetitions: {args.goal} band {min_effect:.4f}")
+    for name in ("train", "test"):
+        print(f"\n{name}")
+        print(table(bucket(pick(args.champion, name) + pick(args.candidate, name))))
     scores = {h: {s: metric(pick(h, s), args.goal) for s in ("train", "test")} for h in (args.champion, args.candidate)}
     keep, why = judge(scores[args.champion]["train"], scores[args.candidate]["train"],
                       scores[args.champion]["test"], scores[args.candidate]["test"], min_effect, args.goal)
@@ -480,6 +491,8 @@ def main() -> None:
     p.add_argument("--goal", choices=sorted(GOALS), default="pass")
     p.add_argument("--reps", type=int, default=None)
     p.add_argument("--min-effect", type=float, default=None)
+    p.add_argument("--noise-from-round", action="store_true",
+                   help="take the noise band from the champion's repetitions in this round (no separate baseline)")
     p.add_argument("--jobs", "-j", type=int, default=1)
     p.set_defaults(fn=cmd_round)
 
