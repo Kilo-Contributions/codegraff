@@ -414,7 +414,7 @@ The repository is organized as follows:
 | path | what it is |
 |---|---|
 | `src/`, `TUI/` | harness + terminal |
-| `apps/` | iOS and Chrome extensions |
+| `apps/` | Chrome native-messaging extension |
 | `graff-evals/` | live, in-house, FrontierHarness |
 | `docs/` | ADRs, architecture, images, install, embedding |
 | `sdk/` | generated TypeScript / Python |
