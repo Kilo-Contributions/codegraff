@@ -95,8 +95,15 @@ def main():
             procs.append(subprocess.Popen([binary, '--model', 'vercel', '--old', '--no-lean', '--yolo', '-p', 'go'], cwd=work, env=e,
                                           stdout=subprocess.DEVNULL, stderr=open(temp / f'{name}.err', 'w')))
             models.append((name, model))
+        # Note the broker's socket while the sessions run: it is removed once the
+        # broker idles out (2s here), which can pass before the checks below.
+        seen = set()
+        deadline = time.time() + 240
+        while any(p.poll() is None for p in procs) and time.time() < deadline:
+            seen |= set(sock_dir.glob('mcp-*.sock')) - pre
+            time.sleep(0.1)
         for p in procs:
-            p.wait(timeout=240)
+            p.wait(timeout=10)
         for _, m in models:
             m.stop()
 
@@ -120,7 +127,7 @@ def main():
         assert len(solo_starts) == 2, f'an ordinary server should run once per session: {len(solo_starts)}'
         print('PASS an ordinary server beside it still runs once per session', flush=True)
 
-        ours = set(sock_dir.glob('mcp-*.sock')) - pre
+        ours = seen
         assert ours, 'no broker socket was created'
         deadline = time.time() + 15
         while time.time() < deadline and alive(pid):
