@@ -90,6 +90,13 @@ test "usdFor: per-million math, cache writes, and negative clamping" {
     try std.testing.expectApproxEqAbs(@as(f64, 0.2 + 0.02 + 12.0), pricing.usdForUsage(terra, "gpt-5.6-terra", 100_000, 100_000, 0, 1_000_000), 1e-9);
     const luna = pricing.priceFor("gpt-5.6-luna").?; // $0.2 / $1.2 / $0.02
     try std.testing.expectApproxEqAbs(@as(f64, 0.02 + 0.002 + 1.2), pricing.usdForUsage(luna, "gpt-5.6-luna", 100_000, 100_000, 0, 1_000_000), 1e-9);
+    // GPT-6.1 Sol: $2 in / $10 out / $0.1 cached (5% of input), cache writes
+    // $2.5; above 272K input 2x input and cache, 1.5x output.
+    const sol61 = pricing.priceFor("gpt-6.1-sol").?;
+    try std.testing.expectApproxEqAbs(@as(f64, 0.25), pricing.usdForUsage(sol61, "gpt-6.1-sol", 0, 0, 100_000, 0), 1e-9);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.2 + 0.01 + 10.0), pricing.usdForUsage(sol61, "gpt-6.1-sol", 100_000, 100_000, 0, 1_000_000), 1e-9);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.8 + 0.04 + 1.5), pricing.usdForUsage(sol61, "gpt-6.1-sol", 200_000, 200_000, 0, 100_000), 1e-9); // long-context tier
+    try std.testing.expectEqual(@as(u64, 1_050_000), pricing.contextFor("openai", "gpt-6.1-sol"));
 }
 
 test "grok-4.6 window is 500k and compact-at is 80%" {

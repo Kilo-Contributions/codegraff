@@ -3,6 +3,7 @@ const ModelPrice = @import("pricing.zig").ModelPrice;
 pub const rows = [_]ModelPrice{
     .{ .name = "gpt-6-astra", .in = 10, .out = 50, .cache = 1, .high_at = 272_000, .high_in = 20, .high_out = 75, .high_cache = 2 },
     .{ .name = "gpt-6-sol", .in = 2, .out = 10, .cache = 0.2, .high_at = 272_000, .high_in = 4, .high_out = 15, .high_cache = 0.4 },
+    .{ .name = "gpt-6.1-sol", .in = 2, .out = 10, .cache = 0.1, .cache_write_multiplier = 1.25, .high_at = 272_000, .high_in = 4, .high_out = 15, .high_cache = 0.2 },
     .{ .name = "gpt-6-luna", .in = 0.1, .out = 0.5, .cache = 0.01, .high_at = 272_000, .high_in = 0.2, .high_out = 0.75, .high_cache = 0.02 },
     .{ .name = "deepseek-v4-pro", .in = 1.1, .out = 2.2, .cache = 0.11 },
     .{ .name = "deepseek-v4-flash", .in = 0.14, .out = 0.28, .cache = 0.028 },

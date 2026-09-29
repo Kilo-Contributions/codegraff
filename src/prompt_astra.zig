@@ -1,6 +1,7 @@
-//! GPT-6 Astra/Sol behavioral guidance, selected at request time so model
-//! switches cannot leave it on another model's prompt. API features belong
-//! in the wire layer, not in instructions claiming tools we do not expose.
+//! GPT-6 Astra/Sol and GPT-6.1 Sol behavioral guidance, selected at request
+//! time so model switches cannot leave it on another model's prompt. API
+//! features belong in the wire layer, not in instructions claiming tools we
+//! do not expose.
 const std = @import("std");
 const Agent = @import("agent.zig").Agent;
 const prompts = @import("prompts.zig");
@@ -40,7 +41,7 @@ const delegation =
 
 fn heading(model: []const u8) ?[]const u8 {
     const bare = model[if (std.mem.lastIndexOfScalar(u8, model, '/')) |i| i + 1 else 0..];
-    for ([_][]const u8{ "gpt-6-astra", "gpt-6-sol" }, [_][]const u8{ "# Astra working guidance", "# GPT-6 Sol working guidance" }) |name, title| {
+    for ([_][]const u8{ "gpt-6-astra", "gpt-6-sol", "gpt-6.1-sol" }, [_][]const u8{ "# Astra working guidance", "# GPT-6 Sol working guidance", "# GPT-6.1 Sol working guidance" }) |name, title| {
         if (std.mem.eql(u8, bare, name) or (std.mem.startsWith(u8, bare, name) and bare.len > name.len and bare[name.len] == '-')) return title;
     }
     return null;
@@ -98,7 +99,7 @@ test "GPT6 emitted requests keep one stable guidance block and refresh on model 
     for ([_][]const u8{ "openai", "codex", "codegraff" }) |provider| {
         var agent = try @import("agent_request_body_responses.zig").testAgentFor(a, provider, .responses, "gpt-6-astra");
         agent.reasoning = .medium;
-        for ([_][]const u8{ "gpt-6-astra", "gpt-6-sol", "openai/gpt-6-sol", "gpt-6-sol-2026-09-22", "mimo-v2.6-flash", "gpt-5.6-terra", "grok-4.6", "grok-4.7", "gpt-6-solish", "gpt-6-luna", "gpt-6-astra" }) |model| {
+        for ([_][]const u8{ "gpt-6-astra", "gpt-6-sol", "openai/gpt-6-sol", "gpt-6-sol-2026-09-22", "gpt-6.1-sol", "openai/gpt-6.1-sol", "mimo-v2.6-flash", "gpt-5.6-terra", "grok-4.6", "grok-4.7", "gpt-6-solish", "gpt-6-luna", "gpt-6-astra" }) |model| {
             agent.provider.model = model;
             const before = try agent.buildBody("[]", false, true, true);
             defer testing.allocator.free(before);
@@ -111,6 +112,7 @@ test "GPT6 emitted requests keep one stable guidance block and refresh on model 
             } else {
                 try testing.expect(std.mem.indexOf(u8, instructions, "# Astra working guidance") == null);
                 try testing.expect(std.mem.indexOf(u8, instructions, "# GPT-6 Sol working guidance") == null);
+                try testing.expect(std.mem.indexOf(u8, instructions, "# GPT-6.1 Sol working guidance") == null);
             }
             try testing.expectEqualStrings(if (std.mem.eql(u8, model, "mimo-v2.6-flash")) (if (std.mem.eql(u8, provider, "codegraff")) "high" else "low") else "medium", parsed.value.object.get("reasoning").?.object.get("effort").?.string);
             var followup: std.json.ObjectMap = .empty;
