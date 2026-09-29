@@ -179,11 +179,12 @@ pub const model_table = [_]ModelInfo{
     // LM Studio serves whatever model is loaded; "lmstudio" is a routing alias —
     // swap for your loaded model id if LM Studio requires an exact match (GET :1234/v1/models).
     .{ .provider = "lmstudio", .name = "lmstudio", .context = 200_000 },
-    // Anthropic: no-key/offline FALLBACK ONLY. With a key, router_catalog
-    // fetches /v1/models and replaces this slice 1:1 with the live list
-    // (windows from max_input_tokens) — do not grow or "fix" these rows to
-    // track releases; they exist so boot, --schema, and routing work before
-    // the first authenticated fetch.
+    // Anthropic: no-key/offline FALLBACK ONLY; with a key, router_catalog swaps
+    // in the live /v1/models list. Rows exist so boot, --schema and routing
+    // (the default, ladder and vision picks) resolve before that fetch.
+    .{ .provider = "anthropic", .name = "claude-opus-5-5", .context = 1_000_000 },
+    .{ .provider = "anthropic", .name = "claude-sonnet-5-5", .context = 1_000_000 },
+    .{ .provider = "anthropic", .name = "claude-fable-5-1", .context = 1_000_000 },
     .{ .provider = "anthropic", .name = "claude-opus-5", .context = 1_000_000 },
     .{ .provider = "anthropic", .name = "claude-sonnet-5", .context = 1_000_000 },
     .{ .provider = "anthropic", .name = "claude-fable-5", .context = 1_000_000 },

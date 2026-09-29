@@ -144,6 +144,49 @@ test "refreshLoginKeyBeforeSend (#402): an out-of-band login heals a live sessio
     try std.testing.expectEqualStrings("relogin-tok", agent.provider.api_key);
 }
 
+/// A provider rejected a request option graff can drop: drop it and retry.
+/// Every error shape comes here, Anthropic `{"type":"error"}` bodies and
+/// streamed error events as well as OpenAI-style envelopes, so a Claude 400
+/// on a forced tool, an effort level or an output format recovers as any
+/// other provider's does (ADR 0219). Before this, Claude errors skipped it.
+pub fn retryWithout(self: *Agent, msg: []const u8, force: *bool, stream_usage: *bool) bool {
+    const has = struct {
+        fn f(haystack: []const u8, needle: []const u8) bool {
+            return std.mem.indexOf(u8, haystack, needle) != null;
+        }
+    }.f;
+    if (force.* and has(msg, "tool_choice")) {
+        force.* = false; // provider can't force a tool; soft-strict
+        return true;
+    }
+    if (stream_usage.* and has(msg, "stream_options")) {
+        stream_usage.* = false; // provider can't report streamed usage
+        return true;
+    }
+    if (!self.cap_new and has(msg, "max_completion_tokens")) {
+        self.cap_new = true; // provider wants the post-deprecation name
+        return true;
+    }
+    // Before the format check: Claude names effort inside output_config.
+    const effort_word = @import("tools.zig").mentionsReasoningEffort(msg) or
+        (self.provider.kind == .anthropic and has(msg, "effort"));
+    if (!self.effort_rejected and effort_word) {
+        self.effort_rejected = true; // model rejects the effort hint here; drop + retry
+        return true;
+    }
+    // #543: a provider without json_schema structured outputs (deepseek:
+    // "This response_format type is unavailable now") must not lose the
+    // --output-schema contract — retry in json_object mode with the schema
+    // moved into the prompt.
+    if (self.output_schema != null and !self.sox_json_object and
+        (has(msg, "response_format") or has(msg, "output_config")))
+    {
+        self.sox_json_object = true;
+        return true;
+    }
+    return false;
+}
+
 /// #148/#402: a login-sourced credential was rejected. Adopt a token an
 /// in-session `/login` (or another process) has already written to disk, else
 /// spend the refresh grant — then retry the request once with the new bearer.

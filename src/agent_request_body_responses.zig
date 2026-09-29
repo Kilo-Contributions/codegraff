@@ -230,19 +230,25 @@ pub fn writeStructuredOutputTool(s: *std.json.Stringify, schema_json: []const u8
 /// #550: native Anthropic structured outputs on the tools-off formatting
 /// turn. Provider id `anthropic` only — minimax / kimi-anthropic keep the
 /// structured_output tool, and a learned sox flag falls back to it too.
-pub fn writeAnthropicSchema(s: *std.json.Stringify, self: *const Agent, schema_json: []const u8) !void {
+/// True when it wrote `output_config`, with `effort` inside it (ADR 0219).
+pub fn writeAnthropicSchema(s: *std.json.Stringify, self: *const Agent, schema_json: []const u8, effort: ?[]const u8) !bool {
     if (std.mem.eql(u8, self.provider.id, "anthropic") and !self.sox_json_object) {
-        try writeAnthropicOutputConfig(s, schema_json);
-        return;
+        try writeAnthropicOutputConfig(s, schema_json, effort);
+        return true;
     }
     try writeAnthropicStructuredTool(s, schema_json);
+    return false;
 }
 
 /// kimi-code's anthropic adapter: `output_config.format = {type, schema}`.
 /// Formatting turn only (ADR 0001): never attach this to a tools turn.
-pub fn writeAnthropicOutputConfig(s: *std.json.Stringify, schema_json: []const u8) !void {
+pub fn writeAnthropicOutputConfig(s: *std.json.Stringify, schema_json: []const u8, effort: ?[]const u8) !void {
     try s.objectField("output_config");
     try s.beginObject();
+    if (effort) |e| {
+        try s.objectField("effort");
+        try s.write(e);
+    }
     try s.objectField("format");
     try s.beginObject();
     try s.objectField("type");

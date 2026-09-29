@@ -202,11 +202,12 @@ test "defaultLadderModel: descends one rung per provider, bottom rung inherits" 
     // openai: same shape, sibling names
     try std.testing.expectEqualStrings("gpt-5.6-terra", defaultLadderModel(mk("openai", "gpt-5.6")).?);
     try std.testing.expect(defaultLadderModel(mk("openai", "gpt-6-astra")) == null);
-    // anthropic: opus-5 -> sonnet-5 -> (bottom). #471 dropped the opus-4-8 and
-    // sonnet-4-6 rungs: every opus generation bills the same $5/$25 per MTok,
-    // so descending within the family is not a cheaper seat at all.
-    try std.testing.expectEqualStrings("claude-sonnet-5", defaultLadderModel(mk("anthropic", "claude-opus-5")).?);
-    try std.testing.expect(defaultLadderModel(mk("anthropic", "claude-sonnet-5")) == null);
+    // anthropic: opus-5-5 -> sonnet-5-5 -> (bottom) (ADR 0219). #471: a rung
+    // must be a cheaper seat, so older opus generations are not rungs, and a
+    // root still on one is off-ladder and inherits.
+    try std.testing.expectEqualStrings("claude-sonnet-5-5", defaultLadderModel(mk("anthropic", "claude-opus-5-5")).?);
+    try std.testing.expect(defaultLadderModel(mk("anthropic", "claude-sonnet-5-5")) == null);
+    try std.testing.expect(defaultLadderModel(mk("anthropic", "claude-opus-5")) == null);
     try std.testing.expect(defaultLadderModel(mk("anthropic", "claude-opus-4-8")) == null);
     // deepseek / codegraff: pro (the session default) descends to flash;
     // a flash root is already the cheap seat and inherits.
@@ -234,10 +235,10 @@ test "default ladder: resolves the mid sibling when no flags are given" {
     const astra_root = try keys.providerById("codex", "gpt-6-astra");
     try std.testing.expect(resolveSubagentProvider(keys, astra_root, null, null, false, false) == null);
 
-    const anthropic_root = try keys.providerById("anthropic", "claude-opus-5");
+    const anthropic_root = try keys.providerById("anthropic", "claude-opus-5-5");
     const anthropic_worker = resolveSubagentProvider(keys, anthropic_root, null, null, false, false).?;
     try std.testing.expectEqualStrings("anthropic", anthropic_worker.id);
-    try std.testing.expectEqualStrings("claude-sonnet-5", anthropic_worker.model);
+    try std.testing.expectEqualStrings("claude-sonnet-5-5", anthropic_worker.model);
 }
 
 test "default ladder: bottom-rung and off-ladder roots inherit (resolve to null)" {

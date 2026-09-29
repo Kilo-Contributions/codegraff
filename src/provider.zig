@@ -76,7 +76,7 @@ pub const provider_specs = [_]ProviderSpec{
     // Anthropic publishes its live model list at /v1/models (same x-api-key +
     // anthropic-version auth as Messages), so new Claude releases appear
     // without a rebuild; the baked pricing.zig rows stay the offline fallback.
-    .{ .id = "anthropic", .display_name = "Anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "https://api.anthropic.com/v1/messages", .env_key = "ANTHROPIC_API_KEY", .default_model = "claude-opus-4-8", .catalog = .anthropic, .models_url = "https://api.anthropic.com/v1/models?limit=1000" },
+    .{ .id = "anthropic", .display_name = "Anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "https://api.anthropic.com/v1/messages", .env_key = "ANTHROPIC_API_KEY", .default_model = "claude-opus-5-5", .catalog = .anthropic, .models_url = "https://api.anthropic.com/v1/models?limit=1000" },
     .{ .id = "codegraff", .display_name = "Codegraff", .kind = .openai, .auth = .bearer, .url = "https://gateway.codegraff.com/v1/chat/completions", .env_key = "CODEGRAFF_API_KEY", .default_model = "mimo-v2.6-pro", .login = .codegraff_device, .catalog = .openai, .models_url = "https://gateway.codegraff.com/v1/models", .takes_effort = true },
     .{ .id = "deepseek", .display_name = "DeepSeek", .kind = .openai, .auth = .bearer, .url = "https://api.deepseek.com/chat/completions", .env_key = "DEEPSEEK_API_KEY", .default_model = "deepseek-v4-pro", .takes_effort = true },
     .{ .id = "openai", .display_name = "OpenAI", .kind = .responses, .auth = .bearer, .url = "https://api.openai.com/v1/responses", .env_key = "OPENAI_API_KEY", .default_model = "gpt-5.6" },
@@ -510,7 +510,7 @@ test "Keys.defaultProvider: first keyed provider on its default model" {
     const all = Keys{ .values = @splat("k") };
     const p = try all.defaultProvider();
     try std.testing.expectEqualStrings("anthropic", p.id); // anthropic leads provider_specs
-    try std.testing.expectEqualStrings("claude-opus-4-8", p.model);
+    try std.testing.expectEqualStrings("claude-opus-5-5", p.model);
     const none = Keys{ .values = @splat(null) };
     try std.testing.expectError(error.MissingKey, none.defaultProvider());
 }

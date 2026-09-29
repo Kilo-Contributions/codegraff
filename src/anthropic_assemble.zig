@@ -44,6 +44,7 @@ pub fn assembleAnthropic(self: *Agent, body: []const u8) !?std.json.ObjectMap {
     var root: ?std.json.ObjectMap = null;
     var blocks: std.ArrayList(BlockAcc) = .empty;
     var stop_reason: ?Value = null;
+    var stop_details: ?Value = null; // a refusal's category (ADR 0219)
     var usage_delta: ?Value = null;
     var saw_block_stop = false;
     var it = std.mem.tokenizeScalar(u8, body, '\n');
@@ -82,6 +83,9 @@ pub fn assembleAnthropic(self: *Agent, body: []const u8) !?std.json.ObjectMap {
                 if (d.object.get("stop_reason")) |sr| if (sr == .string) {
                     stop_reason = sr;
                 };
+                if (d.object.get("stop_details")) |sd| if (sd == .object) {
+                    stop_details = sd;
+                };
             };
             if (v.object.get("usage")) |u| if (u == .object) {
                 usage_delta = u;
@@ -116,6 +120,7 @@ pub fn assembleAnthropic(self: *Agent, body: []const u8) !?std.json.ObjectMap {
     }
     try r.put(scratch, "content", .{ .array = content });
     try r.put(scratch, "stop_reason", stop_reason orelse Value{ .string = "end_turn" });
+    if (stop_details) |sd| try r.put(scratch, "stop_details", sd);
     if (stop_reason == null) try r.put(scratch, "incomplete", .{ .bool = true });
     if (usage_delta) |ud| {
         var usage: std.json.ObjectMap = .empty;
@@ -194,4 +199,14 @@ test "#1218: a stream that ends before message_delta is cut; a finished response
         toolStart("1") ++ toolJson("1", "{\\\"path\\\":") ++ toolStop("1") ++
         "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"}}\n");
     try std.testing.expectEqualSlices(tool_call_args.Refusal, &.{ .none, .malformed }, done);
+}
+
+test "a refusal keeps its stop_details category (ADR 0219)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var agent = testAgent(arena_state.allocator());
+    const root = (try assembleAnthropic(&agent, start_read ++
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\",\"stop_details\":{\"type\":\"refusal\",\"category\":\"cyber\"}}}\n")).?;
+    try std.testing.expectEqualStrings("refusal", root.get("stop_reason").?.string);
+    try std.testing.expectEqualStrings("cyber", @import("claude_refusal.zig").category(root).?);
 }

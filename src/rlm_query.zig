@@ -95,8 +95,16 @@ pub fn buildBody(gpa: Allocator, provider: Provider, prompt: []const u8) ![]u8 {
             try s.write(prompt);
         },
         .anthropic => {
+            // ADR 0219: a Claude model that thinks by default spends max_tokens
+            // on thinking first; 256 left no answer. Room, and little thinking.
+            const claude = @import("claude_wire.zig");
+            const thinks = std.mem.eql(u8, provider.id, "anthropic") and claude.thinksByDefault(provider.model);
             try s.objectField("max_tokens");
-            try s.write(max_out_tokens);
+            try s.write(if (thinks) @as(u32, 4096) else max_out_tokens);
+            if (thinks and claude.takesEffort(provider.model)) {
+                try s.objectField("output_config");
+                try s.print("{{\"effort\":\"low\"}}", .{});
+            }
             try s.objectField("messages");
             try s.beginArray();
             try s.beginObject();
@@ -178,4 +186,20 @@ test "llm_query cannot bypass exhausted aggregate model budget" {
     try std.testing.expect(out.is_error);
     try std.testing.expect(std.mem.indexOf(u8, out.text, "RunBudgetExhausted") != null);
     try std.testing.expectEqual(@as(u64, 1), budget.used());
+}
+
+test "llm_query gives a thinking Claude model room to answer, at low effort (ADR 0219)" {
+    const gpa = std.testing.allocator;
+    var p = sampleProvider(.anthropic);
+    p.id = "anthropic";
+    p.model = "claude-opus-5-5";
+    const body = try buildBody(gpa, p, "one word");
+    defer gpa.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"max_tokens\":4096") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"output_config\":{\"effort\":\"low\"}") != null);
+    p.model = "claude-haiku-4-5"; // no default thinking: the small budget stands
+    const small = try buildBody(gpa, p, "one word");
+    defer gpa.free(small);
+    try std.testing.expect(std.mem.indexOf(u8, small, "\"max_tokens\":256") != null);
+    try std.testing.expect(std.mem.indexOf(u8, small, "output_config") == null);
 }
