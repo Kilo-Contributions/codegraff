@@ -1,3 +1,22 @@
+//! Codex WS turns surface deltas as they arrive, through the same per-line
+//! hook (printDelta) as the SSE reader. Before, a WS turn buffered every frame
+//! and only rendered the answer after response.completed: ACP clients got the
+//! whole reply as one chunk at the end, and a turn that stalled mid-answer had
+//! shown nothing at all.
+
+const std = @import("std");
+const builtin = @import("builtin");
+const Io = std.Io;
+
+const http = @import("http.zig");
+const http_stall = @import("http_stall.zig");
+const ws = @import("ws.zig");
+const agent_ws = @import("agent_ws.zig");
+
+const mock = @import("agent_ws_mock.zig");
+const Mock = mock.Mock;
+const nowMs = mock.nowMs;
+const mockAgent = mock.mockAgent;
 
 test "a WS text delta reaches the UI before the response completes" {
     if (builtin.os.tag == .windows) return error.SkipZigTest;

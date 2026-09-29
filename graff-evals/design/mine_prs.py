@@ -189,7 +189,11 @@ def write(path: str, text: str, mode: int = 0o644) -> None:
 
 
 def prompt_for(title: str, public: dict) -> str:
-    return (f"{title}. Make the test named \"{public['name']}\" in {public['file']} pass. "
+    # State what the grader checks: the test must run in the project's own
+    # test build. "Make it pass" alone let a run prove it in a temporary
+    # harness and leave it unreachable from the suite (ADR 0214).
+    return (f"{title}. Make the test named \"{public['name']}\" in {public['file']} run and pass "
+            "in the project's unit tests (`zig build test`), not only in isolation. "
             "Do not edit that test. Do not add SPEC.md.")
 
 
@@ -216,7 +220,19 @@ def build(pr_number: int, public_name: str | None, hidden_name: str | None, ref:
             raise SystemExit(f"could not extract test {t['name']!r} from {t['file']}")
         blocks[role] = block
     tdir = os.path.join(EVALS, "live", task_id)
-    write(os.path.join(tdir, "public_case.inc"), "\n" + blocks["public"])
+    public_text = "\n" + blocks["public"]
+    parent_has = subprocess.run(["git", "-C", REPO, "cat-file", "-e", f"{pr['parent']}:{public['file']}"],
+                                capture_output=True).returncode == 0
+    if not parent_has and is_test_file(public["file"]):
+        # A new test-only file is part of the spec: without its imports and
+        # helpers the test cannot compile unless the test file is edited,
+        # which the prompt forbids. Ship the whole file, minus the hidden
+        # test. (A new source module with inline tests is the solution
+        # itself, so there only the test block is given.)
+        public_text = file_at(pr["merge"], public["file"])
+        if hidden and hidden["file"] == public["file"]:
+            public_text = public_text.replace(blocks["hidden"], "")
+    write(os.path.join(tdir, "public_case.inc"), public_text)
     write(os.path.join(tdir, "check_public.sh"),
           "#!/bin/sh\nset -eu\nTASK_ROOT=${TASK_ROOT:?}\n"
           f"exec python3 \"$TASK_ROOT/named_unit_check.py\" {json.dumps(public['name'])}\n", 0o755)
@@ -342,6 +358,8 @@ def self_test() -> None:
     assert test_block(src, "second") == 'test "second" {}\n'
     assert test_block(src, "missing") is None
     assert TEST_RE.match('+test "a \\"quoted\\" name" {').group(1) == 'a \\"quoted\\" name'
+    prompt = prompt_for("Fix it", {"name": "alpha", "file": "src/a.zig"})
+    assert "run and pass in the project's unit tests (`zig build test`)" in prompt, prompt
     print("mine_prs self-test ok")
 
 

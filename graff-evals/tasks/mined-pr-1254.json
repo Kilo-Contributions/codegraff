@@ -3,7 +3,7 @@
  "suite": "mined-candidate",
  "category": "live",
  "source": "codegraff #1254 — mined (ADR 0214)",
- "prompt": "Connect the MCP servers an ACP client passes. Make the test named \"parse: stdio with args and env, http with headers, sse and malformed left out\" in src/acp_mcp_servers.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "prompt": "Connect the MCP servers an ACP client passes. Make the test named \"parse: stdio with args and env, http with headers, sse and malformed left out\" in src/acp_mcp_servers.zig run and pass in the project's unit tests (`zig build test`), not only in isolation. Do not edit that test. Do not add SPEC.md.",
  "setup": [
   "python3 \"$TASK_ROOT/live_setup.py\" pr-1254 ."
  ],

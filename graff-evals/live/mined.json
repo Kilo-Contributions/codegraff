@@ -494,33 +494,6 @@
    }
   },
   {
-   "id": "pr-1256",
-   "pr": "codegraff #1256",
-   "why": "Apply GRAFF_NO_PLUGINS before connecting MCP servers",
-   "repo": "justrach/codegraff",
-   "historical_parent": "4706cf974edc48b9f908d173df4acee9347fa0c0",
-   "historical_merge": "5d45a5fde640f75de61822a38aae44256f87cace",
-   "source": "local-git",
-   "public_filter": "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config",
-   "public_file": "src/session_start_plugins_test.zig",
-   "hidden": null,
-   "hidden_filter": null,
-   "hidden_file": null,
-   "check_timeout_s": 420,
-   "validation": {
-    "red": {
-     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "missing"
-    },
-    "green": {
-     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "pass"
-    },
-    "stable": {
-     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "pass"
-    },
-    "ok": true
-   }
-  },
-  {
    "id": "pr-1254",
    "pr": "codegraff #1254",
    "why": "Connect the MCP servers an ACP client passes",
@@ -573,6 +546,33 @@
     },
     "stable": {
      "a WS text delta reaches the UI before the response completes": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1256",
+   "pr": "codegraff #1256",
+   "why": "Apply GRAFF_NO_PLUGINS before connecting MCP servers",
+   "repo": "justrach/codegraff",
+   "historical_parent": "4706cf974edc48b9f908d173df4acee9347fa0c0",
+   "historical_merge": "5d45a5fde640f75de61822a38aae44256f87cace",
+   "source": "local-git",
+   "public_filter": "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config",
+   "public_file": "src/session_start_plugins_test.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "missing"
+    },
+    "green": {
+     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "pass"
+    },
+    "stable": {
+     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "pass"
     },
     "ok": true
    }
