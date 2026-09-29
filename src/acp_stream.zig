@@ -112,17 +112,7 @@ pub fn writeToolDone(w: *Io.Writer, session_id: []const u8, id: []const u8, is_e
     const status: []const u8 = if (is_error) "failed" else "completed";
     v2.breakMessage();
     if (text.len == 0) return writeToolStatus(w, session_id, id, status);
-    try proto.writeNotification(w, "session/update", .{
-        .sessionId = session_id,
-        .update = .{
-            .sessionUpdate = "tool_call_update",
-            .toolCallId = id,
-            .status = status,
-            .content = .{
-                .{ .type = "content", .content = .{ .type = "text", .text = text } },
-            },
-        },
-    });
+    try @import("acp_view_meta.zig").writeDone(w, session_id, id, status, text);
 }
 
 fn storeId(id_buf: *[64]u8, id: []const u8) []const u8 {
