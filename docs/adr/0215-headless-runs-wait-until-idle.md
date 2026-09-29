@@ -54,6 +54,15 @@ the next one.
 
 ## Consequences
 
+- This amends ADR 0064's "no global worker wait" for headless roots. That rule
+  kept unrelated jobs and long-lived servers from holding a turn open. A
+  headless process runs one session, so every job in it belongs to this run,
+  and servers are excluded.
+- The operation-priorities proposal avoids periodic heartbeats by default,
+  because a wakeup can spend a request without new information. Here the
+  heartbeat is the only way out of a wait on work that never reports. It
+  costs at most one request per ten silent minutes, and three quiet
+  heartbeats end the wait.
 - A headless run lasts as long as its background work. The heartbeat, the
   quiet-heartbeat cap, the run budget (`--max-model-calls`) and the caller's
   own timeout bound it.
