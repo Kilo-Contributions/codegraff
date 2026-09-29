@@ -1,3 +1,8 @@
+//! session_start.initRegistryConsent and the plugins switch, kept apart from
+//! session_start.zig (600-line ceiling).
+const std = @import("std");
+const Io = std.Io;
+const session_start = @import("session_start.zig");
 
 test "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config" {
     const plugins = @import("plugins.zig");

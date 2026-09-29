@@ -3,7 +3,7 @@
  "suite": "mined-candidate",
  "category": "live",
  "source": "codegraff #1327 — mined (ADR 0214)",
- "prompt": "ask_user: read the question from every argument shape models send. Make the test named \"the schema shape passes through unchanged\" in src/ask_user_args.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "prompt": "ask_user: read the question from every argument shape models send. Make the test named \"the schema shape passes through unchanged\" in src/ask_user_args.zig run and pass in the project's unit tests (`zig build test`), not only in isolation. Do not edit that test. Do not add SPEC.md.",
  "setup": [
   "python3 \"$TASK_ROOT/live_setup.py\" pr-1327 ."
  ],
