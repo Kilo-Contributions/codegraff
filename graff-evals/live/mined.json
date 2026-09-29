@@ -114,6 +114,468 @@
     },
     "ok": true
    }
+  },
+  {
+   "id": "pr-1385",
+   "pr": "codegraff #1385",
+   "why": "ACP: saved views carry _meta[\"graff/view\"] on the completed tool update",
+   "repo": "justrach/codegraff",
+   "historical_parent": "eb61f38961a4c70886b84fa823538c02cc86d8b2",
+   "historical_merge": "f9e82eb164a498d4ae8ee23c39ffeaf4dfc2a79a",
+   "source": "local-git",
+   "public_filter": "detect: graff's own view and MCP app snapshots",
+   "public_file": "src/acp_view_meta.zig",
+   "hidden": "hidden/pr-1385.sh",
+   "hidden_filter": "detect: anything else is plain text",
+   "hidden_file": "src/acp_view_meta.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "detect: graff's own view and MCP app snapshots": "missing",
+     "detect: anything else is plain text": "missing"
+    },
+    "green": {
+     "detect: graff's own view and MCP app snapshots": "pass",
+     "detect: anything else is plain text": "pass"
+    },
+    "stable": {
+     "detect: graff's own view and MCP app snapshots": "pass",
+     "detect: anything else is plain text": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1373",
+   "pr": "codegraff #1373",
+   "why": "ACP: frame Harness room deliveries as advisory room messages",
+   "repo": "justrach/codegraff",
+   "historical_parent": "3835e5fdfe177f1b2987d5278223360692b0a902",
+   "historical_merge": "962a64bc47016e4511750340a089c113747f533f",
+   "source": "local-git",
+   "public_filter": "an agent's room line becomes an advisory room message; a person's stays a prompt",
+   "public_file": "src/acp_room.zig",
+   "hidden": "hidden/pr-1373.sh",
+   "hidden_filter": "Harness's pre-framed text is kept, but only if it really carries the header",
+   "hidden_file": "src/acp_room.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "an agent's room line becomes an advisory room message; a person's stays a prompt": "missing",
+     "Harness's pre-framed text is kept, but only if it really carries the header": "missing"
+    },
+    "green": {
+     "an agent's room line becomes an advisory room message; a person's stays a prompt": "pass",
+     "Harness's pre-framed text is kept, but only if it really carries the header": "pass"
+    },
+    "stable": {
+     "an agent's room line becomes an advisory room message; a person's stays a prompt": "pass",
+     "Harness's pre-framed text is kept, but only if it really carries the header": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1364",
+   "pr": "codegraff #1364",
+   "why": "Informational subagents keep read tools (#1360)",
+   "repo": "justrach/codegraff",
+   "historical_parent": "2838688fd4c9e6d3f31796f84864b48b25a55d02",
+   "historical_merge": "2012f565fc20b1b50bfb9293020fef95cd5f1591",
+   "source": "local-git",
+   "public_filter": "a read-only child keeps reads and read-only shell, not writes (#1360)",
+   "public_file": "src/agent_tool_gate.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "a read-only child keeps reads and read-only shell, not writes (#1360)": "compile-error"
+    },
+    "green": {
+     "a read-only child keeps reads and read-only shell, not writes (#1360)": "pass"
+    },
+    "stable": {
+     "a read-only child keeps reads and read-only shell, not writes (#1360)": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1309",
+   "pr": "codegraff #1309",
+   "why": "ACP: report context left with the standard usage_update",
+   "repo": "justrach/codegraff",
+   "historical_parent": "1db5b404a6db1c94b4f199338e5bc04e5e4c05a4",
+   "historical_merge": "bef506abb42af4c00f9462346f27984fb423a804",
+   "source": "local-git",
+   "public_filter": "usage_update carries used and size, and cost only when known",
+   "public_file": "src/acp_context_meter.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "usage_update carries used and size, and cost only when known": "missing"
+    },
+    "green": {
+     "usage_update carries used and size, and cost only when known": "pass"
+    },
+    "stable": {
+     "usage_update carries used and size, and cost only when known": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1348",
+   "pr": "codegraff #1348",
+   "why": "PR readiness keys checks by what they run; rlm says when sleep_ms is capped",
+   "repo": "justrach/codegraff",
+   "historical_parent": "b73193713c1eccd1f0547e7aa25af8ad864c353d",
+   "historical_merge": "e898cc339a6937b42b8d0bad5bfe5fcd4fec6415",
+   "source": "local-git",
+   "public_filter": "one check in one directory is one entry whatever its spelling",
+   "public_file": "src/pr_local_checks.zig",
+   "hidden": "hidden/pr-1348.sh",
+   "hidden_filter": "sleepText names the cap when a longer pause was requested",
+   "hidden_file": "src/rlm.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "one check in one directory is one entry whatever its spelling": "compile-error",
+     "sleepText names the cap when a longer pause was requested": "compile-error"
+    },
+    "green": {
+     "one check in one directory is one entry whatever its spelling": "pass",
+     "sleepText names the cap when a longer pause was requested": "pass"
+    },
+    "stable": {
+     "one check in one directory is one entry whatever its spelling": "pass",
+     "sleepText names the cap when a longer pause was requested": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1336",
+   "pr": "codegraff #1336",
+   "why": "Resolve a PR check that finished in the background",
+   "repo": "justrach/codegraff",
+   "historical_parent": "326e6f84fed3d2e7ff5c15ea226e1632969c1088",
+   "historical_merge": "d760017cb9adef0ad17fb0125b7cb61da85758ce",
+   "source": "local-git",
+   "public_filter": "a check promoted to the background resolves when its job exits 0 (#1326)",
+   "public_file": "src/pr_local_checks.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "a check promoted to the background resolves when its job exits 0 (#1326)": "compile-error"
+    },
+    "green": {
+     "a check promoted to the background resolves when its job exits 0 (#1326)": "pass"
+    },
+    "stable": {
+     "a check promoted to the background resolves when its job exits 0 (#1326)": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1330",
+   "pr": "codegraff #1330",
+   "why": "Run tool calls a server left in content as inline markup",
+   "repo": "justrach/codegraff",
+   "historical_parent": "77eaa140c21d82988823fb844d3297c78d8e0193",
+   "historical_merge": "326e6f84fed3d2e7ff5c15ea226e1632969c1088",
+   "source": "local-git",
+   "public_filter": "recoverInlineCalls (#1247): markup after prose becomes calls, parameters in any order",
+   "public_file": "src/tool_call_repair_tests.zig",
+   "hidden": "hidden/pr-1330.sh",
+   "hidden_filter": "recoverInlineCalls (#1247): quoted, unwrapped, unknown, or malformed markup stays text",
+   "hidden_file": "src/tool_call_repair_tests.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "recoverInlineCalls (#1247): markup after prose becomes calls, parameters in any order": "compile-error",
+     "recoverInlineCalls (#1247): quoted, unwrapped, unknown, or malformed markup stays text": "compile-error"
+    },
+    "green": {
+     "recoverInlineCalls (#1247): markup after prose becomes calls, parameters in any order": "pass",
+     "recoverInlineCalls (#1247): quoted, unwrapped, unknown, or malformed markup stays text": "pass"
+    },
+    "stable": {
+     "recoverInlineCalls (#1247): markup after prose becomes calls, parameters in any order": "pass",
+     "recoverInlineCalls (#1247): quoted, unwrapped, unknown, or malformed markup stays text": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1329",
+   "pr": "codegraff #1329",
+   "why": "ACP session/new stops waiting on unreachable MCP servers",
+   "repo": "justrach/codegraff",
+   "historical_parent": "416ec1d2d0cebb80418ea373af15262118d7af2c",
+   "historical_merge": "77eaa140c21d82988823fb844d3297c78d8e0193",
+   "source": "local-git",
+   "public_filter": "joinWithin (#1291): a server that fails fast ends the wait early",
+   "public_file": "src/acp_mcp_servers.zig",
+   "hidden": "hidden/pr-1329.sh",
+   "hidden_filter": "joinWithin (#1291): a stalled handshake returns at the budget and stays queued",
+   "hidden_file": "src/acp_mcp_servers.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "joinWithin (#1291): a server that fails fast ends the wait early": "compile-error",
+     "joinWithin (#1291): a stalled handshake returns at the budget and stays queued": "compile-error"
+    },
+    "green": {
+     "joinWithin (#1291): a server that fails fast ends the wait early": "pass",
+     "joinWithin (#1291): a stalled handshake returns at the budget and stays queued": "pass"
+    },
+    "stable": {
+     "joinWithin (#1291): a server that fails fast ends the wait early": "pass",
+     "joinWithin (#1291): a stalled handshake returns at the budget and stays queued": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1328",
+   "pr": "codegraff #1328",
+   "why": "Free the MCP shape cache at session teardown",
+   "repo": "justrach/codegraff",
+   "historical_parent": "e47e88554c96219b375495542f521d9ac2da137d",
+   "historical_merge": "416ec1d2d0cebb80418ea373af15262118d7af2c",
+   "source": "local-git",
+   "public_filter": "shutdown frees a filled cache and is a no-op when empty (#1196)",
+   "public_file": "src/mcp_shapes.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "shutdown frees a filled cache and is a no-op when empty (#1196)": "compile-error"
+    },
+    "green": {
+     "shutdown frees a filled cache and is a no-op when empty (#1196)": "pass"
+    },
+    "stable": {
+     "shutdown frees a filled cache and is a no-op when empty (#1196)": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1327",
+   "pr": "codegraff #1327",
+   "why": "ask_user: read the question from every argument shape models send",
+   "repo": "justrach/codegraff",
+   "historical_parent": "8ef5b4e6e1e604ef8f073bdd44354fbeb2522c08",
+   "historical_merge": "e47e88554c96219b375495542f521d9ac2da137d",
+   "source": "local-git",
+   "public_filter": "the schema shape passes through unchanged",
+   "public_file": "src/ask_user_args.zig",
+   "hidden": "hidden/pr-1327.sh",
+   "hidden_filter": "question aliases and a double-encoded argument string are read",
+   "hidden_file": "src/ask_user_args.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "the schema shape passes through unchanged": "missing",
+     "question aliases and a double-encoded argument string are read": "missing"
+    },
+    "green": {
+     "the schema shape passes through unchanged": "pass",
+     "question aliases and a double-encoded argument string are read": "pass"
+    },
+    "stable": {
+     "the schema shape passes through unchanged": "pass",
+     "question aliases and a double-encoded argument string are read": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1306",
+   "pr": "codegraff #1306",
+   "why": "Strip provider citation markers from ACP text",
+   "repo": "justrach/codegraff",
+   "historical_parent": "b07d6812b547cfebc0d75de5fd5b9f78cf89f1d9",
+   "historical_merge": "48b5124e46dac198a9db4fd7d150869590397eaf",
+   "source": "local-git",
+   "public_filter": "a whole citation marker is removed and plain text passes through untouched",
+   "public_file": "src/acp_citations.zig",
+   "hidden": "hidden/pr-1306.sh",
+   "hidden_filter": "a marker split across deltas leaves no cite or turn words behind",
+   "hidden_file": "src/acp_citations.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "a whole citation marker is removed and plain text passes through untouched": "missing",
+     "a marker split across deltas leaves no cite or turn words behind": "missing"
+    },
+    "green": {
+     "a whole citation marker is removed and plain text passes through untouched": "pass",
+     "a marker split across deltas leaves no cite or turn words behind": "pass"
+    },
+    "stable": {
+     "a whole citation marker is removed and plain text passes through untouched": "pass",
+     "a marker split across deltas leaves no cite or turn words behind": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1302",
+   "pr": "codegraff #1302",
+   "why": "Bound publication review input for small diffs in large files",
+   "repo": "justrach/codegraff",
+   "historical_parent": "084b152a6aad2eed552cecfd7977ff157176b3a0",
+   "historical_merge": "0ae9f0d3ee8fe55773fbf4b11823b89e6a6d2bf8",
+   "source": "local-git",
+   "public_filter": "claim review uses committed context when changed head source exceeds the budget",
+   "public_file": "src/pr_review_input.zig",
+   "hidden": "hidden/pr-1302.sh",
+   "hidden_filter": "mixed documentation changes leave room for committed test roots",
+   "hidden_file": "src/pr_review_input.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "claim review uses committed context when changed head source exceeds the budget": "compile-error",
+     "mixed documentation changes leave room for committed test roots": "compile-error"
+    },
+    "green": {
+     "claim review uses committed context when changed head source exceeds the budget": "pass",
+     "mixed documentation changes leave room for committed test roots": "pass"
+    },
+    "stable": {
+     "claim review uses committed context when changed head source exceeds the budget": "pass",
+     "mixed documentation changes leave room for committed test roots": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1257",
+   "pr": "codegraff #1257",
+   "why": "stdin: read ACP and --json records past the 64 KiB buffer",
+   "repo": "justrach/codegraff",
+   "historical_parent": "5d45a5fde640f75de61822a38aae44256f87cace",
+   "historical_merge": "082cb7ae151cef1c0a6e9ca292d4181448d57a0d",
+   "source": "local-git",
+   "public_filter": "records larger than the reader buffer are returned whole",
+   "public_file": "src/stdin_line.zig",
+   "hidden": "hidden/pr-1257.sh",
+   "hidden_filter": "an over-limit record is dropped and the next one still arrives",
+   "hidden_file": "src/stdin_line.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "records larger than the reader buffer are returned whole": "missing",
+     "an over-limit record is dropped and the next one still arrives": "missing"
+    },
+    "green": {
+     "records larger than the reader buffer are returned whole": "pass",
+     "an over-limit record is dropped and the next one still arrives": "pass"
+    },
+    "stable": {
+     "records larger than the reader buffer are returned whole": "pass",
+     "an over-limit record is dropped and the next one still arrives": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1256",
+   "pr": "codegraff #1256",
+   "why": "Apply GRAFF_NO_PLUGINS before connecting MCP servers",
+   "repo": "justrach/codegraff",
+   "historical_parent": "4706cf974edc48b9f908d173df4acee9347fa0c0",
+   "historical_merge": "5d45a5fde640f75de61822a38aae44256f87cace",
+   "source": "local-git",
+   "public_filter": "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config",
+   "public_file": "src/session_start_plugins_test.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "missing"
+    },
+    "green": {
+     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "pass"
+    },
+    "stable": {
+     "initRegistryConsent applies GRAFF_NO_PLUGINS before it reads any MCP config": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1254",
+   "pr": "codegraff #1254",
+   "why": "Connect the MCP servers an ACP client passes",
+   "repo": "justrach/codegraff",
+   "historical_parent": "f682cb2e9c4c78cc7427aa2f76fc56ec4dbf0586",
+   "historical_merge": "4706cf974edc48b9f908d173df4acee9347fa0c0",
+   "source": "local-git",
+   "public_filter": "parse: stdio with args and env, http with headers, sse and malformed left out",
+   "public_file": "src/acp_mcp_servers.zig",
+   "hidden": "hidden/pr-1254.sh",
+   "hidden_filter": "parse: no params, no list, or an empty list is nothing to connect",
+   "hidden_file": "src/acp_mcp_servers.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "parse: stdio with args and env, http with headers, sse and malformed left out": "missing",
+     "parse: no params, no list, or an empty list is nothing to connect": "missing"
+    },
+    "green": {
+     "parse: stdio with args and env, http with headers, sse and malformed left out": "pass",
+     "parse: no params, no list, or an empty list is nothing to connect": "pass"
+    },
+    "stable": {
+     "parse: stdio with args and env, http with headers, sse and malformed left out": "pass",
+     "parse: no params, no list, or an empty list is nothing to connect": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1253",
+   "pr": "codegraff #1253",
+   "why": "ws: stream codex WS deltas through printDelta like SSE",
+   "repo": "justrach/codegraff",
+   "historical_parent": "a564bd1f90e3a3837ec747e3ae35fc0556a51d84",
+   "historical_merge": "e6fdad1f11c163ad1a6190acf84ea488f1eb1b9d",
+   "source": "local-git",
+   "public_filter": "a WS text delta reaches the UI before the response completes",
+   "public_file": "src/agent_ws_stream_test.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "a WS text delta reaches the UI before the response completes": "missing"
+    },
+    "green": {
+     "a WS text delta reaches the UI before the response completes": "pass"
+    },
+    "stable": {
+     "a WS text delta reaches the UI before the response completes": "pass"
+    },
+    "ok": true
+   }
   }
  ],
  "mined": []

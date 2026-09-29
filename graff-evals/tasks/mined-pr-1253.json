@@ -1,0 +1,14 @@
+{
+ "id": "pr-1253",
+ "suite": "mined-candidate",
+ "category": "live",
+ "source": "codegraff #1253 — mined (ADR 0214)",
+ "prompt": "ws: stream codex WS deltas through printDelta like SSE. Make the test named \"a WS text delta reaches the UI before the response completes\" in src/agent_ws_stream_test.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "setup": [
+  "python3 \"$TASK_ROOT/live_setup.py\" pr-1253 ."
+ ],
+ "check": "sh \"$TASK_ROOT/live/pr-1253/check_public.sh\"",
+ "timeout_s": 900,
+ "setup_timeout_s": 300,
+ "check_timeout_s": 420
+}

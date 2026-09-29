@@ -1,0 +1,14 @@
+{
+ "id": "pr-1336",
+ "suite": "mined-candidate",
+ "category": "live",
+ "source": "codegraff #1336 — mined (ADR 0214)",
+ "prompt": "Resolve a PR check that finished in the background. Make the test named \"a check promoted to the background resolves when its job exits 0 (#1326)\" in src/pr_local_checks.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "setup": [
+  "python3 \"$TASK_ROOT/live_setup.py\" pr-1336 ."
+ ],
+ "check": "sh \"$TASK_ROOT/live/pr-1336/check_public.sh\"",
+ "timeout_s": 900,
+ "setup_timeout_s": 300,
+ "check_timeout_s": 420
+}
