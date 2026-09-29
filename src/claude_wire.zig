@@ -9,13 +9,15 @@
 //!   under. graff edits that prefix mid-session (tools change when an MCP
 //!   server joins; compaction rewrites history), which new accounts see as a
 //!   400. `drop_block` has the API drop stale blocks instead.
-//! - Effort: `output_config.effort`, on models that take it. graff's default
-//!   (medium) is left off so each model keeps its own default.
+//! - Effort: `output_config.effort`, on models that take it. A 5.5-era model
+//!   gets graff's level as shown, medium included (ADR 0220); an older one
+//!   keeps its own default at graff's default. Titles and recaps run at low.
 //! - max_tokens covers thinking plus text on always-thinking models: 64K, and
 //!   the 128K maximum at the top efforts, as Anthropic measured and advises.
 
 const std = @import("std");
 const ReasoningEffort = @import("main.zig").ReasoningEffort;
+const CallKind = @import("run_budget.zig").CallKind;
 
 pub const Family = enum { opus, sonnet, haiku, fable, mythos };
 pub const Version = struct { family: Family, major: u16, minor: u16 };
@@ -74,17 +76,29 @@ pub fn takesEffort(model: []const u8) bool {
     };
 }
 
-/// graff's effort on the wire. Null at graff's default: the model keeps its
-/// own (medium on Opus 5.5, high on Opus 5 and Sonnet 5.5), so a session that
-/// never ran /effort does not move. `ultra` asks for the most there is.
-pub fn effortWire(effort: ReasoningEffort) ?[]const u8 {
+/// graff's effort on the wire. A 5.5-era model gets the level graff shows,
+/// medium included: Sonnet 5.5 and Fable 5.1 default to high, so leaving it
+/// off ran them a level above the one on screen (ADR 0220). On Opus 5.5
+/// medium is the default, which the API treats as unset. An older model keeps
+/// its own default at graff's default, so a session that never ran /effort
+/// does not move. `ultra` asks for the most there is.
+pub fn effortWire(model: []const u8, effort: ReasoningEffort) ?[]const u8 {
     return switch (effort) {
-        .medium, .none => null,
+        .none => null,
+        .medium => if (fiveFiveEra(model)) "medium" else null,
         .low => "low",
         .high => "high",
         .xhigh => "xhigh",
         .max, .ultra => "max",
     };
+}
+
+/// A title or a recap is one line: it runs at low effort whatever the
+/// session's level. Every other call keeps the session's effort, which the
+/// prompt cache is keyed on (a compaction fork or /btw shares its prefix).
+pub fn effortFor(model: []const u8, effort: ReasoningEffort, kind: CallKind) ?[]const u8 {
+    if (kind == .title or kind == .recap) return "low";
+    return effortWire(model, effort);
 }
 
 /// Thinking is on by default (Opus and Sonnet 5 and later, Fable, Mythos):
@@ -147,15 +161,24 @@ test "5.5-era models are never forced to a tool and bind their thinking" {
     }
 }
 
-test "effort goes on the wire only where it is taken, and never at graff's default" {
+test "effort goes on the wire only where it is taken; 5.5-era models get graff's level as shown" {
     const t = std.testing;
     try t.expect(takesEffort("claude-opus-5-5") and takesEffort("claude-sonnet-5-5") and takesEffort("claude-fable-5-1"));
     try t.expect(takesEffort("claude-opus-4-5") and takesEffort("claude-sonnet-4-6"));
     try t.expect(!takesEffort("claude-haiku-4-5") and !takesEffort("claude-sonnet-4-5") and !takesEffort("claude-opus-4-1"));
-    try t.expect(effortWire(.medium) == null);
-    try t.expectEqualStrings("high", effortWire(.high).?);
-    try t.expectEqualStrings("xhigh", effortWire(.xhigh).?);
-    try t.expectEqualStrings("max", effortWire(.ultra).?);
+    // ADR 0220: medium is sent to the models whose default is not medium.
+    try t.expectEqualStrings("medium", effortWire("claude-sonnet-5-5", .medium).?);
+    try t.expectEqualStrings("medium", effortWire("claude-opus-5-5", .medium).?);
+    try t.expect(effortWire("claude-opus-5", .medium) == null);
+    try t.expect(effortWire("claude-opus-4-8", .medium) == null);
+    try t.expectEqualStrings("high", effortWire("claude-opus-4-8", .high).?);
+    try t.expectEqualStrings("xhigh", effortWire("claude-sonnet-5-5", .xhigh).?);
+    try t.expectEqualStrings("max", effortWire("claude-opus-5-5", .ultra).?);
+    // Titles and recaps run at low; every other call keeps the session's level.
+    try t.expectEqualStrings("low", effortFor("claude-sonnet-5-5", .xhigh, .title).?);
+    try t.expectEqualStrings("low", effortFor("claude-opus-4-8", .medium, .recap).?);
+    try t.expectEqualStrings("xhigh", effortFor("claude-sonnet-5-5", .xhigh, .judge).?);
+    try t.expectEqualStrings("medium", effortFor("claude-sonnet-5-5", .medium, .compaction).?);
 }
 
 test "max_tokens leaves room for thinking on 128K-output models" {

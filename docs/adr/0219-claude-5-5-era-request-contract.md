@@ -44,7 +44,8 @@ OpenAI-shaped errors, so every Claude error failed the request.
   later, Sonnet 4.6 and later, Fable, and Mythos. It shares one `output_config`
   object with a structured-output `format` when there is one. graff's default
   (`medium`) is left off, so each model keeps its own default. `ultra` maps to
-  `max`.
+  `max`. (Amended by ADR 0220: 5.5-era models get `medium` as shown, and
+  titles and recaps run at `low`.)
 - **max_tokens.** 64K on models with a 128K ceiling, and the full 128K at
   `xhigh`, `max` and `ultra`, as Anthropic advises for agentic work. Other
   models keep 16K. graff always streams, which responses this size need.
@@ -68,7 +69,8 @@ OpenAI-shaped errors, so every Claude error failed the request.
   - Keeping thinking instead of dropping it, by freezing `system` and `tools`
     and using inline tool additions and mid-conversation system messages.
   - Showing text written between tool calls via the `updates` display.
-  - Pricing 1-hour cache writes at 2× (they are counted at 1.25×).
+  - Pricing 1-hour cache writes at 2× (they are counted at 1.25×). Done in
+    ADR 0220.
   - Tool search with deferred loading.
   - Task budgets.
   - An elapsed-time clock.

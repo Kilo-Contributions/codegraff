@@ -53,10 +53,22 @@ test "effort rides output_config on Claude, in one object with a structured-outp
     defer arena_state.deinit();
     var agent = try claudeAgent(arena_state.allocator(), "claude-sonnet-5-5");
 
-    // graff's default leaves the model's own effort in place.
+    // ADR 0220: graff's default is sent as shown; Sonnet 5.5's own is high.
     const plain = try agent.buildBody(bash_tools, false, true, true);
     defer std.testing.allocator.free(plain);
-    try std.testing.expect(!has(plain, "\"output_config\""));
+    try std.testing.expect(has(plain, "\"output_config\":{\"effort\":\"medium\"}"));
+    // A title is one line: low effort, whatever the session's level.
+    agent.call_kind = .title;
+    const title = try agent.buildBody(null, false, true, true);
+    defer std.testing.allocator.free(title);
+    try std.testing.expect(has(title, "\"output_config\":{\"effort\":\"low\"}"));
+    agent.call_kind = .root;
+    // An older model keeps its own default at graff's default.
+    agent.provider.model = "claude-opus-4-8";
+    const older = try agent.buildBody(bash_tools, false, true, true);
+    defer std.testing.allocator.free(older);
+    try std.testing.expect(!has(older, "\"output_config\""));
+    agent.provider.model = "claude-sonnet-5-5";
 
     agent.reasoning = .high;
     const high = try agent.buildBody(bash_tools, false, true, true);

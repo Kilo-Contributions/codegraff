@@ -8,12 +8,16 @@
 //! the Agent type into the prompt funnel.
 //!
 //! THE CALL IS THE COMPACTION'S OWN. It runs on the root's provider (the
-//! history it reads is in that wire format), carries NO tools so it cannot
-//! fan out, and sets `compaction_request` — which bounds the reply, drops
-//! reasoning effort to low, charges the call to `CallKind.compaction`, and,
-//! load-bearing here, disables the in-request overflow recovery that would
-//! otherwise let a note turn recurse back into emergencyTrim mid-compaction
-//! (agent_overflow.applyOverflowRecovery's `compaction_request` early-out).
+//! history it reads is in that wire format), is never run as a turn so it
+//! cannot fan out, and sets `compaction_request` — which bounds the reply,
+//! drops reasoning effort to low on the Responses wire, charges the call to
+//! `CallKind.compaction`, and, load-bearing here, disables the in-request
+//! overflow recovery that would otherwise let a note turn recurse back into
+//! emergencyTrim mid-compaction (agent_overflow.applyOverflowRecovery's
+//! `compaction_request` early-out).
+//! When compaction forks the conversation (ADR 0220, cache_fork.zig) it keeps
+//! the root's tools and system prompt, so it reads the history from the
+//! prompt cache; the persona then leads the instruction instead.
 //!
 //! IT IS TRANSACTIONAL. The note request runs against a container-deep clone
 //! of history in a throwaway arena, exactly as compact() builds its summary
@@ -27,6 +31,7 @@ const Allocator = std.mem.Allocator;
 
 const Agent = @import("agent.zig").Agent;
 const agent_compact = @import("agent_compact.zig");
+const cache_fork = @import("cache_fork.zig");
 const compact_note = @import("compact_note.zig");
 const main_mod = @import("main.zig");
 const phase_budget = @import("phase_budget.zig");
@@ -87,15 +92,22 @@ pub fn maybeWrite(self: *Agent) Decision {
     const reply = askModel(self) orelse return .skip_failed;
     if (!compact_note.record(self.io, self.arena, self.session_name, self.history_rewrites, reply))
         return .skip_failed;
-    // The note is in the SYSTEM prompt, beside HARD CONSTRAINTS, so it has to
-    // be re-composed to reach the next request — the same refresh a mid-
-    // session `/never` performs, and for the same reason.
-    prompts.armCompactNotes(self.session_name);
-    @import("prompt_cache_hud.zig").noteBust(.compact);
-    playbook_glue.refreshRoot(self, self.arena);
+    // The very next request is compaction's summary, which carries the note.
+    // A fork keeps the prompt the conversation was cached under instead, and
+    // compact() publishes once its summary is done (ADR 0220).
+    if (!cache_fork.shares()) publish(self);
     if (!main_mod.json_mode) self.say("  📝 wrote a pre-compaction note to self ({d} chars)\n", .{reply.len}) catch {};
     if (self.tracer) |tr| tr.note("compact", "wrote a pre-compaction note to self (#391)");
     return .fire;
+}
+
+/// The note is in the SYSTEM prompt, beside HARD CONSTRAINTS, so it has to
+/// be re-composed to reach the next request — the same refresh a mid-session
+/// `/never` performs, and for the same reason.
+pub fn publish(self: *Agent) void {
+    prompts.armCompactNotes(self.session_name);
+    @import("prompt_cache_hud.zig").noteBust(.compact);
+    playbook_glue.refreshRoot(self, self.arena);
 }
 
 /// The bounded turn. Mirrors playbook_reflect.askModel — a throwaway agent in
@@ -106,8 +118,10 @@ fn askModel(self: *Agent) ?[]const u8 {
     var arena_state = std.heap.ArenaAllocator.init(self.gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
+    const fork = cache_fork.shares(); // ADR 0220: the root's exact prefix, persona in the ask
     var messages = agent_compact.cloneJsonArray(arena, self.messages) catch return null;
-    messages.append(textMessage(arena, "user", compact_note.instruction) catch return null) catch return null;
+    const ask = if (fork) std.fmt.allocPrint(arena, "{s}\n\n{s}", .{ compact_note.persona, compact_note.instruction }) catch return null else compact_note.instruction;
+    messages.append(textMessage(arena, "user", ask) catch return null) catch return null;
     var agent: Agent = .{
         .gpa = self.gpa,
         .arena = arena,
@@ -121,13 +135,14 @@ fn askModel(self: *Agent) ?[]const u8 {
         .tracer = self.tracer,
         .run_budget = self.run_budget,
         .reasoning = self.reasoning,
+        .fast = self.fast, // a speed change would miss the cached prefix
         .stream_quiet = true,
         .compaction_request = true, // bounded reply, low effort, no recursive recovery
         .message_mutation_arena = arena,
-        .sys_override = compact_note.persona,
+        .sys_override = if (fork) self.systemPrompt() else compact_note.persona,
     };
     defer agent.tools_used.deinit(self.gpa);
-    const root = agent.request(null) catch return null;
+    const root = agent.request(cache_fork.tools(self, fork)) catch return null;
     const text = std.mem.trim(u8, title.assistantText(self.provider.kind, root), " \t\r\n");
     if (compact_note.isEmptyReply(text)) return null;
     return self.arena.dupe(u8, text) catch null;

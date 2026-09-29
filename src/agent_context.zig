@@ -136,7 +136,7 @@ pub fn recordUsage(self: *Agent, root: std.json.ObjectMap, req_body_len: usize) 
             const cache = usageInt(u, "cache_read_input_tokens");
             const cache_write = usageInt(u, "cache_creation_input_tokens");
             if (cache > 0) self.last_cache_read = @intCast(cache);
-            self.recordCost(usageInt(u, "input_tokens"), cache, cache_write, usageInt(u, "output_tokens"));
+            @import("cache_billing.zig").record(self, u, usageInt(u, "input_tokens"), cache, cache_write, usageInt(u, "output_tokens"));
         },
         .openai => {
             const total = usageInt(u, "total_tokens");

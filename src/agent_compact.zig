@@ -117,6 +117,8 @@ pub fn compactPrelude(self: *Agent) ?usize {
 pub fn compact(self: *Agent) anyerror!usize {
     // An opaque item anywhere in history needs the server, never a local summary.
     if (@import("compaction_window.zig").latestBlob(self.messages.items) != null) return error.ServerCompactionRequired;
+    const fork = @import("cache_fork.zig").begin(self); // ADR 0220: read the cached history, not rewrite it
+    defer @import("cache_fork.zig").end();
     const pending_tokens = compactPrelude(self) orelse {
         if (!main_mod.json_mode) try self.say("nothing to compact\n", .{});
         return 0;
@@ -127,7 +129,8 @@ pub fn compact(self: *Agent) anyerror!usize {
     // #391: the agent writes its own handoff BEFORE the summarizer rewrites the
     // history it describes. Gated, budgeted, best-effort: every refusal is a
     // named skip, so everything below runs unconditionally.
-    _ = compact_note_glue.maybeWrite(self);
+    const note = compact_note_glue.maybeWrite(self);
+    defer if (note == .fire and fork) compact_note_glue.publish(self); // a fork's summary keeps the cached prompt
     // #163: reclaim room BEFORE the summarization request so it fits under the
     // model's input cap. On codex/gpt-5.x an over-cap request fails to WRITE
     // (WriteFailed) rather than returning a clean overflow, so compaction could
@@ -170,7 +173,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     const recent_messages = live_messages.items[recent_start..];
     var summary_messages = std.json.Array.init(compact_arena);
     try summary_messages.ensureTotalCapacity(recent_start);
-    for (live_messages.items[0..recent_start]) |item| {
+    for (live_messages.items[0..if (fork) live_messages.items.len else recent_start]) |item| {
         if (peer_context.isPeerInject(item)) continue; // ADR 0004: do not ask the summarizer to hoard the room
         try summary_messages.append(try cloneJsonValue(compact_arena, item));
     }
@@ -195,7 +198,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     // turn context once this synthetic user request is appended. Pruning first
     // left precisely that large encrypted blob in the full summary resend.
     _ = dropPriorTurnReasoning(self);
-    _ = trimOldestToolOutputsAlloc(self, compact_arena);
+    if (!fork) _ = trimOldestToolOutputsAlloc(self, compact_arena);
 
     var progress = @import("compact_status.zig").begin(self);
     defer progress.end(self);
@@ -211,7 +214,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     defer self.stream_quiet = was_quiet;
     defer self.compaction_request = was_compaction_request;
     defer self.message_mutation_arena = was_message_mutation_arena;
-    const root = try self.request(null);
+    const root = try self.request(@import("cache_fork.zig").tools(self, fork));
     progress.end(self);
     // Any complete transport response proves the previous opaque failure was
     // transient/non-wedging, even when its summary text is empty or truncated.
