@@ -72,14 +72,16 @@ class Second(ScriptedModel):
     """Reads what the resumed session delivered, then waits on the late job."""
     def __init__(self, late):
         super().__init__([])
-        self.late, self.seen, self.done = late, {}, threading.Event()
+        self.late, self.seen, self.done = late, {'users': ''}, threading.Event()
 
     def next_reply(self, body):
         with self._lock:
             self.requests.append(body)
             n = len(self.requests)
+        # The notice lands at a step boundary: the first request, or the next
+        # one if the re-attached pump published just after the first.
+        self.seen['users'] += user_text(body)
         if n == 1:
-            self.seen['first_request_users'] = user_text(body)
             return {'tool': 'bash_output', 'arguments': {'id': self.late, 'wait_ms': 20000}}
         if n == 2:
             self.seen['late_output'] = tool_text(body)[-1]
@@ -138,7 +140,7 @@ def run(binary, expect):
         b = Second(late); models.append(b)
         proc_b, out_b, err_b = start(binary, directory, b, 'B', ['--resume', session]); running.append((proc_b, out_b, err_b))
         finished = b.done.wait(40)
-        users = b.seen.get('first_request_users', '')
+        users = b.seen.get('users', '')
         late_out = b.seen.get('late_output', '')
         checks = dict(
             early_notice=bool(re.search(rf'\[job {early} exited 7:', users)) and 'EARLY-DONE' in users,
