@@ -184,6 +184,56 @@ def archive_local(rev, dest, paths=None):
         shutil.copytree(pkg, os.path.join(dest, "zig-pkg"), symlinks=True)
 
 
+def test_block(text, name):
+    """The full `test "name" { … }` block, braces matched outside strings,
+    char literals, `//` comments and `\\\\` multiline string lines."""
+    head = f'test "{name}"'
+    start = text.find(head)
+    if start < 0:
+        return None
+    # Include the doc comments / blank line directly above? No: the block only.
+    i = text.find("{", start + len(head))
+    if i < 0:
+        return None
+    depth, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "/" and text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c == "\\" and text.startswith("\\\\", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c in "\"'":
+            j = i + 1
+            while j < n and text[j] != c:
+                j += 2 if text[j] == "\\" else 1
+            i = j + 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1] + "\n"
+        i += 1
+    return None
+
+
+def named_case(task_id):
+    """(file, test name) a mined task appended and told the model not to
+    edit, or None for any other task."""
+    try:
+        task = manifest(task_id)
+    except SystemExit:
+        return None
+    if task.get("source") != "local-git" or not task.get("public_file") or not task.get("public_filter"):
+        return None
+    return task["public_file"], task["public_filter"]
+
+
 def append_case(sandbox, rel, inc, name):
     """Append a test block unless a test with that name is already there."""
     path = os.path.join(sandbox, rel)

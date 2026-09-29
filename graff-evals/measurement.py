@@ -186,20 +186,69 @@ def provider_command(command):
     return result
 
 
+# Caches and dependency trees hold no task verifier; walking them is slow.
+_NOT_VERIFIERS = {'.git', '.zig-cache', 'zig-cache', 'zig-out', 'zig-pkg', 'node_modules', '__pycache__'}
+_LIVE_TASK = re.compile(r'live_setup\.py"?\s+([\w.-]+)')
+
+
+def is_visible_test(name):
+    """A test or check file a task ships (`test_*.py`, `check_*.py`,
+    `*_test.py`). In a copy of a Zig repository, a `test_` name is production
+    code: `src/test_hooks.zig` is where a fix registers a new test file."""
+    return name.endswith('.py') and (name.startswith(('test_', 'check_')) or name.endswith('_test.py'))
+
+
 def verifier_snapshot(sandbox, task, task_root):
-    """Visible tests are immutable; held-out graders stay outside agent cwd."""
-    paths = {p for p in Path(sandbox).rglob('*') if p.is_file() and
-             (p.name.startswith('test_') or p.name.startswith('check_') or p.name.endswith('_test.py'))}
+    """Visible tests are immutable; held-out graders stay outside agent cwd.
+    A mined task's named test was appended to a source file the fix may also
+    belong in, so that test's own text is protected, not the file."""
+    snap = {}
+    for root, dirs, files in os.walk(sandbox):
+        dirs[:] = [d for d in dirs if d not in _NOT_VERIFIERS]
+        for name in files:
+            if is_visible_test(name):
+                path = os.path.join(root, name)
+                snap[path] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
     for relative in re.findall(r'\$TASK_ROOT/(hidden/[^\s"\x27;]+)', task.get('check', '')):
-        paths.add(Path(task_root) / relative)
-    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+        path = Path(task_root) / relative
+        snap[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+    live = _LIVE_TASK.search(' '.join(task.get('setup', [])))
+    if live:
+        import live_setup
+        case = live_setup.named_case(live.group(1))
+        path = os.path.join(sandbox, case[0]) if case else None
+        block = live_setup.test_block(Path(path).read_text(errors='replace'), case[1]) if path and os.path.exists(path) else None
+        if block:
+            snap[path] = {'contains': block}
+    return snap
 
 
 def verifiers_unchanged(snapshot):
-    for path, digest in snapshot.items():
+    for path, want in snapshot.items():
         try:
-            if hashlib.sha256(Path(path).read_bytes()).hexdigest() != digest:
-                return False
+            data = Path(path).read_bytes()
         except OSError:
             return False
+        if isinstance(want, dict):
+            if want['contains'].encode() not in data:
+                return False
+        elif hashlib.sha256(data).hexdigest() != want:
+            return False
     return True
+
+
+def isolate_git(sandbox):
+    """Give a sandbox its own repository, holding the task tree as one commit.
+    Sandboxes sit inside this checkout. Without their own repository, `git
+    status`, `git diff` and `git show HEAD:` there describe the checkout, not
+    the task, and a `git stash` or `git checkout` would change the checkout. A
+    task that made its own repository keeps it."""
+    if os.path.exists(os.path.join(sandbox, '.git')):
+        return
+    git = ['git', '-c', 'user.name=eval', '-c', 'user.email=eval@localhost', '-c', 'commit.gpgsign=false',
+           '-c', 'core.hooksPath=/dev/null', '-C', sandbox]
+    subprocess.run(git + ['init', '-q', '-b', 'main'], check=True, capture_output=True)
+    with open(os.path.join(sandbox, '.git', 'info', 'exclude'), 'a') as f:
+        f.write('.zig-cache/\nzig-cache/\nzig-out/\nzig-pkg/\n.graff/\n.eval-*\n')
+    subprocess.run(git + ['add', '-A'], check=True, capture_output=True)
+    subprocess.run(git + ['commit', '-q', '--allow-empty', '--no-verify', '-m', 'task'], check=True, capture_output=True)

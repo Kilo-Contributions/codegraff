@@ -123,42 +123,7 @@ def candidates(days: int, ref: str, limit: int) -> list[dict]:
 
 # ── Zig test blocks ──────────────────────────────────────────────────────
 
-def test_block(text: str, name: str) -> str | None:
-    """The full `test "name" { … }` block, braces matched outside strings,
-    char literals, `//` comments and `\\\\` multiline string lines."""
-    head = f'test "{name}"'
-    start = text.find(head)
-    if start < 0:
-        return None
-    # Include the doc comments / blank line directly above? No: the block only.
-    i = text.find("{", start + len(head))
-    if i < 0:
-        return None
-    depth, n = 0, len(text)
-    while i < n:
-        c = text[i]
-        if c == "/" and text.startswith("//", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
-            continue
-        if c == "\\" and text.startswith("\\\\", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
-            continue
-        if c in "\"'":
-            j = i + 1
-            while j < n and text[j] != c:
-                j += 2 if text[j] == "\\" else 1
-            i = j + 1
-            continue
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start:i + 1] + "\n"
-        i += 1
-    return None
+test_block = live_setup.test_block
 
 
 def file_at(rev: str, path: str) -> str:
@@ -190,10 +155,15 @@ def write(path: str, text: str, mode: int = 0o644) -> None:
 
 def prompt_for(title: str, public: dict) -> str:
     # State what the grader checks: the test must run in the project's own
-    # test build. "Make it pass" alone let a run prove it in a temporary
-    # harness and leave it unreachable from the suite (ADR 0214).
-    return (f"{title}. Make the test named \"{public['name']}\" in {public['file']} run and pass "
-            "in the project's unit tests (`zig build test`), not only in isolation. "
+    # unit-test binary. "Make it pass" alone let a run prove it in a temporary
+    # harness and leave it unreachable from the suite. Naming only `zig build
+    # test` sent runs into its integration scripts, which cannot pass without
+    # graff-evals/ and ate most of the time budget (ADR 0214).
+    return (f"{title}. Make the test named \"{public['name']}\" in {public['file']} pass in the "
+            "project's unit-test binary, not only in isolation: "
+            f"`zig build test-bin -Dtest-filter=\"{public['name']}\"` compiles it (the newest "
+            "`.zig-cache/o/*/test`), and running that binary must report the test OK. The full "
+            "`zig build test` also runs integration scripts this task does not need. "
             "Do not edit that test. Do not add SPEC.md.")
 
 
@@ -359,7 +329,9 @@ def self_test() -> None:
     assert test_block(src, "missing") is None
     assert TEST_RE.match('+test "a \\"quoted\\" name" {').group(1) == 'a \\"quoted\\" name'
     prompt = prompt_for("Fix it", {"name": "alpha", "file": "src/a.zig"})
-    assert "run and pass in the project's unit tests (`zig build test`)" in prompt, prompt
+    # The grader's own check, not the full `zig build test` (ADR 0214).
+    assert "pass in the project's unit-test binary, not only in isolation" in prompt, prompt
+    assert '`zig build test-bin -Dtest-filter="alpha"`' in prompt, prompt
     print("mine_prs self-test ok")
 
 

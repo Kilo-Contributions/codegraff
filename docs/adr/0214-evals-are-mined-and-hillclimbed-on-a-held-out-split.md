@@ -50,6 +50,22 @@ an unreachable test counts). On the merge tree both must pass, and a second run
 must give the same verdicts. That is three filtered builds per task, one
 build at a time.
 
+**A sandbox is its own repository, and only the named test is protected**
+(amended 2026-09-29). Sandboxes sit inside this checkout. Before this change,
+`git status`, `git diff` and `git show HEAD:` in a sandbox described the
+checkout, not the task, and a `git stash` there would have changed the
+checkout. Each sandbox now gets a one-commit repository of the task tree
+(`measurement.isolate_git`).
+
+The mined prompt names the check the grader runs, `zig build test-bin
+-Dtest-filter=…`. When it named `zig build test`, runs spent most of their time
+budget on that step's integration scripts, which cannot pass without
+`graff-evals/`.
+
+A mined task protects its named test's own text. Otherwise only Python test
+files count as visible verifiers. In a copy of this repository,
+`src/test_hooks.zig` is where a fix registers a new test file.
+
 **A person approves each task.** `review` writes a local page, and `approve`
 moves a validated candidate into the `mined` suite. The loop never picks its
 own tasks from one model's failures.

@@ -3,7 +3,7 @@
  "suite": "mined-candidate",
  "category": "live",
  "source": "codegraff #1328 — mined (ADR 0214)",
- "prompt": "Free the MCP shape cache at session teardown. Make the test named \"shutdown frees a filled cache and is a no-op when empty (#1196)\" in src/mcp_shapes.zig run and pass in the project's unit tests (`zig build test`), not only in isolation. Do not edit that test. Do not add SPEC.md.",
+ "prompt": "Free the MCP shape cache at session teardown. Make the test named \"shutdown frees a filled cache and is a no-op when empty (#1196)\" in src/mcp_shapes.zig pass in the project's unit-test binary, not only in isolation: `zig build test-bin -Dtest-filter=\"shutdown frees a filled cache and is a no-op when empty (#1196)\"` compiles it (the newest `.zig-cache/o/*/test`), and running that binary must report the test OK. The full `zig build test` also runs integration scripts this task does not need. Do not edit that test. Do not add SPEC.md.",
  "setup": [
   "python3 \"$TASK_ROOT/live_setup.py\" pr-1328 ."
  ],
