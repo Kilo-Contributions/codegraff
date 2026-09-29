@@ -1,0 +1,4 @@
+[
+  {"tool": "bash", "arguments": {"command": "printf done > /app/answer"}},
+  {"text": "Wrote done to /app/answer."}
+]

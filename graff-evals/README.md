@@ -25,6 +25,8 @@ harness under test spends model calls.
 | `live` | Capped 12 gated PRs, no SPEC.md. Pass @ n=3; list$ on passing reps only. See [LIVE.md](../artifacts/graff-evals-live/LIVE.md). |
 | `bg` | Commands that outlast the 15s `-p` foreground wait, so each run must collect background results. For A/Bs of how the harness words and delivers them. Opt-in. |
 
+Terminal-Bench and other Harbor datasets run graff through the adapter in [harbor/](harbor/README.md).
+
 Published live board (2026-09-09, five harnesses on grok-4.6 SuperGrok):
 [artifacts/graff-evals-live/RECEIPT.md](../artifacts/graff-evals-live/RECEIPT.md).
 Rebuild the card with `python3 plot_live.py --from-jsonl` when `results/` is present.
