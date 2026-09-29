@@ -73,12 +73,14 @@ pub fn record(root: anytype, call: ToolCall, result: ExecResult) !void {
     const command = shell.runCommand(call) orelse return;
     root.publication_checks.observation_mutex.lockUncancelable(root.io);
     defer root.publication_checks.observation_mutex.unlock(root.io);
-    const parsed = @import("pr_command.zig").literal(root.arena, command) catch return;
+    const check_key = @import("check_key.zig");
+    const parsed = @import("pr_command.zig").literal(root.arena, try check_key.stripSelectors(root.arena, command)) catch return;
     // One check, one key: the argv without a leading `cd` or extra spacing,
     // matched with the effective directory below. Keying by the raw string
     // made `cd app && zig build test` and `zig build test` run in app/ two
-    // outstanding checks, named to the model one spelling at a time.
-    const key = try std.mem.join(root.arena, " ", parsed.argv);
+    // outstanding checks, named to the model one spelling at a time. A
+    // toolchain-only difference is the same check too (#1375).
+    const key = try check_key.key(root.arena, parsed.argv);
     if (!isCheck(key)) return;
     const base = root.agent_cwd orelse ".";
     const path = if (parsed.cwd) |cwd| if (std.fs.path.isAbsolute(cwd)) cwd else try std.fs.path.join(root.arena, &.{ base, cwd }) else base;
@@ -502,4 +504,22 @@ test "one check in one directory is one entry whatever its spelling" {
     const passing = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"run\",\"command\":\"zig  build   test\"}", .{});
     try record(&root, .{ .id = "b", .name = "shell", .input = passing }, .{ .text = "All tests passed", .is_error = false });
     try std.testing.expect(root.publication_checks.unresolved(repository) == null);
+
+    // #1375: a failure, then the same check rerun under a per-command
+    // toolchain override (a dynamic PATH prefix used to go unobserved).
+    root.agent_cwd = repo;
+    try record(&root, .{ .id = "c", .name = "shell", .input = failing }, .{ .text = "FAIL", .is_error = true });
+    try std.testing.expect(root.publication_checks.unresolved(repository) != null);
+    const override = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"run\",\"command\":\"cd app && PATH=\\\"$HOME/zig-0.17:$PATH\\\" zig build test\"}", .{});
+    try record(&root, .{ .id = "d", .name = "shell", .input = override }, .{ .text = "All tests passed", .is_error = false });
+    try std.testing.expect(root.publication_checks.unresolved(repository) == null);
+    // The override does not reach a failure in another directory.
+    try record(&root, .{ .id = "e", .name = "shell", .input = failing }, .{ .text = "FAIL", .is_error = true });
+    const elsewhere = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"action\":\"run\",\"command\":\"PATH=\\\"$HOME/zig-0.17:$PATH\\\" zig build test\"}", .{});
+    try record(&root, .{ .id = "f", .name = "shell", .input = elsewhere }, .{ .text = "All tests passed", .is_error = false });
+    try std.testing.expect(root.publication_checks.unresolved(repository) != null);
+}
+
+test {
+    _ = @import("check_key.zig");
 }
