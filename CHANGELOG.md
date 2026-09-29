@@ -10,6 +10,43 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.10
+
+### Tool calls
+
+- A response that stops mid-output (an output-limit stop, or a stream that ends before its terminal event) no longer runs its unfinished tool call. On the Anthropic wire a `tool_use` block that never got its `content_block_stop` is refused; on chat completions the last call of a `length`-stopped or cut-off stream is refused unless its arguments already close as a JSON object. The refusal names the cause and asks for fewer or smaller calls per response, instead of a malformed-JSON error the model retried as-is, and a call whose name streamed without arguments no longer runs as an empty call. (#1218)
+
+### Prompt cache
+
+- On the Anthropic API, and for Anthropic models through OpenRouter, a request whose predecessor began three or more minutes earlier asks for the 1-hour cache TTL, so a slow call no longer comes back to an expired prefix. (#1320)
+- The per-response `usage` trace line says why a request read nothing from the cache: `gap_ms`, `cache_ttl`, `prefix_changed` with the named bust reason, and `cache_miss` (`prefix_changed`, `first_request`, `idle_gap` or `unknown`). (#1320)
+- OpenRouter requests carry `session_id` for sticky routing, and Anthropic models there get OpenRouter's top-level `cache_control`, so their prefix is cached instead of billed at full price every turn. (#1284)
+
+### Autonomous runs
+
+- `/loop` holds for its own background work. A turn that only started or waited on a background shell job or subagent no longer ends the run as idle: the work's completion continues it as a loop turn with the run's credits, pacing and steering. Typing takes over, as before. (#1278)
+
+### Serve, remote control and ACP
+
+- A resent request no longer starts a second turn. `message_id` on a `graff serve` or remote-control request, or `messageId` / `_meta["graff/messageId"]` on ACP `session/prompt`, makes a resend of a finished request return that request's events (serve, remote control) or stop reason (ACP). (#1285)
+- ACP: a completed tool update whose result saved a rendered view or an MCP app carries `_meta["graff/view"]`, and `graff/models` rows name each model's maker. (#1385, #1386)
+
+### Line REPL
+
+- A paste during a running turn is framed as one steer line, and dropped images are bounded. (#1367)
+
+### PR publication
+
+- A failed local check is resolved by a passing rerun that only changes the toolchain (`PATH=…`, `RUSTUP_TOOLCHAIN=…`, `cargo +nightly`, another `zig` by path), including a dynamic `PATH` prefix. (#1375)
+
+### Traces
+
+- Each model response writes a `usage` event with the server's own token split (input, cache read, cache write, output), so a cache hit rate is `cache_read_tokens / input_tokens`. (#1387)
+
+### Repository
+
+- The in-repo iOS app is removed, and the README is shorter and points desktop users at [Harness](https://github.com/justrach/harness).
+
 ## v0.0.302.9
 
 This is the first published release since v0.0.302.6. v0.0.302.7 and v0.0.302.8 were only published as a pre-release and a draft, so their sections below are part of this release too.

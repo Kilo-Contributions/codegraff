@@ -23,6 +23,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.10
+    \\  • a tool call cut off mid-response is refused with its cause, not run
+    \\  • /loop waits for its background work; resends never start a second turn
+    \\  • slow Anthropic calls keep their prompt cache; OpenRouter caches Claude
+    \\
     \\0.0.302.9
     \\  • macOS CLI signed and notarized by the release workflow
     \\  • local MCP servers start on first use; "shared": true runs one per machine
