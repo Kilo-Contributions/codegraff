@@ -24,6 +24,10 @@ pub fn rawStream() ?*engine.StreamBuf {
 pub fn setFollowupFn(f: ?engine.FollowupFn) void {
     engine.g_followup_fn = f;
 }
+pub fn setSteerFns(send: ?engine.SteerSendFn, reclaim: ?engine.SteerReclaimFn) void {
+    engine.g_steer_send_fn = send;
+    engine.g_steer_reclaim_fn = reclaim;
+}
 pub const Event = engine.Event;
 pub const EventQueue = engine.EventQueue;
 pub const ToolEvent = engine.ToolEvent;

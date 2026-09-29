@@ -108,6 +108,7 @@ pub fn finishJob(self: *Model) void {
     job.events.deinit();
     self.alloc.destroy(job);
     self.pending = null;
+    if (engine.g_steer_reclaim_fn) |f| f(self.alloc, &self.steer_queue); // undelivered follow-ups run next
     @import("owned_images.zig").collect(self);
     self.cancel_requested = false;
     self.scroll = 0;
@@ -150,7 +151,7 @@ pub fn drainSteer(self: *Model) Effect {
 pub fn steerEnter(self: *Model) void {
     const v = std.mem.trim(u8, self.input.getValue(), " \t\r\n");
     if (v.len > 0 or self.images.items.len > 0) {
-        @import("dispatch.zig").queueSteerLine(self, v);
+        @import("dispatch.zig").steerLine(self, v);
     } else if (self.steer_queue.items.len > 0) {
         cancelTurn(self);
         self.push(.system, "↳ force › interrupting…") catch {};

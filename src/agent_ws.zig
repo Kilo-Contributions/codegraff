@@ -119,7 +119,7 @@ pub fn postLive(self: *Agent, body: []const u8) ![]u8 {
     if (!wsEligible(self)) return self.postStream(body);
     const response = postResponsesWs(self, body) catch |e| {
         if (@import("agent_async_tools.zig").started(self)) return e;
-        if (e == error.Interrupted or e == error.StreamStalled or e == error.ModelLoop) return e;
+        if (e == error.Interrupted or e == error.StreamStalled or e == error.ModelLoop or e == error.Steered) return e;
         // Preemptive idle expiry is not a failed transport attempt; it only asks
         // request() to rebuild the already-created delta as full input.
         if (e == error.CodexWsReanchor) return e;
@@ -583,6 +583,11 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
             break :stream;
         }
         if (orig_tio != null and escPressed(true)) return error.Interrupted;
+        // GPT-6 steers server-side (tick above); other models supersede the reply.
+        if (!@import("agent_ws_steer.zig").modelSupports(self.provider.model) and @import("steer_now.zig").pending(self)) {
+            engine_sink.forAgent(self).emit(self.io, .{ .stream_aborted = .steered });
+            return error.Steered;
+        }
     }
     self.traceFirstToken(); // tool-only responses fall back to completion time
     self.codex_ws_used_ms = nowAwakeMs(self.io); // completed turn — restart the idle window (#codex-ws)

@@ -158,6 +158,10 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
             sink.emit(self.io, .{ .stream_aborted = .interrupted });
             return error.Interrupted;
         }
+        if (@import("steer_now.zig").pending(self)) { // a follow-up supersedes this reply
+            sink.emit(self.io, .{ .stream_aborted = .steered });
+            return error.Steered;
+        }
     }
     // A connection the peer is draining (GOAWAY) takes no new streams.
     keep = keep and head.lease.?.session.reusable();

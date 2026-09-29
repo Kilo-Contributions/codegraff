@@ -194,7 +194,7 @@ fn emit(ctx: *anyopaque, ev: engine_sink.Stamped) void {
             // people hit Esc on a turn that was still recovering.
             if (!t.turn_ending) return;
             switch (t.reason) {
-                .interrupted => {},
+                .interrupted, .steered => {},
                 .stalled => b.queue.push(.{ .notice = "⚠ stream stalled — ending turn" }),
                 .dropped => b.queue.push(.{ .notice = "⚠ connection dropped — response ended early" }),
             }
@@ -205,6 +205,7 @@ fn emit(ctx: *anyopaque, ev: engine_sink.Stamped) void {
                 .interrupted => {},
                 .stalled => b.queue.push(.{ .notice = "⚠ stream stalled — ending turn" }),
                 .dropped => b.queue.push(.{ .notice = "⚠ connection dropped — response ended early" }),
+                .steered => b.queue.push(.{ .notice = "↳ follow-up received — restarting the reply" }),
             }
         },
         // The status bar's model name is a TUI-owned global; a mid-turn

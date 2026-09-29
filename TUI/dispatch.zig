@@ -72,6 +72,20 @@ fn withImages(self: *Model, line: []const u8) []const u8 {
 /// Queue a mid-turn follow-up, including any attached chips. Idle applyLine
 /// already prefixes `@[path]`; steer used to copy only the typed text, so the
 /// pixels never left the composer.
+/// A follow-up typed with Enter mid-turn. Plain text joins the running turn
+/// (a streaming reply restarts with it); commands and image chips wait for
+/// the turn to end, as a /btw aside does.
+pub fn steerLine(self: *Model, text: []const u8) void {
+    const line = std.mem.trim(u8, text, " \t\r\n");
+    if (self.images.items.len == 0 and line.len > 0 and line[0] != '/') if (engine.g_steer_send_fn) |send| if (send(line)) {
+        if (engine.g_followup_fn) |f| f();
+        self.input.setValue("") catch {};
+        self.push(.system, "↳ sent to the running turn") catch {};
+        return;
+    };
+    queueSteerLine(self, text);
+}
+
 pub fn queueSteerLine(self: *Model, text: []const u8) void {
     const line = std.mem.trim(u8, text, " \t\r\n");
     if (line.len == 0 and self.images.items.len == 0) return;

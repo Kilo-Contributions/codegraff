@@ -78,6 +78,10 @@ test "deliverSteer injects one non-force line and leaves force queued" {
     try std.testing.expect(main_mod.g_steer_queue.items[0].force);
 }
 
+test {
+    _ = @import("steer_now.zig");
+}
+
 test "deliverSteer is a no-op on subagents" {
     var root: Agent = undefined;
     root.sub = true;

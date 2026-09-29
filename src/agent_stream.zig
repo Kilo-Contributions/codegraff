@@ -341,6 +341,11 @@ pub fn postStreamWithClient(self: *Agent, client: *std.http.Client, body: []cons
             if (req.connection) |conn| conn.closing = true;
             return error.Interrupted;
         }
+        if (@import("steer_now.zig").pending(self)) { // a follow-up supersedes this reply
+            sink.emit(self.io, .{ .stream_aborted = .steered });
+            if (req.connection) |conn| conn.closing = true;
+            return error.Steered;
+        }
         if (!more) break;
         reader.toss(1);
     }

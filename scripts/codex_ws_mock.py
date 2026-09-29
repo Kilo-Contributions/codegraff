@@ -226,6 +226,12 @@ class CodexMock:
     raw_for_request: Callable[[RecordedRequest], bytes | None] | None = field(
         default=None, repr=False
     )
+    # Optional per-request pause between events (SSE and WebSocket), so a reply
+    # streams slowly enough for a test to act mid-stream. SSE goes chunked; a
+    # client that hangs up mid-stream just ends the response.
+    delay_for_request: Callable[[RecordedRequest], float] | None = field(
+        default=None, repr=False
+    )
     requests: list[RecordedRequest] = field(default_factory=list, repr=False)
     prewarm_ids: dict[int, str] = field(default_factory=dict, repr=False)
     _sock: socket.socket | None = field(default=None, repr=False)
@@ -413,12 +419,16 @@ class CodexMock:
                     separators=(",", ":")).encode("utf-8"))
                 self._log("ws -> response.completed (prewarm)")
                 continue
-            events = self._events("ws", connection_id, event, headers)
+            request = self._record("ws", connection_id, event, headers)
+            events = self._events_for(request)
+            delay = self.delay_for_request(request) if self.delay_for_request else 0.0
             for ev in events:
                 _send_frame(
                     conn, OP_TEXT, json.dumps(ev, separators=(",", ":")).encode("utf-8")
                 )
                 self._log(f"ws -> {ev['type']}")
+                if delay > 0:
+                    time.sleep(delay)
             with self._lock:
                 self.ws_turns += 1
             # Real Codex closes immediately after a terminal type:error frame.
@@ -450,6 +460,10 @@ class CodexMock:
                     self.sse_turns += 1
                 return
         events = self._events_for(request)
+        delay = self.delay_for_request(request) if self.delay_for_request else 0.0
+        if delay > 0:
+            self._serve_sse_slow(conn, events, delay)
+            return
         payload = "".join(
             f"data: {json.dumps(ev, separators=(',', ':'))}\n\n" for ev in events
         ).encode("utf-8")
@@ -465,6 +479,23 @@ class CodexMock:
         )
         for ev in events:
             self._log(f"sse -> {ev['type']}")
+        with self._lock:
+            self.sse_turns += 1
+
+    def _serve_sse_slow(self, conn: socket.socket, events: list[dict], delay: float) -> None:
+        conn.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+            b"Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+        )
+        try:
+            for ev in events:
+                data = f"data: {json.dumps(ev, separators=(',', ':'))}\n\n".encode("utf-8")
+                conn.sendall(f"{len(data):x}\r\n".encode("ascii") + data + b"\r\n")
+                self._log(f"sse -> {ev['type']} (slow)")
+                time.sleep(delay)
+            conn.sendall(b"0\r\n\r\n")
+        except OSError as exc:
+            self._log(f"sse slow stream ended early: {exc}")
         with self._lock:
             self.sse_turns += 1
 

@@ -459,3 +459,68 @@ test "lastLines caps ! output to the tail" {
     try std.testing.expectEqualStrings("c\nd", lastLines("a\nb\nc\nd", 2));
     try std.testing.expectEqualStrings("a\nb", lastLines("a\nb", 5));
 }
+
+var handed_buf: [128]u8 = undefined;
+var handed_len: usize = 0;
+var hand_accepts = true;
+fn fakeSteerSend(text: []const u8) bool {
+    if (!hand_accepts) return false;
+    handed_len = @min(text.len, handed_buf.len);
+    @memcpy(handed_buf[0..handed_len], text[0..handed_len]);
+    return true;
+}
+
+fn pendingModel(m: *Model) !*engine.Job {
+    m.setup(std.testing.allocator);
+    const job = try std.testing.allocator.create(engine.Job);
+    job.* = .{ .gpa = std.testing.allocator, .history = &.{}, .params = .{}, .stream = .{}, .threaded = false };
+    m.pending = job;
+    return job;
+}
+
+test "Enter mid-turn hands plain text to the running turn" {
+    var m: Model = undefined;
+    const job = try pendingModel(&m);
+    defer {
+        m.pending = null;
+        std.testing.allocator.destroy(job);
+        m.deinit();
+    }
+    engine.g_steer_send_fn = fakeSteerSend;
+    defer engine.g_steer_send_fn = null;
+    hand_accepts = true;
+    handed_len = 0;
+    try m.input.setValue("also run the tests");
+    turn.steerEnter(&m);
+    try std.testing.expectEqualStrings("also run the tests", handed_buf[0..handed_len]);
+    try std.testing.expectEqual(@as(usize, 0), m.steer_queue.items.len);
+    try std.testing.expectEqualStrings("", m.input.getValue());
+    try std.testing.expect(std.mem.indexOf(u8, m.history.items[m.history.items.len - 1].text, "sent to the running turn") != null);
+}
+
+test "commands, images, /btw and a refused hand-off still wait for the turn" {
+    var m: Model = undefined;
+    const job = try pendingModel(&m);
+    defer {
+        m.pending = null;
+        std.testing.allocator.destroy(job);
+        m.deinit();
+    }
+    engine.g_steer_send_fn = fakeSteerSend;
+    defer engine.g_steer_send_fn = null;
+    hand_accepts = true;
+    handed_len = 0;
+    try m.input.setValue("/model gpt-6");
+    turn.steerEnter(&m);
+    m.attachImage("/tmp/shot.png");
+    try m.input.setValue("look at this");
+    turn.steerEnter(&m);
+    _ = applyLine(&m, "/btw remember the tests");
+    hand_accepts = false;
+    try m.input.setValue("plain but refused");
+    turn.steerEnter(&m);
+    try std.testing.expectEqual(@as(usize, 0), handed_len); // nothing was handed over
+    try std.testing.expectEqual(@as(usize, 4), m.steer_queue.items.len);
+    try std.testing.expectEqualStrings("remember the tests", m.steer_queue.items[2]);
+    try std.testing.expectEqualStrings("plain but refused", m.steer_queue.items[3]);
+}

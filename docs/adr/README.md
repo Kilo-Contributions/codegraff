@@ -243,6 +243,7 @@ record only when you need the evidence or the edge cases.
 | [0214](0214-evals-are-mined-and-hillclimbed-on-a-held-out-split.md) | Mine live eval tasks from merged PRs, with graders validated red on the parent and green and stable on the merge, and a person approving each. Hill-climb on a fixed held-out split with measured noise: keep a change only when train beats the noise band and test improves. Model-guide advice enters as candidates, not edits. |
 | [0215](0215-headless-runs-wait-until-idle.md) | Headless roots (`-p`, `--json`, `graff serve`, piped stdin) wait for their own background work to report before a plain final ends the run. Servers do not count, a 10-minute heartbeat wakes the model, and interactive surfaces keep their idle wake. |
 | [0216](0216-loop-is-retired.md) | `/loop` is retired: `/goal` is the one autonomous run, and waiting for background work is how every run works (ADR 0215). Typing `/loop` prints a pointer to `/goal` and makes no model call. |
+| [0217](0217-follow-ups-supersede-the-streaming-reply.md) | A plain follow-up typed while the root reply streams cuts that stream, drops the uncommitted partial and rebuilds the request with the follow-up (not for compaction, children, started async tools, or GPT-6 WebSocket steer). TUI Enter hands plain text to the running turn; `/btw`, commands and images still wait; ACP is unchanged. |
 
 ## When to write one
 
