@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Cube transport proof: run `graff serve` inside a Daytona sandbox (via the
 codegraff gateway) and stream a real agent turn from this Mac through the
-Daytona preview URL — the exact pipe the iOS app will use.
+Daytona preview URL — the pipe a remote client uses.
 
 Steps: create sandbox -> install graff -> start serve (async exec, detached)
 -> mint preview URL -> create session + stream one NDJSON turn from outside
 -> report cost meter. Leaves the sandbox running (autoStop reaps it) so a
-client (e.g. the iOS app via GRAFF_SERVE_BASE/GRAFF_SERVE_TOKEN) can reuse
+client (via GRAFF_SERVE_BASE/GRAFF_SERVE_TOKEN) can reuse
 it via .graff/cube-state.json. Run from the repo root:
 
   python3 scripts/e2e-cube-serve.py
