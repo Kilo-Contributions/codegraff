@@ -80,6 +80,10 @@ fn spawnFailText(gpa: Allocator, err: anyerror) ![]u8 {
 /// server-like or a finite command (#1324).
 const Started = enum { background, background_finite, server, finite };
 
+/// A finite job's next move (ADR 0215): its result arrives by itself, so the
+/// model keeps working or ends its reply to wait. Servers never report.
+const reports_back = "Its exit status and output reach you when it finishes: continue with independent work, or end your reply to wait for it.";
+
 fn startedText(gpa: Allocator, id: u64, cmd: []const u8, ssh: bool, how: Started, wait_s: u64, partial: []const u8) ![]u8 {
     var aw: Io.Writer.Allocating = .init(gpa);
     errdefer aw.deinit();
@@ -90,9 +94,9 @@ fn startedText(gpa: Allocator, id: u64, cmd: []const u8, ssh: bool, how: Started
     } else if (how == .server) {
         try w.print("Command exceeded the {d}s foreground wait and was automatically moved to the background. Process is still running as job {d}. You are notified on exit with the status and output — do not poll. action=output is a snapshot; leave it on /jobs or action=kill it.", .{ wait_s, id });
     } else if (how == .background_finite) {
-        try w.print("Running in the background as job {d}. You are notified on exit with the status and output. To block until it finishes, call action=output id {d} with wait_ms>0 once; action=kill stops it.", .{ id, id });
+        try w.print("Running in the background as job {d}. {s} To block on it instead, call action=output id {d} with wait_ms>0 once; action=kill stops it.", .{ id, reports_back, id });
     } else if (how == .finite) {
-        try w.print("Command exceeded the {d}s foreground wait and was automatically moved to the background. Process is still running as job {d}. You are notified on exit with the status and output. To block until it finishes instead, call action=output id {d} with wait_ms>0 once; action=kill stops it.", .{ wait_s, id, id });
+        try w.print("Command exceeded the {d}s foreground wait and was automatically moved to the background. Process is still running as job {d}. {s} To block on it instead, call action=output id {d} with wait_ms>0 once; action=kill stops it.", .{ wait_s, id, reports_back, id });
     } else {
         try w.print("This is a persistent server. It runs in the background across turns. You are notified on exit — do not poll. action=output id {d} reads unread output. action=kill stops it.", .{id});
     }
@@ -263,6 +267,7 @@ test "an auto-parked finite command offers the wait-until-exit read (#1324)" {
     const text = try startedText(gpa, 8, "cargo test", false, .finite, 15, "");
     defer gpa.free(text);
     try std.testing.expect(std.mem.indexOf(u8, text, "action=output id 8 with wait_ms>0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "end your reply to wait for it") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "snapshot") == null);
     try std.testing.expect(std.mem.indexOf(u8, text, "persistent server") == null);
 }
@@ -272,6 +277,7 @@ test "a finite command backgrounded on purpose offers the wait-until-exit read (
     const text = try startedText(gpa, 9, "cargo test", false, .background_finite, 0, "");
     defer gpa.free(text);
     try std.testing.expect(std.mem.indexOf(u8, text, "action=output id 9 with wait_ms>0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "end your reply to wait for it") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "persistent server") == null);
     try std.testing.expect(std.mem.indexOf(u8, text, "do not poll") == null);
 }

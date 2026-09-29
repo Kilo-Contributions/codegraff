@@ -1,0 +1,13 @@
+{
+  "id": "bg-two-checks",
+  "suite": "bg",
+  "category": "background",
+  "prompt": "Two independent checks cover app.py: `python3 lint.py` and `python3 test.py`. Each takes about 20 seconds, so run them in parallel. Fix what they report in app.py, then run both again and confirm both pass.",
+  "files": {
+    "app.py": "import os\nimport json\n\n\ndef greet(name):\n    return \"Hello, \" + name + \"!\"\n\n\ndef total(xs):\n    t = 0\n    for x in xs[1:]:\n        t += x\n    return t\n",
+    "lint.py": "import ast, sys, time\n# A slow linter: about 20 seconds. Reports imports app.py never uses.\ntime.sleep(20)\ntree = ast.parse(open(\"app.py\").read())\nimported = set()\nfor node in ast.walk(tree):\n    if isinstance(node, ast.Import):\n        imported.update(a.asname or a.name for a in node.names)\n    elif isinstance(node, ast.ImportFrom):\n        imported.update(a.asname or a.name for a in node.names)\nused = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}\nunused = sorted(imported - used)\nfor name in unused:\n    print(f\"app.py: unused import {name}\")\nprint(\"lint clean\" if not unused else f\"{len(unused)} lint error(s)\")\nsys.exit(1 if unused else 0)\n",
+    "test.py": "import sys, time\nimport app\n# A slow test run: about 20 seconds.\ntime.sleep(20)\ncases = [(\"greet\", app.greet(\"Ada\") == \"Hello, Ada!\"), (\"total\", app.total([1, 2, 3]) == 6)]\nfor name, ok in cases:\n    print((\"ok   \" if ok else \"FAIL \") + name)\nfailed = [n for n, ok in cases if not ok]\nprint(\"tests passed\" if not failed else f\"{len(failed)} test(s) failed\")\nsys.exit(1 if failed else 0)\n"
+  },
+  "check": "python3 -c \"import ast; t=ast.parse(open('app.py').read()); names={a.asname or a.name for n in ast.walk(t) if isinstance(n,(ast.Import,ast.ImportFrom)) for a in n.names}; used={n.id for n in ast.walk(t) if isinstance(n,ast.Name)}; assert not (names-used), names-used\" && python3 -c \"import app; assert app.greet('Ada')=='Hello, Ada!'; assert app.total([1,2,3])==6\"",
+  "timeout_s": 420
+}

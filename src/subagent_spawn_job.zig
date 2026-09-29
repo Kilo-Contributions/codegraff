@@ -53,9 +53,9 @@ pub fn spawnSubBackground(ctx: ToolCtx, label: []const u8, prompt: []const u8, s
     subagent.g_agent_jobs.next_id += 1;
     const receipt = (if (state) |saved| std.fmt.allocPrint(
         gpa,
-        "[agent {d} started: {s}] [task_id {s}]\nIt runs in the background across turns. Do not poll. agent_output(id {d}, wait_ms>0) waits for completion. agent_message queues feedback; subagent_resume continues the retained conversation after completion.",
+        "[agent {d} started: {s}] [task_id {s}]\nIt runs in the background and its report reaches you when it finishes: continue with independent work, or end your reply to wait for it. Do not poll; agent_output(id {d}, wait_ms>0) blocks until it finishes. agent_message queues feedback; subagent_resume continues the retained conversation after completion.",
         .{ job.id, job.label, saved.record.id, job.id },
-    ) else std.fmt.allocPrint(gpa, "[agent {d} started: {s}]\nIt runs in the background across turns. Do not poll. agent_output(id {d}, wait_ms>0) waits for completion.", .{ job.id, job.label, job.id })) catch |err| {
+    ) else std.fmt.allocPrint(gpa, "[agent {d} started: {s}]\nIt runs in the background and its report reaches you when it finishes: continue with independent work, or end your reply to wait for it. Do not poll; agent_output(id {d}, wait_ms>0) blocks until it finishes.", .{ job.id, job.label, job.id })) catch |err| {
         subagent.g_agent_jobs.mutex.unlock(ctx.io);
         gpa.destroy(job);
         return err;
