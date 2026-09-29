@@ -1,0 +1,12 @@
+{
+  "id": "bg-slow-tests",
+  "suite": "bg",
+  "category": "background",
+  "prompt": "Run `python3 run_tests.py`; the suite takes about 25 seconds and is the only source of truth, so run it as given. Fix the bug in calc.py that makes it fail, then rerun the full suite and confirm it passes.",
+  "files": {
+    "calc.py": "def mean(xs):\n    return sum(xs) / len(xs)\n\n\ndef median(xs):\n    s = sorted(xs)\n    mid = len(s) // 2\n    return s[mid]\n",
+    "run_tests.py": "import sys, time\nimport calc\n\n# The suite is slow on purpose: each group takes about eight seconds.\nGROUPS = [\n    (\"mean\", lambda: calc.mean([2, 4, 6, 8]) == 5),\n    (\"median of odd count\", lambda: calc.median([7, 1, 3]) == 3),\n    (\"median of even count\", lambda: calc.median([4, 1, 3, 2]) == 2.5),\n]\nfailed = []\nfor name, check in GROUPS:\n    time.sleep(8)\n    ok = check()\n    print((\"ok   \" if ok else \"FAIL \") + name, flush=True)\n    if not ok:\n        failed.append(name)\nprint(\"ALL PASSED\" if not failed else f\"{len(failed)} FAILED\", flush=True)\nsys.exit(1 if failed else 0)\n"
+  },
+  "check": "python3 -c \"import calc; assert calc.mean([2,4,6,8]) == 5; assert calc.median([7,1,3]) == 3; assert calc.median([4,1,3,2]) == 2.5\"",
+  "timeout_s": 420
+}

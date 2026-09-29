@@ -1,0 +1,11 @@
+{
+  "id": "bg-build-id",
+  "suite": "bg",
+  "category": "background",
+  "prompt": "Run `sh build.sh`. It takes about 20 seconds and prints a build id at the end. Write that build id, and nothing else, to build_id.txt.",
+  "files": {
+    "build.sh": "#!/bin/sh\n# A slow build: it takes about 20 seconds and prints a fresh build id.\nid=$(python3 -c 'import secrets; print(secrets.token_hex(4))')\nprintf '%s\\n' \"$id\" > .build-id-truth\necho \"compiling...\"\nsleep 20\necho \"build id: $id\"\n"
+  },
+  "check": "test -s .build-id-truth && test \"$(tr -d ' \\n' < build_id.txt)\" = \"$(tr -d ' \\n' < .build-id-truth)\"",
+  "timeout_s": 300
+}
