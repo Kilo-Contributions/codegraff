@@ -151,12 +151,15 @@ test "a background job with a session writes to files, reports through bash_outp
     defer job_capture.test_root = null;
     defer jobs.jobsReap(gpa, io);
 
-    const done = try jobs.spawnJobOpts(gpa, io, "printf a; printf b >&2; exit 4", .{ .session = "s-live" });
+    const done = try jobs.spawnJobOpts(gpa, io, "printf to-out; printf to-err >&2; exit 4", .{ .session = "s-live" });
     try std.testing.expect(done.capture != null);
     const out = try jobs.jobOutput(gpa, io, done.id, 5000);
     defer gpa.free(out.text);
     try std.testing.expect(std.mem.indexOf(u8, out.text, "exited with code 4") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.text, "ab") != null);
+    // Two files, read one after the other: a poll can land between the two
+    // writes, so the streams arrive in either order.
+    try std.testing.expect(std.mem.indexOf(u8, out.text, "to-out") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.text, "to-err") != null);
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
     const meta = job_capture.readMeta(io, arena.allocator(), done.capture.?.dir) orelse return error.NoMeta;
