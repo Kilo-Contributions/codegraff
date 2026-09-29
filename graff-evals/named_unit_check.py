@@ -28,7 +28,12 @@ def parse(output: str, name: str) -> str:
     broke = re.compile(r"error: '[^'\n]*\.test\." + re.escape(name) + r"' (?:failed|terminated)")
     if broke.search(output) or any(v.startswith(("FAIL", "SKIP")) for v in verdicts):
         return "fail"
-    return "pass" if any(v.startswith("OK") for v in verdicts) else "missing"
+    if any(v.startswith("OK") for v in verdicts):
+        return "pass"
+    # Started but never reached a verdict: a crash (a segfault aborts the
+    # binary mid-line). It ran and failed; calling it missing sent a reader
+    # looking for an unreachable test instead of a crashing fix.
+    return "crashed" if verdicts else "missing"
 
 
 def grade(cwd: str, names: list[str], timeout: int = 600) -> dict[str, str]:
@@ -62,6 +67,8 @@ def self_test() -> None:
     assert parse(out, "never compiled in") == "missing"
     crash = "error: 'x.test.boom' terminated with signal ABRT with stderr:\n"
     assert parse(crash, "boom") == "fail"
+    segv = "3/74 m.test.joinWithin: stays queued...Segmentation fault at address 0x138\n"
+    assert parse(segv, "joinWithin: stays queued") == "crashed"
     print("named_unit_check self-test ok")
 
 

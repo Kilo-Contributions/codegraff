@@ -432,6 +432,9 @@ def one_run(hname, harness, task, model, rep, live=False):
             p.wait(timeout=10)
         else:
             timed_out = False
+        # Whatever the run left in its session (background jobs keep their own
+        # process groups) must not run on into the next task.
+        measurement.kill_session(p.pid)
         sel.close()
         p.stdout.close()
         p.stderr.close()

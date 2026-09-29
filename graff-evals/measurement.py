@@ -240,6 +240,30 @@ def verifiers_unchanged(snapshot):
     return True
 
 
+def kill_session(sid):
+    """SIGKILL every process still in a harness's session; returns how many.
+    The harness runs in a session of its own. graff gives each shell job its
+    own process group but not its own session, so killing the harness's group
+    left a job behind (a hung test binary spun a core through later tasks).
+    Session ids outlive reparenting, so orphans are still found here."""
+    if os.name != 'posix' or sid <= 1:
+        return 0
+    listing = subprocess.run(['ps', '-axo', 'pid='], capture_output=True, text=True).stdout
+    killed = 0
+    for token in listing.split():
+        pid = int(token)
+        if pid == os.getpid():
+            continue
+        try:
+            if os.getsid(pid) != sid:
+                continue
+            os.kill(pid, 9)
+            killed += 1
+        except OSError:
+            continue
+    return killed
+
+
 def isolate_git(sandbox):
     """Give a sandbox its own repository, holding the task tree as one commit.
     Sandboxes sit inside this checkout. Without their own repository, `git

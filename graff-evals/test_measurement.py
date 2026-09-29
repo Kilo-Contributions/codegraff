@@ -313,6 +313,35 @@ class MeasurementTests(unittest.TestCase):
             self.assertEqual(subprocess.run(['git', '-C', str(sandbox), 'rev-parse', 'HEAD'],
                                             capture_output=True, text=True, check=True).stdout, head)
 
+    @unittest.skipIf(os.name != 'posix', 'POSIX sessions')
+    def test_a_run_s_leftover_jobs_are_swept_with_its_session(self):
+        import subprocess, time
+        # A harness in its own session starts a job in its own process group
+        # (as graff does), then dies: the job is orphaned but keeps the session.
+        with tempfile.TemporaryDirectory() as temp:
+            pidfile = Path(temp) / 'job.pid'
+            harness = subprocess.Popen(
+                ['/bin/sh', '-c', f'set -m; sleep 60 & echo $! > {pidfile}; wait'],
+                start_new_session=True)
+            for _ in range(100):
+                if pidfile.exists() and pidfile.read_text().strip():
+                    break
+                time.sleep(0.05)
+            job = int(pidfile.read_text())
+            self.assertNotEqual(os.getpgid(job), harness.pid)  # not in the harness's group
+            os.killpg(harness.pid, 9)  # what the harness used to do
+            harness.wait()
+            os.kill(job, 0)  # still running
+            self.assertGreaterEqual(measurement.kill_session(harness.pid), 1)
+            for _ in range(100):
+                try:
+                    os.kill(job, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail('the orphaned job survived the session sweep')
+
     def test_untracked_source_is_in_snapshot_receipt(self):
         import subprocess
         with tempfile.TemporaryDirectory() as temp:
