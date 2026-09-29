@@ -115,6 +115,7 @@ not tuned against.
 ./hillclimb.py split --suite mined          # fixed train/test split; never redrawn between rounds
 ./hillclimb.py noise --suite mined --harness graff-dev --model gpt-6-sol --reps 3
 ./hillclimb.py round --suite mined --champion graff-dev --candidate graff-dev-g6-followthrough --model gpt-6-sol
+./hillclimb.py round --suite mined --candidate graff-dev-g6-followthrough --model gpt-6-sol --reps 2 --noise-from-round  # no separate baseline
 ```
 
 A round keeps the candidate only when its train score beats the measured
