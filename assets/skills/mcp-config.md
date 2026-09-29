@@ -39,6 +39,14 @@ global one with the same name. Their tools reach the model as
   still loads. If tools vanished after an edit, check the file parses first.
 - `~/.mcpconfig.json` is not read - that path belongs to other MCP clients.
   Startup says so once if it exists.
+- A local server starts on first use once graff has seen its tools (they are
+  cached): the session lists its tools but spawns the process only when a tool
+  is called. `"startup": "eager"` on an entry starts it with every session;
+  `GRAFF_MCP_EAGER=1` does that for all of them.
+- `"shared": true` on a stateless local server (time, fetch, a docs search)
+  runs one process per machine for every session, through a broker graff
+  starts on demand and stops after a minute idle. Leave it off for servers that
+  keep per-agent state: a browser, a working directory, credentials. POSIX only.
 
 ## Prefer the CLI for writes
 
@@ -51,8 +59,9 @@ graff mcp add <name> --url https://host/mcp --header KEY=VALUE
 graff mcp login <name>                               # OAuth for a remote server
 ```
 
-`graff mcp add` and `/mcp add` always write the project `.mcp.json`, never the
-global file - adding a server to one repository must not edit every other one.
+`graff mcp add` and `/mcp add` write the project `.mcp.json`; only
+`graff mcp add … --everywhere` writes the global file - adding a server to one
+repository must not edit every other one.
 Editing either file with `edit_file` or `write_file` is equally valid, and it is
 how you remove a server (drop its key) or rename one. Do not commit a secret
 into it: prefer `graff mcp login` (OAuth credentials are stored outside the
