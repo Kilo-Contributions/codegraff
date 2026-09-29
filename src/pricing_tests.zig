@@ -97,6 +97,8 @@ test "usdFor: per-million math, cache writes, and negative clamping" {
     try std.testing.expectApproxEqAbs(@as(f64, 0.2 + 0.01 + 10.0), pricing.usdForUsage(sol61, "gpt-6.1-sol", 100_000, 100_000, 0, 1_000_000), 1e-9);
     try std.testing.expectApproxEqAbs(@as(f64, 0.8 + 0.04 + 1.5), pricing.usdForUsage(sol61, "gpt-6.1-sol", 200_000, 200_000, 0, 100_000), 1e-9); // long-context tier
     try std.testing.expectEqual(@as(u64, 1_050_000), pricing.contextFor("openai", "gpt-6.1-sol"));
+    try std.testing.expectEqual(pricing.codex_context_window, pricing.contextFor("codex", "gpt-6.1-sol"));
+    try std.testing.expect(pricing.providerModelInTable("codex", "gpt-6.1-sol"));
 }
 
 test "grok-4.6 window is 500k and compact-at is 80%" {

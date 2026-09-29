@@ -221,12 +221,12 @@ pub const model_table = [_]ModelInfo{
     .{ .provider = "xiaomi", .name = "mimo-v2.5", .context = 1_048_576 },
     .{ .provider = "xiaomi", .name = "mimo-v2.5-pro-ultraspeed", .context = 1_048_576 },
     .{ .provider = "xiaomi", .name = "mimo-v2-flash", .context = 262_144 },
-    // Offline snapshot only. At startup models_cache.zig replaces the entire
+    // Offline snapshot only: at startup models_cache.zig replaces the whole
     // Codex slice from the account-scoped /models response (5-minute cache).
-    // Keep this usable when auth/discovery is unavailable: these are the
-    // visible rows and advertised windows from the 2026-07-10 Codex catalog.
+    // These rows keep Codex usable when auth or discovery is unavailable.
     .{ .provider = "codex", .name = "gpt-6-astra", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-6-sol", .context = 272_000 },
+    .{ .provider = "codex", .name = "gpt-6.1-sol", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-5.6-sol", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-5.6-terra", .context = 272_000 },
     .{ .provider = "codegraff", .name = "muse-spark-1.2", .context = 262_144 },
