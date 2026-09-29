@@ -79,6 +79,26 @@ test "empty first call is guarded when a fresh ID restarts the index" {
     try std.testing.expectEqualStrings("next.txt", next.input.object.get("path").?.string);
 }
 
+test "#1218: a length stop cuts the unfinished last call; [DONE] without a finish does not" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const args = @import("tool_call_args.zig");
+    const read_a = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"a\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"a\\\"}\"}}]}}]}\n";
+    const name_only = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":1,\"id\":\"b\",\"function\":{\"name\":\"read_file\"}}]}}]}\n";
+    // Output limit hit right after the second call's header: it never got arguments.
+    const limited = try streamedCalls(arena, read_a ++ name_only ++
+        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n");
+    try std.testing.expectEqual(args.Refusal.none, args.takeInvalidMark(&limited.items[0].object));
+    try std.testing.expectEqual(args.Refusal.cut, args.takeInvalidMark(&limited.items[1].object));
+    // The stream ended with no finish_reason and no [DONE]: dropped mid-call.
+    const dropped = try streamedCalls(arena, read_a ++ name_only);
+    try std.testing.expectEqual(args.Refusal.cut, args.takeInvalidMark(&dropped.items[1].object));
+    // A provider that omits finish_reason but ends with [DONE] finished the call.
+    const done = try streamedCalls(arena, read_a ++ name_only ++ "data: [DONE]\n");
+    try std.testing.expectEqual(args.Refusal.none, args.takeInvalidMark(&done.items[1].object));
+}
+
 test "same ID with contradictory function names remains non-executable" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();

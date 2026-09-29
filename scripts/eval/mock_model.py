@@ -151,7 +151,7 @@ class ScriptedModel:
                         }]})
                 if "stream_deltas" in reply:
                     deltas = reply["stream_deltas"]
-                finish = "tool_calls" if "tool_calls" in message or "stream_deltas" in reply else "stop"
+                finish = reply.get("finish") or ("tool_calls" if "tool_calls" in message or "stream_deltas" in reply else "stop")
                 for delta in deltas or [{"role": "assistant", "content": ""}]:
                     self._chunk({"choices": [{"index": 0, "delta": delta, "finish_reason": None}]})
                     if hook := getattr(model, "after_stream_delta", None):

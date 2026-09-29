@@ -9,6 +9,8 @@ pub const Call = struct {
     name: []const u8 = "",
     args: std.ArrayList(u8) = .empty,
     invalid: bool = false,
+    /// #1218: the response stopped while this call was still streaming.
+    cut: bool = false,
     thought_signature: []const u8 = "",
     extra_content: ?Value = null,
 
@@ -76,5 +78,16 @@ pub const Calls = struct {
         const call = &self.items.items[slot.?];
         if (id.len > 0) call.id = id;
         return call;
+    }
+
+    /// #1218: when the response stopped mid-output (finish_reason `length`,
+    /// or no finish and no [DONE]), the last call to start is unfinished
+    /// unless its arguments already close as an object. That includes a
+    /// name-only call that got no arguments, which used to run as `{}`.
+    pub fn markCut(self: *Calls, response_cut: bool) void {
+        if (!response_cut or self.items.items.len == 0) return;
+        const last = &self.items.items[self.items.items.len - 1];
+        const args = std.mem.trim(u8, last.args.items, &std.ascii.whitespace);
+        if (args.len == 0 or !@import("tool_call_args.zig").isObjectString(std.heap.page_allocator, args)) last.cut = true;
     }
 };

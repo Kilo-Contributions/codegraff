@@ -440,7 +440,7 @@ fn unusableResult(content: Value) bool {
     if (content != .string) return false;
     const t = std.mem.trimStart(u8, content.string, " ");
     const body = if (std.mem.startsWith(u8, t, "[error] ")) t["[error] ".len..] else t;
-    return std.mem.startsWith(u8, body, tool_call_args.invalid_exec_message) or
+    return std.mem.startsWith(u8, body, tool_call_args.truncated_prefix) or
         std.mem.startsWith(u8, body, "missing or non-string argument");
 }
 
