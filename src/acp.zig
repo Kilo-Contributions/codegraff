@@ -144,6 +144,7 @@ fn liveModels(ctx: *anyopaque, arena: Allocator, w: *Io.Writer, req: proto.Reque
     const Row = struct {
         name: []const u8,
         provider: []const u8,
+        maker: ?[]const u8, // who made it, for a logo; the provider is only the route
         context: u64,
         authenticated: bool,
         cost: []const u8,
@@ -163,13 +164,12 @@ fn liveModels(ctx: *anyopaque, arena: Allocator, w: *Io.Writer, req: proto.Reque
     const rows = try arena.alloc(Row, catalog.len);
     for (ranked, rows) |r, *row| {
         const m = catalog[r.idx];
-        const supports_effort = if (provider_mod.specFor(m.provider)) |spec|
-            @import("schema.zig").providerTakesEffort(spec.kind, m.provider, m.name)
-        else
-            false;
+        const spec = provider_mod.specFor(m.provider);
+        const supports_effort = spec != null and @import("schema.zig").providerTakesEffort(spec.?.kind, m.provider, m.name);
         row.* = .{
             .name = m.name,
             .provider = m.provider,
+            .maker = @import("model_maker.zig").of(m.provider, m.name),
             .context = pricing.contextFor(m.provider, m.name),
             .authenticated = keys.get(m.provider) != null,
             .cost = billing.costFor(m.provider, keys.source(m.provider)).badge(),
@@ -547,6 +547,7 @@ test {
     _ = @import("transport_gate.zig");
     _ = @import("acp_mcp_app.zig");
     _ = @import("acp_view_meta.zig");
+    _ = @import("model_maker.zig");
 }
 
 test "ACP advertises the complete REPL command catalog including compact" {
