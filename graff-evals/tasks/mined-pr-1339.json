@@ -1,0 +1,14 @@
+{
+ "id": "pr-1339",
+ "suite": "mined-candidate",
+ "category": "live",
+ "source": "codegraff #1339 — mined (ADR 0214)",
+ "prompt": "ask_user: a question that comes back unanswered is not a cancel. Make the test named \"decline, cancel, an empty accept and an error each end the question as themselves (#1322)\" in src/acp_elicit.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "setup": [
+  "python3 \"$TASK_ROOT/live_setup.py\" pr-1339 ."
+ ],
+ "check": "sh \"$TASK_ROOT/live/pr-1339/check_public.sh\" && sh \"$TASK_ROOT/hidden/pr-1339.sh\"",
+ "timeout_s": 900,
+ "setup_timeout_s": 300,
+ "check_timeout_s": 420
+}
