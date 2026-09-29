@@ -4,7 +4,7 @@
 
 <h1 align="center">CodeGraff</h1>
 
-<p align="center">An AI agent for coding and computer work, in your terminal or desktop.</p>
+<p align="center">An AI coding agent for your terminal. One small binary, no dependencies.</p>
 
 <p align="center">
   <img alt="macOS · Linux · Windows" src="https://img.shields.io/badge/macOS%20·%20Linux%20·%20Windows-555">
@@ -18,42 +18,16 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#the-desktop-app">Desktop</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#what-it-does">What it does</a> ·
+  <a href="#mcp-servers">MCP</a> ·
+  <a href="#desktop-app">Desktop app</a> ·
   <a href="#use-it-from-code">SDKs</a> ·
   <a href="#evaluation-results">Evaluations</a> ·
   <a href="#development">Development</a>
 </p>
 
-<p align="center">
-  <img src="docs/images/harness-chat-dark.png" width="960" alt="Harness desktop with graff selected, in the Codegraff Dark theme">
-  <br><sub><a href="https://github.com/justrach/harness">Harness</a>, the graff desktop app, in the built-in Codegraff Dark theme. Synthetic example conversation.</sub>
-</p>
-
-## Quick start
-
-### Desktop
-
-The desktop app for graff is [Harness](https://github.com/justrach/harness),
-a native app built with Rust and GPUI.
-
-**macOS** (Apple Silicon, macOS 12+)
-
-1. [Download Harness](https://github.com/justrach/harness/releases/latest/download/Harness-macos-arm64.dmg).
-2. Open the disk image and drag **Harness.app** to **Applications**.
-3. Open **Harness** from Applications.
-
-The app is signed and notarized. It bundles graff and puts the `graff` command
-on your terminal `PATH` the first time it opens.
-
-**Windows** (x86_64): [download the portable build](https://github.com/justrach/harness/releases/latest/download/Harness-windows-x86_64.zip),
-unpack it, and run `harness.exe`. Keep `harness-update.json` next to it for
-in-app updates. Install the graff CLI as described below.
-
-**Linux:** build Harness from source. See the
-[Harness README](https://github.com/justrach/harness#get-started).
-
-### Terminal
+## Install
 
 On macOS or Linux:
 
@@ -61,93 +35,100 @@ On macOS or Linux:
 curl -fsSL https://github.com/justrach/codegraff/releases/latest/download/install.sh | sh
 ```
 
+On Windows, unpack `graff-x86_64-windows.tar.gz` (or `aarch64`) from the
+[latest release](https://github.com/justrach/codegraff/releases/latest) and put
+`graff.exe` on your `PATH`. The [desktop app](#desktop-app) installs `graff`
+for you.
+
 ```sh
-graff login                     # sign in
-graff                           # start an interactive session
-graff -p "Explain this project"  # ask a single question
+graff login                      # sign in
+graff                            # start an interactive session
+graff -p "Explain this project"  # ask one question, answer on stdout
 ```
 
-To try the newest CLI beta on macOS or Linux, run `graff update --beta --check`
-to see the release, then `graff update --beta` to install it for the next
-launch. The CLI chooses the beta for the newest numeric release branch and
-checks the tarball against that release's `SHA256SUMS`. `graff update` continues
-to use the stable release. Update package-managed installs through their
-package manager.
+`graff update` installs the latest stable release, and `graff update --beta`
+the newest beta. Both check the download against the release's `SHA256SUMS`.
 
 <details>
-<summary>Other login options, Windows, and editor integration</summary>
+<summary>Other sign-ins, installing from a checkout, and editors</summary>
 
 ```sh
+graff login codex               # ChatGPT account
 graff login kimi
 graff login zai
-graff login codex
-graff key set deepseek sk-...
+graff login xai
+graff key set deepseek sk-...   # any provider by API key
 graff --model grok-4.6
 ```
 
-From a checkout: `./install.sh` (binary in `~/bin`; `HARNESS_NO_PATH=1` skips
-PATH edits). Windows: unpack `graff-*-windows.tar.gz` from the latest release
-and put `graff.exe` on `PATH`.
+From a checkout: `./install.sh` puts the binary in `~/bin`
+(`HARNESS_NO_PATH=1` skips PATH edits).
 
-`graff acp` is the [Agent Client Protocol](docs/embedding.md) spawn (Zed
-External Agents). Recipe: [docs/acp-registry.md](docs/acp-registry.md).
+`graff acp` speaks the [Agent Client Protocol](docs/embedding.md), so editors
+such as Zed can run graff as an external agent. Recipe:
+[docs/acp-registry.md](docs/acp-registry.md).
 
 </details>
 
-## What can it do?
+## What it does
 
-Describe a task in plain English. Graff can read and edit files, run commands,
-use browser tools, and delegate work to sub-agents.
+Describe a task in plain English. Graff reads and edits files, runs commands,
+uses browser tools, and hands parts of the work to sub-agents.
 
 - **Build:** “Build a small app to track my workouts.”
 - **Investigate:** “Find out why this page is slow.”
 - **Work with data:** “Turn these CSVs into one clean spreadsheet.”
 - **Compare:** “Try three approaches and test which works best.”
 
-## The desktop app
+**Sub-agents** work in parallel, each with its own context. A `workflow` runs
+phases of parallel children in sequence and passes results on through
+`{{prev}}`.
 
-[Harness](https://github.com/justrach/harness) is the desktop app for graff.
-Choose graff, or another installed coding agent, and a model for each
-conversation. Workspaces and sessions stay together, and you can review changes
-next to the chat. Files, a browser, and terminals are also available in the
-app.
-
-<p align="center">
-  <img src="docs/images/harness-agents-dark.png" width="960" alt="Harness Settings → Agents in the Codegraff Dark theme, with graff listed first">
-  <br><sub>Installed agents appear in <strong>Settings → Agents</strong>, with graff listed first.</sub>
-</p>
-
-- **Works locally first:** Harness starts in local mode without an account.
-  Turn on sync to follow or control a session from another signed-in device or
-  the iOS companion app.
-- **Keeps graff up to date:** the macOS app checks for the latest stable
-  CodeGraff release shortly after launch and every six hours. It installs an
-  update only after checking the SHA-256 checksum. To try the newest beta,
-  choose **Install beta** in **Settings → Agents**. Choose **Update** to go back
-  to stable. Set `HARNESS_GRAFF_AUTO_UPDATE=0` to turn off background checks. If
-  you set `GRAFF_EXECUTABLE`, Harness does not replace that binary.
-- **Shows graff's sub-agents:** each background agent links to its live
-  transcript.
-- **Tabs and split panes:** each tab keeps its own split layout, and ⌘K jumps
-  to any open pane.
-
-*These images are captures of the production Harness app with synthetic
-content. Harness can [regenerate them](https://github.com/justrach/harness/tree/main/docs/media/readme).*
-
-## How Graff handles work
-
-**Sub-agents** work in parallel with their own context. A `workflow` combines
-sequential phases of parallel children, passing results through `{{prev}}`.
-Children use a one-level tool set without nested fan-out.
-
-**Context** stays focused by reusing stable setup, running small programs over
-working data, and carrying useful results forward. Large tool outputs become
-handles you can page with `read_tool_result`. Use `/compact` to shorten the
-transcript.
+**Context** stays small: stable setup is reused, large tool outputs become
+handles the model pages through with `read_tool_result`, and `/compact`
+shortens the transcript.
 
 <p align="center">
   <img src="docs/images/readme-context-workshop.png" alt="Context moves through three steps: reuse setup, work with context, and carry results forward" width="960">
 </p>
+
+## MCP servers
+
+```sh
+graff mcp add github                        # by name, from codegraff.com/mcp
+graff mcp add https://mcp.example.com/mcp   # a remote server
+graff mcp add notes -- npx -y some-mcp      # a local command
+graff mcp add github --everywhere           # every project, and Harness
+```
+
+`graff mcp add` checks the server works before saving it. Browse servers by
+name at [codegraff.com/mcp](https://codegraff.com/mcp). Local servers start the
+first time one of their tools is used, and `"shared": true` runs one copy per
+machine for every session (macOS and Linux). `/mcp` shows them in a session. Config reference:
+[assets/skills/mcp-config.md](assets/skills/mcp-config.md).
+
+## Desktop app
+
+[Harness](https://github.com/justrach/harness) is the desktop app for graff, a
+native app built with Rust and GPUI. Pick graff, or another installed coding
+agent, and a model for each conversation. Review changes next to the chat,
+with files, a browser, and terminals in the same window. It works locally
+without an account; turn on sync to follow a session from another device.
+
+<p align="center">
+  <img src="docs/images/harness-chat-dark.png" width="960" alt="Harness desktop with graff selected, in the Codegraff Dark theme">
+  <br><sub>Harness in the built-in Codegraff Dark theme. Synthetic example conversation.</sub>
+</p>
+
+- **macOS** (Apple Silicon, macOS 12+):
+  [download Harness](https://github.com/justrach/harness/releases/latest/download/Harness-macos-arm64.dmg),
+  drag it to Applications, and open it. It is signed and notarized, bundles
+  graff, puts `graff` on your terminal `PATH`, and keeps graff up to date.
+- **Windows** (x86_64):
+  [portable build](https://github.com/justrach/harness/releases/latest/download/Harness-windows-x86_64.zip).
+  Unpack it and run `harness.exe`.
+- **Linux:** build from source, see the
+  [Harness README](https://github.com/justrach/harness#get-started).
 
 ## Use it from code
 
@@ -164,10 +145,11 @@ for await (const ev of runAgent({ prompt: "summarize README.md", yolo: true })) 
 }
 ```
 
-`graff --json` / `graff --schema` generate the SDKs ([`sdk/`](sdk/)). Remote:
-`graff serve`. MCP clients can delegate small tasks with
-[`graff mcp serve`](docs/mcp-server.md). Embedders: `--no-local-tools` + a sandbox MCP —
-[Embedding graff](docs/embedding.md).
+The SDKs in [`sdk/`](sdk/) are generated from `graff --json` and
+`graff --schema`. `graff serve` runs sessions over HTTP,
+[`graff mcp serve`](docs/mcp-server.md) lets other MCP clients hand graff small
+tasks, and [Embedding graff](docs/embedding.md) covers `--no-local-tools` with a
+sandbox MCP.
 
 <details>
 <summary><strong>CLI, slash commands, providers, permissions</strong></summary>
@@ -175,11 +157,11 @@ for await (const ev of runAgent({ prompt: "summarize README.md", yolo: true })) 
 <br/>
 
 ```
-graff [flags]                 REPL
-graff -p "prompt"             one-shot (answer on stdout)
+graff [flags]                 interactive session
+graff -p "prompt"             one question (answer on stdout)
 graff login [codegraff|codex|kimi|xai|zai]
 graff key set <provider> <key>
-graff mcp add <name | url | @scope/pkg | uvx:pkg | json>   save + verify an MCP server (names: codegraff.com/mcp)
+graff mcp add <name | url | @scope/pkg | uvx:pkg | json>
 graff mcp add <name> -- <cmd>
 graff learn <command>
 graff --schema
@@ -188,8 +170,8 @@ graff --schema
 --subagent-model <name>   --max-model-calls N
 ```
 
-One-shot has no human at the gate: pre-approve in `.harness/settings.json` or
-pass `--yolo`. Full flag list: `graff --help`. Learning:
+`-p` has no human to approve anything: pre-approve in `.harness/settings.json`
+or pass `--yolo`. Full flag list: `graff --help`. Learning:
 [docs/local-learning.md](docs/local-learning.md). Skills:
 [docs/skills.md](docs/skills.md).
 
@@ -199,28 +181,20 @@ pass `--yolo`. Full flag list: `graff --help`. Learning:
 /skills /plugins /mcp /save /resume /sessions /help
 ```
 
-Bare `/` is a filterable menu. Esc interrupts the turn. `/help` is the live
-catalog.
+A bare `/` opens a filterable menu, Esc interrupts the turn, and `/help` is the
+live catalog.
 
 | mode | what it does |
 | --- | --- |
 | default | ask before writes, MCP, and non-read-only bash |
 | `--yolo` / `/yolo` | skip every prompt (CI, `-p`) |
-| `/plan` | read-only explore |
+| `/plan` | read-only exploration |
 | `/strict` | every message is a tool |
 
 Providers: Anthropic, OpenAI, DeepSeek, xAI, Z.AI, Kimi, Codex (ChatGPT login),
 Vercel, OpenRouter, MiniMax, Xiaomi, Groq, Cerebras, Mistral, plus one
-workspace router in `.graff/.config.router`. `graff models refresh` pulls
+workspace router in `.graff/.config.router`. `graff models refresh` pulls the
 catalogs. Claude-subscription OAuth is deliberately not supported.
-
-OpenAI's GPT-5.6 family is `gpt-5.6` (the API alias for `gpt-5.6-sol`),
-`gpt-5.6-terra`, and `gpt-5.6-luna`, on the Responses wire via `openai`,
-`codex`, or the Codegraff gateway. `/effort` takes `low|medium|high|xhigh`
-plus the family's `max` (shown as Ultra; `medium` is the default). Reasoning
-replays from local history, so `reasoning.context` is never sent
-([ADR 0145](docs/adr/0145-gpt-5-6-reasoning-replays-from-local-history.md));
-`reasoning.mode: "pro"` is not exposed yet.
 
 </details>
 
@@ -409,20 +383,17 @@ container.
 
 ## Development
 
-The repository is organized as follows:
-
 | path | what it is |
 |---|---|
-| `src/`, `TUI/` | harness + terminal |
+| `src/`, `TUI/` | agent engine and terminal UI |
 | `apps/` | Chrome native-messaging extension |
 | `graff-evals/` | live, in-house, FrontierHarness |
 | `docs/` | ADRs, architecture, images, install, embedding |
 | `sdk/` | generated TypeScript / Python |
 | `scripts/` | tier-1/2, PTY probes, release |
 
-The desktop app, Harness, has its own repository:
-[justrach/harness](https://github.com/justrach/harness). Evaluation tooling is
-in `graff-evals`.
+The desktop app has its own repository,
+[justrach/harness](https://github.com/justrach/harness).
 
 ```bash
 scripts/install-hooks.sh          # once
