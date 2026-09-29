@@ -244,6 +244,7 @@ record only when you need the evidence or the edge cases.
 | [0215](0215-headless-runs-wait-until-idle.md) | Headless roots (`-p`, `--json`, `graff serve`, piped stdin) wait for their own background work to report before a plain final ends the run. Servers do not count, a 10-minute heartbeat wakes the model, and interactive surfaces keep their idle wake. |
 | [0216](0216-loop-is-retired.md) | `/loop` is retired: `/goal` is the one autonomous run, and waiting for background work is how every run works (ADR 0215). Typing `/loop` prints a pointer to `/goal` and makes no model call. |
 | [0217](0217-follow-ups-supersede-the-streaming-reply.md) | A plain follow-up typed while the root reply streams cuts that stream, drops the uncommitted partial and rebuilds the request with the follow-up (not for compaction, children, started async tools, or GPT-6 WebSocket steer). TUI Enter hands plain text to the running turn; `/btw`, commands and images still wait; ACP is unchanged. |
+| [0218](0218-background-jobs-survive-a-crash.md) | A finite root job started in the background writes its output to `.graff/job-output/<id>/` with an exit receipt from its own shell, so it outlives a crashed graff. Loading the session re-attaches this session's unreported jobs under their old ids, reports what ended while graff was down, and sweeps other sessions' stale captures. Foreground commands, servers, subagent jobs and Windows keep pipes. |
 
 ## When to write one
 

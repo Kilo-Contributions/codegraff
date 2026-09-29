@@ -220,6 +220,9 @@ jobs:
       - name: PTY /goal run holds for its own background work (#1278)
         run: python3 scripts/test-pty-goal-hold.py zig-out/bin/graff
 
+      - name: Background jobs survive a killed graff and return on resume (ADR 0218)
+        run: python3 scripts/test-job-crash-resume.py zig-out/bin/graff
+
       - name: PTY a follow-up typed mid-reply supersedes it (line REPL)
         run: python3 scripts/test-pty-steer-mid-reply.py zig-out/bin/graff
 

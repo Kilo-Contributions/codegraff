@@ -543,4 +543,6 @@ pub fn loadSession(root: *Agent, keys: *Keys, arena: Allocator, name: []const u8
     const subagent = @import("subagent.zig");
     if (subagent_ledger.nextId() > subagent.g_agent_jobs.next_id)
         subagent.g_agent_jobs.next_id = subagent_ledger.nextId();
+    // ADR 0218: background jobs that outlived the last graff come back.
+    @import("job_recover.zig").onLoad(root.gpa, root.io, name);
 }
