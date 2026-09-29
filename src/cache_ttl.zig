@@ -29,15 +29,21 @@ pub fn gap() ?i64 {
     return gap_ms;
 }
 
-/// Only the Anthropic API gets a TTL; Anthropic-format providers keep the default.
-pub fn longTtl(provider_id: []const u8, since_previous: ?i64) bool {
+/// The Anthropic API, and Anthropic models through OpenRouter (#1284), take a
+/// TTL; other Anthropic-format providers keep the default.
+pub fn takesTtl(provider_id: []const u8, model: []const u8) bool {
+    return std.mem.eql(u8, provider_id, "anthropic") or
+        (std.mem.eql(u8, provider_id, "openrouter") and std.mem.startsWith(u8, model, "anthropic/"));
+}
+
+pub fn longTtl(provider_id: []const u8, model: []const u8, since_previous: ?i64) bool {
     const g = since_previous orelse return false;
-    return std.mem.eql(u8, provider_id, "anthropic") and g >= slow_gap_ms;
+    return takesTtl(provider_id, model) and g >= slow_gap_ms;
 }
 
 /// The cache_control object for this request's breakpoints.
 pub fn control(self: *const Agent) []const u8 {
-    return if (longTtl(self.provider.id, gap_ms)) ephemeral_1h else ephemeral;
+    return if (longTtl(self.provider.id, self.provider.model, gap_ms)) ephemeral_1h else ephemeral;
 }
 
 /// Why a request with real input read nothing from the cache. Content-free.
@@ -49,11 +55,14 @@ pub fn missReason(cache_read: i64, input: i64, prefix_changed: bool, since_previ
 }
 
 test "#1320: slow calls get the 1-hour TTL on the Anthropic API only" {
-    try std.testing.expect(!longTtl("anthropic", null));
-    try std.testing.expect(!longTtl("anthropic", 90_000));
-    try std.testing.expect(longTtl("anthropic", 307_000));
-    try std.testing.expect(!longTtl("kimi", 307_000));
-    try std.testing.expect(!longTtl("codex", 307_000));
+    try std.testing.expect(!longTtl("anthropic", "claude-opus-5", null));
+    try std.testing.expect(!longTtl("anthropic", "claude-opus-5", 90_000));
+    try std.testing.expect(longTtl("anthropic", "claude-opus-5", 307_000));
+    try std.testing.expect(!longTtl("kimi", "k3", 307_000));
+    try std.testing.expect(!longTtl("codex", "gpt-6-sol", 307_000));
+    // #1284: Anthropic models through OpenRouter take the TTL too.
+    try std.testing.expect(longTtl("openrouter", "anthropic/claude-sonnet-5", 307_000));
+    try std.testing.expect(!longTtl("openrouter", "deepseek/deepseek-v4-pro", 307_000));
 }
 
 test "#1320: an Anthropic body after a slow call marks every breakpoint 1h; Kimi keeps the default" {
@@ -102,4 +111,8 @@ test "#1320: a zero-read request names its likely cause" {
     try std.testing.expectEqualStrings("first_request", missReason(0, 90_000, false, null).?);
     try std.testing.expectEqualStrings("idle_gap", missReason(0, 90_000, false, 307_000).?);
     try std.testing.expectEqualStrings("unknown", missReason(0, 90_000, false, 20_000).?);
+}
+
+test {
+    _ = @import("openrouter_cache.zig");
 }
