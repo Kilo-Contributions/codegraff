@@ -141,6 +141,10 @@ pub fn build(b: *std.Build) void {
     // pre-push spend its 600s budget before the tests check started.
     const test_bin = b.step("test-bin", "Compile unit tests without running them");
     test_bin.dependOn(&unit_tests.step);
+    // The working loop: the unit binary alone, without the integration
+    // scripts `test` adds below. `-Dtest-filter` narrows it to named tests.
+    const unit_step = b.step("unit", "Run only the unit tests (-Dtest-filter narrows them)");
+    unit_step.dependOn(&run_tests.step);
     const acp_preauth_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-preauth.py" });
     acp_preauth_test.addArtifactArg(exe);
     test_step.dependOn(&acp_preauth_test.step);

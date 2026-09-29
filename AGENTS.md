@@ -102,6 +102,11 @@ graff over ACP. A new-chat folder rule, a worktree handoff, or a session cwd
 that exists only in a client is not done — wire the same behavior through the ACP session in the same
 change. The workspace the agent runs in is not chrome.
 
+## Running tests
+
+- While you work, run only what you touched: `zig build unit -Dtest-filter="<part of a test name>"` builds and runs just the unit tests (repeat the flag for several names).
+- `zig build test` also runs the subprocess integration scripts and takes several minutes. Run it once before you push; the pre-push hook does.
+
 ## Tests must be reachable
 
 - `zig build test` only runs the tests in files the test root pulls in. A new module's `test {}` blocks compile to nothing until something references it, and the suite still reports green.
