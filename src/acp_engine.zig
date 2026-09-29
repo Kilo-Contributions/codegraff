@@ -30,6 +30,9 @@ pub var cancel_flag = std.atomic.Value(bool).init(false);
 pub var on_cancel: ?*const fn () void = null;
 /// CLI live ACP also watches `Agent.esc_cancel` (Esc / session/cancel).
 pub var extra_cancelled: ?*const fn () bool = null;
+/// #1285: session/prompt message ids this process already ran, by session.
+/// Prompts dispatch one at a time, so no lock.
+pub var resent: @import("resend.zig").Ledger = .{};
 
 pub const TurnFn = *const fn (ctx: *anyopaque, arena: Allocator, text: []const u8) anyerror![]const u8;
 pub const SlashFn = *const fn (ctx: *anyopaque, arena: Allocator, text: []const u8) anyerror!?[]const u8;
@@ -176,6 +179,12 @@ fn promptTurn(d: *Dispatch, arena: Allocator, w: *Io.Writer, req: proto.Request)
         if (obj) |o| if (util.strFieldObj(o, "sessionId")) |s| break :blk s;
         break :blk d.session_id orelse "";
     };
+    // #1285: a resent prompt this session already ran answers with that turn's
+    // stop reason instead of starting another. A failed turn is not recorded.
+    const resend = @import("resend.zig");
+    const resend_key: ?u64 = if (obj) |o| (if (resend.acpId(o)) |mid| resend.Ledger.keyOf(sid, mid) else null) else null;
+    if (resend_key) |key| if (resent.finished(key)) |prior| return respond(w, req, .{ .stopReason = prior.stopReason() });
+    if (resend_key) |key| resent.begin(key, 0);
     if (d.bind_session) |bind| bind(d.ctx, sid);
     @import("acp_citations.zig").endTurn(sid); // a failed turn must not leave a marker open
     const config_before = configOptions(d, arena) catch |err| return turnError(d, w, req, err);
@@ -192,6 +201,7 @@ fn promptTurn(d: *Dispatch, arena: Allocator, w: *Io.Writer, req: proto.Request)
             emitConfigChange(d, arena, w, sid, config_before) catch |config_err| return turnError(d, w, req, config_err);
             try acp_workspace.emitChange(d.workspace, arena, w, sid, workspace_before);
             try emitMeter(d, w, sid);
+            if (resend_key) |key| resent.finish(key, 0, "end_turn");
             return respond(w, req, .{ .stopReason = "end_turn" });
         }
     }
@@ -206,6 +216,7 @@ fn promptTurn(d: *Dispatch, arena: Allocator, w: *Io.Writer, req: proto.Request)
     try emitMeter(d, w, sid);
     const extra = if (extra_cancelled) |f| f() else false;
     const stop: []const u8 = if (cancel_flag.load(.acquire) or extra) "cancelled" else "end_turn";
+    if (resend_key) |key| resent.finish(key, 0, stop);
     try respond(w, req, .{ .stopReason = stop });
 }
 
