@@ -217,6 +217,9 @@ jobs:
       - name: PTY /goal autonomous collapse wiring test
         run: python3 scripts/test-pty-goal-loop.py zig-out/bin/graff
 
+      - name: PTY /loop holds for its own background work (#1278)
+        run: python3 scripts/test-pty-loop-hold.py zig-out/bin/graff
+
       - name: PTY peer-channel delivery smoke test (#469)
         run: python3 scripts/test-pty-peer-channel.py zig-out/bin/graff
 
