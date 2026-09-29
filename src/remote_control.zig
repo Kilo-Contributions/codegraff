@@ -285,7 +285,7 @@ fn runCommand(self: *State, arena: Allocator, cmd: Command) void {
     // works for a session this supervisor never ran, straight off the disk.
     if (std.mem.eql(u8, rtype, "reattach")) {
         var up = upload.Uploader.init(link(self, client), arena, cmd.id, sid);
-        replayTape(self, arena, &up, sid, from orelse 1);
+        replayTape(self, arena, &up, sid, from orelse 1, std.math.maxInt(u64));
         return up.finish(200, "{\"ok\":true,\"type\":\"reattach\"}");
     }
     self.st.mutex.lockUncancelable(io);
@@ -370,14 +370,23 @@ fn drain(self: *State, client: *std.http.Client, arena: Allocator, s: *ServeSess
     // the moment busy is released below, and finish() still names it.
     const sid = arena.dupe(u8, s.name) catch s.name;
     var up = upload.Uploader.init(link(self, client), arena, cmd_id, sid);
+    const resend = @import("resend.zig");
+    const body = std.json.parseFromSliceLeaky(Value, arena, line, .{ .allocate = .alloc_always }) catch .null;
+    const resend_key: ?u64 = if (body == .object) (if (resend.bodyId(body.object)) |mid| resend.Ledger.keyOf("", mid) else null) else null;
     {
         s.busy.lockUncancelable(io); // serialize requests per session
         defer s.busy.unlock(io);
+        // #1285: as serve, a resend of a finished request replays its events.
+        if (resend_key) |key| if (s.resent.finished(key)) |prior| {
+            replayTape(self, arena, &up, sid, prior.first_seq, prior.last_seq);
+            return up.finish(200, "{\"ok\":true,\"resent\":true}");
+        };
         s.in_flight.store(true, .release);
         defer s.in_flight.store(false, .release);
+        if (resend_key) |key| s.resent.begin(key, s.last_seq + 1);
 
         serve.writeChildLine(io, s, line) catch return up.finish(502, "{\"error\":\"session process is gone\"}");
-        if (from) |n| replayTape(self, arena, &up, sid, n);
+        if (from) |n| replayTape(self, arena, &up, sid, n, std.math.maxInt(u64));
         while (true) {
             const ev_line = s.rdr.interface.takeDelimiter('\n') catch |err| switch (err) {
                 error.StreamTooLong => break abort(s, &up, "event line exceeded the 1 MiB serve cap — session closed", &dead),
@@ -391,6 +400,7 @@ fn drain(self: *State, client: *std.http.Client, arena: Allocator, s: *ServeSess
             up.push(trimmed);
             if (events.terminalEvent(trimmed)) {
                 serve.serveClearAnswerState(io, s);
+                if (resend_key) |key| s.resent.finish(key, s.last_seq, "");
                 break;
             }
         }
@@ -411,8 +421,8 @@ fn abort(s: *ServeSession, up: *upload.Uploader, message: []const u8, dead: *boo
     dead.* = true;
 }
 
-/// Every complete tape line with seq >= from, in order.
-fn replayTape(self: *State, arena: Allocator, up: *upload.Uploader, sid: []const u8, from: u64) void {
+/// Every complete tape line with from <= seq <= to, in order.
+fn replayTape(self: *State, arena: Allocator, up: *upload.Uploader, sid: []const u8, from: u64, to: u64) void {
     const path = events.logPath(arena, sid) catch return;
     const data = Io.Dir.cwd().readFileAlloc(self.st.io, path, arena, .limited(events.max_log_bytes)) catch return;
     var rest = data;
@@ -421,7 +431,7 @@ fn replayTape(self: *State, arena: Allocator, up: *upload.Uploader, sid: []const
         rest = rest[nl + 1 ..];
         if (line.len == 0) continue;
         const seq = events.seqOf(line) orelse continue;
-        if (seq >= from) up.push(line);
+        if (seq >= from and seq <= to) up.push(line);
     }
 }
 

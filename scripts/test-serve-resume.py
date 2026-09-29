@@ -247,6 +247,20 @@ def main() -> None:
             raise AssertionError("{'type':'reattach'} did not match the GET replay")
         print(f"  reattach POST: resume_from={mid} matched the GET ({len(reattached)} events)")
 
+        # 2b ── #1285: resending a finished request (same message_id) is
+        # answered from the tape — the same events, no second model turn.
+        calls = len(mock.recorded_requests())
+        sent = stream(serve_port, "POST", f"/v1/sessions/{SESSION}",
+                      {"type": "user", "text": "RESEND_ME", "message_id": "m-1285"})
+        last = expect_contiguous(sent, last + 1, "message_id turn")
+        again = stream(serve_port, "POST", f"/v1/sessions/{SESSION}",
+                       {"type": "user", "text": "RESEND_ME", "message_id": "m-1285"})
+        if again != sent:
+            raise AssertionError(f"a resend did not replay the first request's events: {again[-1:]!r}")
+        if len(mock.recorded_requests()) != calls + 1:
+            raise AssertionError("a resend with the same message_id started a second model turn")
+        print(f"  resend: message_id m-1285 replayed its {len(again)} events, one model call")
+
         # 3 ── drop the socket mid-turn; the run continues, ?from=N catches up ─
         slow_turn.set()
         partial: list[dict] = []

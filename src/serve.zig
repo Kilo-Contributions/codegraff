@@ -71,6 +71,7 @@ pub const ServeSession = struct {
     awaiting_answer: bool = false,
     answer_call_id: [128]u8 = undefined,
     answer_call_id_len: usize = 0,
+    resent: @import("resend.zig").Ledger = .{}, // #1285: client message ids this session ran (under busy)
 };
 
 pub const ServeState = struct {
@@ -296,11 +297,21 @@ fn serveMessage(st: *ServeState, req: *std.http.Server.Request, transport: *Io.W
     // `dead` rather than dropping inline: serveDrop FREES the session, and the
     // busy/in_flight defers below would then run through a dangling pointer.
     var dead = false;
+    const resend_key: ?u64 = if (@import("resend.zig").bodyId(parsed.object)) |mid| @import("resend.zig").Ledger.keyOf("", mid) else null;
     {
         s.busy.lockUncancelable(io); // serialize requests per session
         defer s.busy.unlock(io);
+        // #1285: a resend of a request this session already ran gets that
+        // request's events again from the tape, not a second turn.
+        if (resend_key) |key| if (s.resent.finished(key)) |prior| {
+            const tape = Io.Dir.cwd().readFileAlloc(io, s.log_path, arena, .limited(events.max_log_bytes)) catch "";
+            var again: Io.Writer.Allocating = .init(arena);
+            _ = @import("resend.zig").replayRange(&again.writer, tape, prior.first_seq, prior.last_seq) catch {};
+            return req.respond(again.written(), .{ .extra_headers = serveNdjsonHeaders(st) });
+        };
         s.in_flight.store(true, .release);
         defer s.in_flight.store(false, .release);
+        if (resend_key) |key| s.resent.begin(key, s.last_seq + 1);
 
         writeChildLine(io, s, line) catch return respondJson(st, req, .bad_gateway, "{\"error\":\"session process is gone\"}");
 
@@ -362,6 +373,7 @@ fn serveMessage(st: *ServeState, req: *std.http.Server.Request, transport: *Io.W
             }
             if (events.terminalEvent(trimmed)) {
                 serveClearAnswerState(io, s);
+                if (resend_key) |key| s.resent.finish(key, s.last_seq, "");
                 break;
             }
         }
