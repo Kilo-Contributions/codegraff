@@ -1,6 +1,6 @@
 //! Time-triggered tasks that wake a session (#556). Store is
 //! `.graff/schedule/<id>.json`. Due-claim runs at the same step boundary as
-//! job_notify. `/loop` stays the standing-goal controller; this is cron.
+//! job_notify. `/goal` is the standing-goal controller; this is cron.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -22,7 +22,7 @@ const ExecResult = tools_mod.ExecResult;
 const ToolSpec = schema.ToolSpec;
 
 pub const tool_name = "schedule_task";
-pub const tool_desc = "Schedule a prompt to wake this session later. delay is 30s/5m/2h (same tokens as /loop). At the due time the prompt is injected as a user turn.";
+pub const tool_desc = "Schedule a prompt to wake this session later. delay is 30s/5m/2h. At the due time the prompt is injected as a user turn.";
 pub const tool_schema =
     \\{"type": "object", "properties": {"delay": {"type": "string", "description": "30s, 5m, or 2h"}, "prompt": {"type": "string", "description": "what to do when it fires"}}, "required": ["delay", "prompt"]}
 ;

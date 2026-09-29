@@ -1,9 +1,10 @@
-//! Time-aware /loop pacing: the optional duration prefix on `/loop`, the run
-//! clock it arms, and the pacing line every continuation turn carries.
+//! Time-aware pacing for an autonomous /goal run: the optional duration prefix
+//! on `/goal`, the run clock it arms, and the pacing line every continuation
+//! turn carries.
 //!
 //! Everything the model reads here is INFORMATION, never enforcement. This
 //! repo dropped goal budget enforcement on purpose (#224), and that stands: a
-//! deadline's only hard effect is that the /loop controller stops the run with
+//! deadline's only hard effect is that the run's controller stops it with
 //! the `expired` outcome. The rest is guidance, on the prior art's reasoning -
 //! codex renders tokens_used/token_budget/remaining_tokens into its
 //! continuation prompt on every turn, and LemonHarness feeds wall-clock phases
@@ -21,7 +22,7 @@ const Io = std.Io;
 const repl_glue = @import("repl_glue.zig");
 const Agent = @import("agent.zig").Agent;
 
-/// A parsed `/loop` argument: an optional wall-clock budget and the prompt.
+/// A parsed duration prefix: an optional wall-clock budget and the prompt.
 pub const LoopBudget = struct {
     /// Milliseconds from now until the run's deadline, or null for no deadline.
     deadline_ms_delta: ?i64 = null,
@@ -29,11 +30,11 @@ pub const LoopBudget = struct {
     prompt: []const u8,
 };
 
-/// Parse the text after `/loop`. A leading `<integer><s|m|h>` followed by
-/// whitespace and a nonempty prompt is a budget; ANYTHING else is not, and the
-/// whole text is the prompt. That fallback is the important half: `/loop 30m`
-/// on its own is someone asking the model about thirty minutes, not an empty
-/// run, and `/loop 30mins of cleanup` is a sentence. Rejecting silently costs
+/// Parse an objective's optional duration prefix. A leading `<integer><s|m|h>`
+/// followed by whitespace and a nonempty prompt is a budget; ANYTHING else is
+/// not, and the whole text is the prompt. That fallback is the important half:
+/// `/goal 30m` on its own is an objective about thirty minutes, not an empty
+/// run, and `/goal 30mins of cleanup` is a sentence. Rejecting silently costs
 /// nothing (the run just has no deadline); guessing wrong would either eat the
 /// user's prompt or start a run they never asked to be timed.
 pub fn parseLoopBudget(text: []const u8) LoopBudget {
@@ -56,7 +57,7 @@ pub fn parseLoopBudget(text: []const u8) LoopBudget {
     const n = std.fmt.parseInt(i64, trimmed[0..digits], 10) catch return none;
     if (n <= 0) return none; // "0m" is not a deadline that already passed, it is a typo
     const delta = std.math.mul(i64, n, unit) catch return none;
-    // Clamped, not rejected: "/loop 9999h soak" is a real (if odd) instruction,
+    // Clamped, not rejected: "/goal 9999h soak" is a real (if odd) instruction,
     // and an unclamped delta overflowed pacingNote's percent math (round-4
     // verifier: a typed line panicked Debug builds and mis-phased ReleaseFast).
     return .{ .deadline_ms_delta = @min(delta, max_budget_ms), .prompt = prompt };
@@ -64,13 +65,6 @@ pub fn parseLoopBudget(text: []const u8) LoopBudget {
 
 /// A week: past it nothing about a run is meaningful, and the percent math stays in i64.
 pub const max_budget_ms: i64 = 7 * 24 * std.time.ms_per_hour;
-
-/// The same parse straight off an input line, so the caller stays one line.
-/// Returns null when the line is not a `/loop` invocation at all.
-pub fn loopBudgetFromLine(line: []const u8) ?LoopBudget {
-    if (!std.mem.startsWith(u8, line, "/loop ")) return null;
-    return parseLoopBudget(line["/loop".len..]);
-}
 
 /// A slash command typed into `-p` reaches the MODEL as prose: that path runs
 /// one turn and never sees mainloop's command parse, so `graff -p "/goal 30m
@@ -83,14 +77,12 @@ pub fn oneshotSlashRefusal(prompt_text: []const u8) ?[]const u8 {
     if (!repl_glue.isSlashCommandLine(line)) return null;
     if (std.mem.startsWith(u8, line, "/goal"))
         return "slash commands are interactive only: -p runs a single turn and never reaches the command parser, so this would have been sent to the model as text. Use `graff --goal \"<objective>\" -p \"<prompt>\"` to steer a headless run.";
-    if (std.mem.startsWith(u8, line, "/loop"))
-        return "slash commands are interactive only: -p runs a single turn, so there is no loop to continue. Run /loop in an interactive session, or give -p the work directly as a prompt.";
     return "slash commands are interactive only: -p runs a single turn and never reaches the command parser, so this would have been sent to the model as text.";
 }
 
 test "oneshotSlashRefusal: commands are refused, prompts and paths are not" {
     try std.testing.expect(oneshotSlashRefusal("/goal 30m ship it") != null);
-    try std.testing.expect(oneshotSlashRefusal("/loop keep going") != null);
+    try std.testing.expect(oneshotSlashRefusal("/review the diff") != null);
     try std.testing.expect(oneshotSlashRefusal("  /model  ") != null);
     // Real prompts, including one opening with an absolute path.
     try std.testing.expect(oneshotSlashRefusal("fix the retry path") == null);
@@ -99,19 +91,17 @@ test "oneshotSlashRefusal: commands are refused, prompts and paths are not" {
     try std.testing.expect(std.mem.indexOf(u8, oneshotSlashRefusal("/goal ship").?, "--goal") != null);
 }
 
-/// One autonomous run, however it was asked for. `/goal <objective>` and
-/// `/loop <prompt>` are the same machine: plan, act, verify, and let the
-/// controller decide whether another turn is authorized. They differ in one
-/// bit - whether the objective becomes STANDING - so they stopped being two
-/// commands and became one with a flag. Both take the same optional duration
-/// prefix (`/goal 30m ship it`).
+/// One autonomous run. `/goal <objective>` adopts the objective and runs it on
+/// the plan-act-verify machine, where the controller decides whether another
+/// turn is authorized. It takes an optional duration prefix
+/// (`/goal 30m ship it`).
 pub const Autonomous = struct {
     /// The text the turn actually runs on, duration prefix removed.
     prompt: []const u8,
     deadline_ms_delta: ?i64 = null,
     /// The `/goal ...` command to apply before the first turn (duration
-    /// stripped, so the objective never records "30m"). Null for `/loop`,
-    /// which runs autonomously without adopting a standing objective.
+    /// stripped, so the objective never records "30m"). Null for a
+    /// continuation turn, which stays in the run it continues.
     goal_line: ?[]const u8 = null,
 
     /// The wall-clock half, for arming the run.
@@ -123,26 +113,25 @@ pub const Autonomous = struct {
 /// Parse an autonomous invocation off an input line. `/goal` with a lifecycle
 /// word (pause/resume/status/clear) or bare is NOT one - those stay commands,
 /// which is why the objective parse still lives in repl_glue.goalPromptFromLine
-/// and is passed in here as `goal_objective`.
-pub fn autonomousFromLine(arena: Allocator, line: []const u8, goal_objective: ?[]const u8) !?Autonomous {
-    if (goal_objective) |obj| {
-        const b = parseLoopBudget(obj);
-        return .{
-            .prompt = b.prompt,
-            .deadline_ms_delta = b.deadline_ms_delta,
-            // Rebuild the command only when a duration was stripped, so the
-            // common path stays allocation-free and byte-identical.
-            .goal_line = if (b.deadline_ms_delta == null)
-                line
-            else
-                try std.fmt.allocPrint(arena, "/goal {s}", .{b.prompt}),
-        };
-    }
-    const b = loopBudgetFromLine(line) orelse return null;
-    return .{ .prompt = b.prompt, .deadline_ms_delta = b.deadline_ms_delta };
+/// and is passed in here as `goal_objective`. A queued continuation turn stays
+/// in the run it continues: no new objective, and no new clock.
+pub fn autonomousFromLine(arena: Allocator, line: []const u8, goal_objective: ?[]const u8, continuation: bool) !?Autonomous {
+    if (continuation) return .{ .prompt = line };
+    const obj = goal_objective orelse return null;
+    const b = parseLoopBudget(obj);
+    return .{
+        .prompt = b.prompt,
+        .deadline_ms_delta = b.deadline_ms_delta,
+        // Rebuild the command only when a duration was stripped, so the
+        // common path stays allocation-free and byte-identical.
+        .goal_line = if (b.deadline_ms_delta == null)
+            line
+        else
+            try std.fmt.allocPrint(arena, "/goal {s}", .{b.prompt}),
+    };
 }
 
-/// The wall clock of ONE /loop run: when it started and when it must stop.
+/// The wall clock of ONE autonomous run: when it started and when it must stop.
 /// Run-local like LoopListGate and never persisted - a fresh run, a user steer
 /// and a stop all reset it. The deadline is mirrored onto the Agent so a
 /// subagent spawned mid-run can inherit it (goal_pacing.childTaskPrompt).
@@ -168,7 +157,7 @@ pub const LoopClock = struct {
     }
 };
 
-/// What every freshly-typed input line does to the run clock. A `/loop ...`
+/// What every freshly-typed input line does to the run clock. A `/goal ...`
 /// line starts a run: its clock begins now (not after the first turn, so a
 /// "30m" the user typed really is 30 minutes of theirs) and the previous run's
 /// completion evidence is dropped - a checklist finished BEFORE this prompt is
@@ -183,12 +172,12 @@ pub fn armFreshRun(clock: *LoopClock, root: *Agent, now_ms: i64, budget: ?LoopBu
 }
 
 /// armFreshRun plus one line of feedback the instant a wall clock arms. Silent
-/// arming hid misparses: `/loop 5m ...` quietly took the "5m" out of the prompt
+/// arming hid misparses: `/goal 5m ...` quietly took the "5m" out of the prompt
 /// AND started a deadline whose only trace was an `expired` stop minutes later.
 pub fn armAndAnnounce(clock: *LoopClock, root: *Agent, out: *Io.Writer, arena: Allocator, now_ms: i64, budget: ?LoopBudget) !void {
     armFreshRun(clock, root, now_ms, budget);
     const d = (budget orelse return).deadline_ms_delta orelse return;
-    try out.print("\xe2\x8f\xb1 /loop budget: {s}\n", .{try fmtDur(arena, d)});
+    try out.print("\xe2\x8f\xb1 run budget: {s}\n", .{try fmtDur(arena, d)});
     try out.flush();
 }
 
@@ -211,7 +200,7 @@ fn phaseHint(pct_left: i64) []const u8 {
     return "Wrap up now: preserve what works, start nothing new, and report the exact state.";
 }
 
-/// The pacing line appended to each /loop continuation turn. The iteration
+/// The pacing line appended to each continuation turn. The iteration
 /// count is unconditional - a model that cannot see how many continuations it
 /// has left cannot decide whether to open a new thread of work - and a run with
 /// a wall-clock budget also gets the remaining time and one phase hint.
@@ -244,7 +233,7 @@ pub fn childBudgetMs(deadline_ms: i64, now_ms: i64) i64 {
     return left - @max(integration_margin_floor_ms, @divTrunc(left, 10));
 }
 
-/// A child's task prompt, prefixed with the parent's time budget when a /loop
+/// A child's task prompt, prefixed with the parent's time budget when a run
 /// deadline is live. Returns `prompt` untouched when there is none, so an
 /// ordinary session's subagents are byte-identical to before. Guidance only:
 /// subagents get no watchdog in this round, because a killed child returns
@@ -288,9 +277,6 @@ test "parseLoopBudget: every ambiguous shape stays a prompt, verbatim" {
     // An absurd-but-parseable duration clamps to the week cap instead of
     // feeding pacingNote a deadline whose percent math overflows i64.
     try std.testing.expectEqual(@as(?i64, max_budget_ms), parseLoopBudget("30000000000h go").deadline_ms_delta);
-    // And the whole thing only fires on a real /loop line.
-    try std.testing.expect(loopBudgetFromLine("/goal 30m ship") == null);
-    try std.testing.expectEqual(@as(?i64, 5 * std.time.ms_per_min), loopBudgetFromLine("/loop 5m ship").?.deadline_ms_delta);
 }
 
 /// The two Agent fields this file's helpers touch, initialized; everything
@@ -324,7 +310,7 @@ test "childTaskPrompt: the same absolute deadline reaches every child, minus a m
     const ar = arena_state.allocator();
     const prompt = "audit the retry path";
 
-    // No /loop deadline: the child's prompt is untouched, byte for byte.
+    // No run deadline: the child's prompt is untouched, byte for byte.
     try std.testing.expectEqualStrings(prompt, try childTaskPrompt(ar, prompt, null, 0));
 
     // 60 minutes left -> 6 minutes of margin -> 54 for the child. Three
@@ -352,25 +338,25 @@ test "childTaskPrompt: the same absolute deadline reaches every child, minus a m
     }
 }
 
-test "armFreshRun: a /loop line starts the clock, any other line ends it" {
+test "armFreshRun: a /goal line starts the clock, any other line ends it" {
     var root = pacingRoot();
     root.todos_dirty = true; // left over from the previous run
     var clock: LoopClock = .{};
 
-    armFreshRun(&clock, &root, 5_000, loopBudgetFromLine("/loop 30m fix the flaky test"));
+    armFreshRun(&clock, &root, 5_000, parseLoopBudget("30m fix the flaky test"));
     try std.testing.expectEqual(@as(i64, 5_000), clock.started_ms); // the user's 30m starts when they typed it
     try std.testing.expectEqual(@as(?i64, 5_000 + 30 * std.time.ms_per_min), root.loop_deadline_ms);
     try std.testing.expect(!root.todos_dirty);
 
-    // A /loop with no duration still starts a run, just an untimed one.
-    armFreshRun(&clock, &root, 9_000, loopBudgetFromLine("/loop keep going"));
+    // A /goal with no duration still starts a run, just an untimed one.
+    armFreshRun(&clock, &root, 9_000, parseLoopBudget("keep going"));
     try std.testing.expectEqual(@as(i64, 9_000), clock.started_ms);
     try std.testing.expect(root.loop_deadline_ms == null);
 
     // Any other typed line means no run is in flight. Without this a turn that
     // errored out mid-run left a deadline armed, and every later subagent - of
     // any turn, forever - was told to hurry for a run that ended long ago.
-    armFreshRun(&clock, &root, 12_000, loopBudgetFromLine("/loop 5m ship"));
+    armFreshRun(&clock, &root, 12_000, parseLoopBudget("5m ship"));
     try std.testing.expect(root.loop_deadline_ms != null);
     armFreshRun(&clock, &root, 13_000, null);
     try std.testing.expect(root.loop_deadline_ms == null and clock.deadline_ms == null and clock.started_ms == 0);

@@ -196,7 +196,7 @@ test "goalSteeringNote: active-only gate, completion contract, and no embedded c
     try std.testing.expectEqualStrings("", try goalSteeringNote(ar, .{ .objective = "x", .standing = true, .status = .paused }));
 }
 
-/// #226 continuation gate — the outcome when a /loop turn finishes: the loop
+/// #226 continuation gate — the outcome when an autonomous run's turn finishes: the run
 /// either runs another turn or stops with a NAMED terminal state (surfaced in
 /// the transcript so #219's ledger can later record it verbatim). Budget-free.
 /// One sentence per outcome, because the tag alone misleads: a user reading a
@@ -218,18 +218,18 @@ pub fn outcomeText(outcome: ContinuationOutcome, iter_cap: u32) []const u8 {
 pub const ContinuationOutcome = enum {
     accepted, // the goal's checklist is complete (or the goal itself is complete)
     idle, // the turn did no tool work and asserted nothing - the loop stops, but nothing is done (#318)
-    exhausted, // hit the hard per-/loop iteration bound with work still open
-    expired, // the run's wall-clock budget (`/loop 30m ...`) ran out with work still open
+    exhausted, // hit the hard per-run iteration bound with work still open
+    expired, // the run's wall-clock budget (`/goal 30m ...`) ran out with work still open
     blocked, // the goal is blocked and needs the user
     cancelled, // the goal was paused — the user stepped in
 };
 
 pub const ContinuationDecision = union(enum) {
-    continue_turn, // run another /loop turn without reading a new user line
+    continue_turn, // run another turn of the run without reading a new user line
     stop: ContinuationOutcome, // return control to the prompt with this named outcome
 };
 
-/// Pure controller decision for /loop continuation (#226): continuation is
+/// Pure controller decision for a run's continuation (#226): continuation is
 /// authorized by CONTROLLER STATE, never by the model merely stopping. An active
 /// goal with the checklist still open and iterations left keeps going; a
 /// paused or blocked goal, or a spent iteration bound, yields the matching
@@ -250,7 +250,7 @@ pub fn continuationDecision(
         // (attempt_completion sets root.completed) or through mainloop's
         // flip-then-stop, so .complete here is a LEFTOVER objective from an
         // earlier run or a resume reconciliation. It must not label a fresh
-        // /loop `accepted` at iteration 1 before anything happened (#318).
+        // run `accepted` at iteration 1 before anything happened (#318).
         .complete, .active => {},
     }
     if (model_stopped) return .{ .stop = .idle };
@@ -261,7 +261,7 @@ pub fn continuationDecision(
 /// Did this turn genuinely stop working? Zero tool calls is the model declining
 /// to act - but a REFUSED attempt_completion is exempt from the tool counter,
 /// and that is exactly a turn where the model acted and got an is_error back to
-/// react to. Reading it as silence killed the /loop on the very turn the
+/// react to. Reading it as silence killed the run on the very turn the
 /// completion gate meant to keep alive (#318).
 pub fn turnStopped(tool_calls: u64, completion_refused: bool) bool {
     return tool_calls == 0 and !completion_refused;

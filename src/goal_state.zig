@@ -107,7 +107,7 @@ pub fn adoptTodos(todos: []TodoItem, from_epoch: u64, to_epoch: u64) void {
 /// attempt_completion per turn, so clearing the arm at the turn boundary made
 /// every refusal unresolvable - refuse, turn ends, flag clears, refuse again,
 /// forever, with nothing the user could type to break out.
-/// `new_ask` marks a turn the USER started (false for a /loop continuation,
+/// `new_ask` marks a turn the USER started (false for a run's continuation,
 /// which is the same ask still running): that is the boundary where a finished
 /// checklist retires instead of following the session forever (#394).
 pub fn beginTurn(root: *Agent, new_ask: bool) void {
@@ -118,7 +118,7 @@ pub fn beginTurn(root: *Agent, new_ask: bool) void {
 /// The caller's half of a refusal: arm the double-check so the model's promised
 /// second attempt_completion closes the goal (this turn or any later one), and
 /// record that the turn did work - a refused call is exempt from the tool
-/// counter, so without this the /loop reads the turn as silence (#318).
+/// counter, so without this the run reads the turn as silence (#318).
 pub fn noteCompletionRefused(root: *Agent) void {
     root.completion_gate_armed = true;
     root.completion_refused = true;
@@ -126,10 +126,10 @@ pub fn noteCompletionRefused(root: *Agent) void {
 
 /// Did the checklist finish in THIS process? `allDone` alone is not evidence:
 /// todos persist, so a checklist completed in a PREVIOUS session made the next
-/// /loop stop at iteration 1 as `accepted` and flipped the restored goal to
+/// run stop at iteration 1 as `accepted` and flipped the restored goal to
 /// complete with zero work done (#318). The freshness flag also covers the
 /// goal == null case, where an all-completed epoch-0 leftover satisfies allDone
-/// on a bare /loop. Only todo_write sets it; loadSession, /clear and /new clear it.
+/// on a goal-less run. Only todo_write sets it; loadSession, /clear and /new clear it.
 pub fn checklistFinished(root: *const Agent) bool {
     if (!root.todos_dirty) return false;
     return allDone(root.todos.items, currentEpoch(root.goal));
@@ -137,7 +137,7 @@ pub fn checklistFinished(root: *const Agent) bool {
 
 /// todo_write just rewrote the current epoch's checklist: the completion
 /// double-check gets fresh evidence to check against, and the list becomes
-/// this-process evidence for /loop termination (#318).
+/// this-process evidence for run termination (#318).
 pub fn noteTodoWrite(root: *Agent) void {
     resetCompletionGate(root);
     root.todos_dirty = true;
@@ -187,7 +187,7 @@ pub fn resetCompletionGate(root: *Agent) void {
 }
 
 /// Re-state an unchanged active note after this many suppressed turns, in case
-/// LoopListGate: re-paste an unchanged /loop checklist after this many quiet turns.
+/// LoopListGate: re-paste an unchanged run checklist after this many quiet turns.
 pub const refresh_turns: u32 = 8;
 /// Standing-goal essay. 0 = never; the objective lives in the prefix (ADR 0005).
 pub const essay_refresh_turns: u32 = 0;
@@ -248,7 +248,7 @@ pub fn hasCurrent(todos: []const TodoItem, epoch: u64) bool {
 /// ever can, since one attempt_completion per turn is all a model emits.
 /// A standing --goal is gated like any other goal (#318: an unearned "done" is
 /// exactly what the flag's headless sessions need double-checked - exempting
-/// them here let one premature claim end a /loop as accepted with open work);
+/// them here let one premature claim end a run as accepted with open work);
 /// standing only exempts RETIREMENT (retireOnCompletion), so a confirmed claim
 /// is recorded and the objective keeps steering.
 pub fn completionGate(arena: Allocator, agent: *Agent) !?[]const u8 {
@@ -418,7 +418,7 @@ test "checklistFinished demands THIS process's todo_write; a restored all-[x] li
     root.goal = null;
     root.todos_dirty = false; // exactly what loadSession leaves behind
     try root.todos.append(ar, .{ .content = "old work", .status = "completed", .epoch = 0 });
-    // The goal == null variant: a bare /loop must not stop at iteration 1 just
+    // The goal == null variant: a goal-less run must not stop at iteration 1 just
     // because a previous session left a finished epoch-0 list on disk.
     try std.testing.expect(allDone(root.todos.items, 0));
     try std.testing.expect(!checklistFinished(&root));

@@ -117,8 +117,6 @@ pub fn runCommand(self: *Model, line: []const u8) void {
         self.push(.info, "named agents are used by the agent loop, not single-shot chat") catch {};
     } else if (std.mem.eql(u8, cmd, "/hooks")) {
         self.push(.info, "hooks run around the agent loop, not the chat repl") catch {};
-    } else if (std.mem.eql(u8, cmd, "/loop")) {
-        self.push(.info, "`/loop` schedules repeated runs in the main session, not the chat repl") catch {};
     } else if (eqlAny(cmd, &.{ "/trace", "/trajectory", "/cache" })) {
         self.push(.info, "trace/trajectory/cache logging is a main-session feature") catch {};
     } else if (eqlAny(cmd, &.{ "/save", "/resume", "/sessions", "/workspace", "/ws", "/plugins" })) {

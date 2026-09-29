@@ -66,7 +66,7 @@ fn resumeSession(arena: Allocator, root: *Agent, json: []const u8) !void {
 
 /// A root agent in the state loadSession hands back: no live turn behind it.
 /// The turn-scoped fields matter too - goal_flow.loopTurnDecision reads them
-/// to decide whether a /loop continues, and "restored, no work yet" is exactly
+/// to decide whether a run continues, and "restored, no work yet" is exactly
 /// the state #318's never-completing loop started from.
 fn blankRoot(arena: Allocator) Agent {
     var root: Agent = undefined;
@@ -108,7 +108,7 @@ test "resume: an active goal whose checklist is already finished retires (#318)"
     // finished epoch-2 list both survive the round trip (#318 D-PARK).
     try std.testing.expectEqual(@as(usize, 3), root.todos.items.len);
     try std.testing.expectEqual(@as(usize, 1), goal_state.parkedOpenCount(root.todos.items, 2));
-    // The retired goal is not fresh completion evidence either: the first /loop
+    // The retired goal is not fresh completion evidence either: the first run
     // turn of the resumed session must still do real work to stop as accepted.
     try std.testing.expect(!goal_state.checklistFinished(&root));
 }
@@ -129,7 +129,7 @@ test "resume: open items keep the goal active and the checklist current (#318)" 
     try std.testing.expectEqualStrings("[x] fix the tests\n[ ] verify in the browser", goal_state.renderCurrent(&root));
     try std.testing.expect(!goal_state.checklistFinished(&root));
     // Finishing the restored list only counts once todo_write has run in THIS
-    // process - the /loop allDone arm stays inert until then.
+    // process - the run's allDone arm stays inert until then.
     root.todos.items[1].status = "completed";
     try std.testing.expect(goal_state.allDone(root.todos.items, 2));
     try std.testing.expect(!goal_state.checklistFinished(&root));
@@ -137,13 +137,13 @@ test "resume: open items keep the goal active and the checklist current (#318)" 
     try std.testing.expect(goal_state.checklistFinished(&root));
 }
 
-test "resume: a finished epoch-0 leftover cannot end a bare /loop (#318)" {
+test "resume: a finished epoch-0 leftover cannot end a goal-less run (#318)" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const ar = arena_state.allocator();
     var root = blankRoot(ar);
     // No goal at all, and a checklist the previous session finished. Before the
-    // freshness flag this made /loop stop at iteration 1 as `accepted` without
+    // freshness flag this made a run stop at iteration 1 as `accepted` without
     // the model doing anything.
     try resumeSession(ar, &root,
         \\{"goal":null,
@@ -338,14 +338,14 @@ test "the first /goal adopts the in-flight unscoped plan, minus finished work (#
     try std.testing.expect(refusal != null and std.mem.indexOf(u8, refusal.?, "1 open") != null);
 }
 
-test "/loop: a restored all-[x] list is idle, not accepted (#318)" {
+test "goal run: a restored all-[x] list is idle, not accepted (#318)" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const ar = arena_state.allocator();
     var root = blankRoot(ar);
     // A standing --goal survives the resume with its finished checklist intact
     // (reconcileRestored leaves it alone), so this is the exact state a fresh
-    // /loop starts from: goal active, every item [x], zero tools run yet. It
+    // run starts from: goal active, every item [x], zero tools run yet. It
     // used to stop at iteration 1 as `accepted` with nothing done.
     try resumeSession(ar, &root,
         \\{"goal":{"objective":"keep the tree green","status":"active","epoch":2,"standing":true,"created_ms":1,"updated_ms":2},
@@ -357,7 +357,7 @@ test "/loop: a restored all-[x] list is idle, not accepted (#318)" {
     try std.testing.expectEqual(agent_mod.GoalStatus.active, root.goal.?.status); // and nothing was retired
 }
 
-test "/loop: a finished list accepts and retires only a retirable goal (#318)" {
+test "goal run: a finished list accepts and retires only a retirable goal (#318)" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const ar = arena_state.allocator();
@@ -382,7 +382,7 @@ test "/loop: a finished list accepts and retires only a retirable goal (#318)" {
     try std.testing.expectEqual(agent_mod.GoalStatus.active, root.goal.?.status);
 }
 
-test "/loop: a refused completion is work, and a leftover complete goal decides nothing (#318)" {
+test "goal run: a refused completion is work, and a leftover complete goal decides nothing (#318)" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const ar = arena_state.allocator();
@@ -391,7 +391,7 @@ test "/loop: a refused completion is work, and a leftover complete goal decides 
     try root.todos.append(ar, .{ .content = "verify in the browser", .status = "pending", .epoch = 1 });
     // The completion gate refused: the model called attempt_completion (which
     // is exempt from the tool counter) and got an is_error back to react to.
-    // Reading that as silence killed the /loop on the very turn the gate meant
+    // Reading that as silence killed the run on the very turn the gate meant
     // to keep alive, so the promised second call could never happen (#318).
     goal_state.noteCompletionRefused(&root);
     try std.testing.expectEqual(@as(u64, 0), root.tool_calls_this_turn);
@@ -401,7 +401,7 @@ test "/loop: a refused completion is work, and a leftover complete goal decides 
     try std.testing.expectEqual(repl_glue.ContinuationOutcome.idle, goal_flow.loopTurnDecision(&root, 25, 0).stop);
 
     // A goal left .complete by an earlier run or a resume reconciliation must
-    // not label a fresh /loop `accepted` at iteration 1 before anything has
+    // not label a fresh run `accepted` at iteration 1 before anything has
     // happened: it decides nothing, exactly like .active.
     root.goal.?.status = .complete;
     root.tool_calls_this_turn = 3;
@@ -411,7 +411,7 @@ test "/loop: a refused completion is work, and a leftover complete goal decides 
     try std.testing.expectEqual(repl_glue.ContinuationOutcome.idle, goal_flow.loopTurnDecision(&root, 25, 0).stop);
 }
 
-test "a fresh /loop cannot stop accepted off a checklist finished before it (#318)" {
+test "a fresh run cannot stop accepted off a checklist finished before it (#318)" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const ar = arena_state.allocator();
@@ -425,7 +425,7 @@ test "a fresh /loop cannot stop accepted off a checklist finished before it (#31
     root.tool_calls_this_turn = 1;
     // Stale evidence reads as work_done -> accepted on B's very first decision...
     try std.testing.expectEqual(repl_glue.ContinuationOutcome.accepted, goal_flow.loopTurnDecision(&root, 25, 0).stop);
-    // ...which is why mainloop clears todos_dirty when a FRESH /loop arms: the
+    // ...which is why mainloop clears todos_dirty when a FRESH run arms: the
     // new prompt starts with no completion evidence of its own, and only a
     // todo_write (or attempt_completion) made DURING the run can stop it.
     root.todos_dirty = false;
@@ -434,7 +434,7 @@ test "a fresh /loop cannot stop accepted off a checklist finished before it (#31
     try std.testing.expectEqual(repl_glue.ContinuationOutcome.accepted, goal_flow.loopTurnDecision(&root, 25, 0).stop);
 }
 
-test "/loop: a passed wall-clock deadline stops as expired and flips nothing" {
+test "goal run: a passed wall-clock deadline stops as expired and flips nothing" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const ar = arena_state.allocator();
@@ -442,7 +442,7 @@ test "/loop: a passed wall-clock deadline stops as expired and flips nothing" {
     root.goal = .{ .objective = "ship phase 2", .epoch = 1, .status = .active };
     try root.todos.append(ar, .{ .content = "still open", .status = "pending", .epoch = 1 });
     root.tool_calls_this_turn = 3; // the turn worked; it simply ran out of clock
-    root.loop_deadline_ms = 10_000; // `/loop 30m ...` armed this
+    root.loop_deadline_ms = 10_000; // `/goal 30m ...` armed this
 
     // One second short of it the run continues exactly as before.
     try std.testing.expect(std.meta.activeTag(goal_flow.loopTurnDecision(&root, 25, 9_999)) == .continue_turn);

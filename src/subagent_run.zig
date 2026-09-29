@@ -402,7 +402,7 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
             const err = if (r) |_| break :ask r else |e| e;
             const fail_kind = classifyFailure(err, agent.last_api_error);
             if (!subagent_retry.shouldRetry(err, fail_kind, agent.last_api_error, attempts)) break :ask r;
-            // A /loop deadline the run is already past makes waiting pointless.
+            // A run deadline already past makes waiting pointless.
             if (subagent_retry.pastDeadline(util.unixMs(ctx.io), ctx.loop_deadline_ms)) break :ask r;
             subagent_retry.traceAttempt(ctx.tracer, sub_id, attempts, fail_kind, agent.last_api_error);
             agent.sleepInterruptible(@import("retry_jitter.zig").ms(agent.io, subagent_retry.backoffMs(fail_kind, attempts))) catch break :ask r; // #1274

@@ -236,7 +236,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     self.last_context_tokens = 0;
     self.context_local_tokens = 0;
     self.goal_note_fp = 0; // the injected goal note died with the old history - re-state in full (#318)
-    self.history_rewrites +%= 1; // readers of pasted state (the /loop checklist gate) re-carry it (#318)
+    self.history_rewrites +%= 1; // readers of pasted state (the run's checklist gate) re-carry it (#318)
     installed_summary = true;
     acp_run.finish(.completed, summary, null);
     // #445: the history the model was reading is gone and the durable file is
@@ -479,7 +479,7 @@ pub fn emergencyTrim(self: *Agent) usize {
         for (self.messages.items[cut..]) |m| fresh.append(m) catch return 0;
         self.messages = fresh;
         self.goal_note_fp = 0; // trimmed history may have carried the goal note (#318)
-        self.history_rewrites +%= 1; // and the /loop checklist gate's pasted copies (#318)
+        self.history_rewrites +%= 1; // and the run's checklist gate's pasted copies (#318)
         // No synthetic message exists here to hang the standing state on (unlike
         // compact()'s handoff), so it rides the next turn's one-shot slot. Only
         // when that slot is free: a queued /goal replace|clear note is the USER's
@@ -494,7 +494,7 @@ pub fn emergencyTrim(self: *Agent) usize {
     // session — reclaim context by truncating the oldest tool outputs in place,
     // keeping every call/output pair valid. Nonzero = recovered. This too is a
     // rewrite: the stubbed outputs may include the last todo_write render the
-    // suppressed /loop note points the model at (#318).
+    // suppressed run note points the model at (#318).
     if (trimOldestToolOutputs(self) > 0) {
         self.history_rewrites +%= 1;
         if (self.pending_goal_note == null)

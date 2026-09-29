@@ -1,6 +1,6 @@
 //! #412: the no-progress guard in front of a repeated verification.
 //!
-//! A /goal (or /loop) run is plan-act-VERIFY, and the verifier is the `eval`
+//! A /goal run is plan-act-VERIFY, and the verifier is the `eval`
 //! tool: it runs the --eval command, optionally spawns an LLM judge subagent,
 //! and a RED verdict blocks attempt_completion until a fresh green one
 //! (agent_tools.handleMeta). So a continuation turn's obvious move is to call

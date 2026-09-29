@@ -178,7 +178,7 @@ or pass `--yolo`. Full flag list: `graff --help`. Learning:
 [docs/skills.md](docs/skills.md).
 
 ```
-/model /models /clear /new /goal /loop /review /never
+/model /models /clear /new /goal /review /never
 /plan /yolo /strict /effort /compact /rewind /btw
 /skills /plugins /mcp /save /resume /sessions /help
 ```
