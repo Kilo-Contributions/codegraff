@@ -1,0 +1,21 @@
+schema_version = "1.4"
+
+[task]
+name = "graff/adapter-smoke"
+version = "1.0.0"
+
+[agent]
+user = "agent"
+timeout_sec = 240
+
+[verifier]
+timeout_sec = 60
+
+[environment]
+build_timeout_sec = 600
+
+[environment.healthcheck]
+command = "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:1234/v1/models')\""
+interval_sec = 0.5
+timeout_sec = 5
+retries = 20
