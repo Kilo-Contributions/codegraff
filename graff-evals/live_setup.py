@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,7 +39,10 @@ def load_catalog():
 
 def manifest(task_id):
     cat = load_catalog()
-    for t in cat["published"] + cat.get("reserve", []) + cat.get("dropped", []):
+    mined_path = os.path.join(EVALS, "live", "mined.json")  # ADR 0214, machine-managed
+    mined = json.load(open(mined_path)) if os.path.exists(mined_path) else {}
+    for t in (cat["published"] + cat.get("reserve", []) + cat.get("dropped", [])
+              + mined.get("mined", []) + mined.get("candidates", [])):
         if t["id"] == task_id:
             return t
     raise SystemExit(f"unknown live task: {task_id}")
@@ -153,6 +157,41 @@ def clone_historical_parent(task, dest):
         subprocess.check_call([sys.executable, pin, dest])
 
 
+def archive_local(rev, dest, paths=None):
+    """A historical tree straight from this checkout's git history (ADR 0214:
+    mined tasks). Recent parents build on the pinned toolchain as they are."""
+    os.makedirs(dest, exist_ok=True)
+    wanted = list(paths or DEFAULT_SPARSE)
+    # Whatever that revision's build.zig embeds or builds from (for example a
+    # stylesheet under apps/ before the desktop app left) must come along.
+    build = subprocess.run(["git", "-C", REPO, "show", f"{rev}:build.zig"],
+                           capture_output=True, text=True).stdout
+    wanted += [p for p in re.findall(r'b\.path\("([^"]+)"\)', build) if p not in wanted]
+    have = [p for p in wanted
+            if subprocess.run(["git", "-C", REPO, "cat-file", "-e", f"{rev}:{p}"],
+                              capture_output=True).returncode == 0]
+    arch = subprocess.Popen(["git", "-C", REPO, "archive", rev, *have], stdout=subprocess.PIPE)
+    subprocess.check_call(["tar", "-x", "-C", dest], stdin=arch.stdout)
+    if arch.wait() != 0:
+        raise SystemExit(f"git archive {rev} failed")
+    # Fetched dependencies live in the untracked zig-pkg/ cache. Copy it (it
+    # is small) so a sandbox build does not refetch every package, and an
+    # agent working in the sandbox cannot write into this checkout's copy.
+    pkg = os.path.join(REPO, "zig-pkg")
+    if os.path.isdir(pkg) and not os.path.exists(os.path.join(dest, "zig-pkg")):
+        shutil.copytree(pkg, os.path.join(dest, "zig-pkg"), symlinks=True)
+
+
+def append_case(sandbox, rel, inc, name):
+    """Append a test block unless a test with that name is already there."""
+    path = os.path.join(sandbox, rel)
+    text = open(path).read() if os.path.exists(path) else ""
+    if f'test "{name}"' in text:
+        return
+    with open(path, "a") as f:
+        f.write(open(inc).read())
+
+
 def setup(task_id, sandbox, allow_green=False):
     task = manifest(task_id)
     os.makedirs(sandbox, exist_ok=True)
@@ -167,6 +206,10 @@ def setup(task_id, sandbox, allow_green=False):
             os.remove(path)
     if task.get("source") == "clone":
         clone_historical_parent(task, sandbox)
+    elif task.get("source") == "local-git":
+        archive_local(task["historical_parent"], sandbox, task.get("sparse"))
+        append_case(sandbox, task["public_file"],
+                    os.path.join(EVALS, "live", task["id"], "public_case.inc"), task["public_filter"])
     else:
         copy_local_package(sandbox, task.get("sparse") or DEFAULT_SPARSE)
         apply_parent(task, sandbox)

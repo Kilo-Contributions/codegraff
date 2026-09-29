@@ -37,6 +37,34 @@
       "kept_on": "2026-08-30",
       "why": "autoInitLearning detaches graff learn init (same process-group spawn as a trial). Session-end no longer waits ~38s on suite generation. Pin stays a hardlink. -p / REPL / TUI share the path.",
       "forbidden": []
+    },
+    {
+      "id": "g6-followthrough",
+      "harness": "graff-dev-g6-followthrough",
+      "kept": false,
+      "why": "GPT-6 prompting guide recommendation. Judge with a held-out round on gpt-6 models before a prompt change ships.",
+      "forbidden": []
+    },
+    {
+      "id": "g6-skill-precedence",
+      "harness": "graff-dev-g6-skill-precedence",
+      "kept": false,
+      "why": "GPT-6 prompting guide recommendation. Judge with a held-out round on gpt-6 models before a prompt change ships.",
+      "forbidden": []
+    },
+    {
+      "id": "g6-test-calibration",
+      "harness": "graff-dev-g6-test-calibration",
+      "kept": false,
+      "why": "GPT-6 prompting guide recommendation. Judge with a held-out round on gpt-6 models before a prompt change ships.",
+      "forbidden": []
+    },
+    {
+      "id": "g6-plain-prose",
+      "harness": "graff-dev-g6-plain-prose",
+      "kept": false,
+      "why": "GPT-6 prompting guide recommendation. Judge with a held-out round on gpt-6 models before a prompt change ships.",
+      "forbidden": []
     }
   ]
 }
