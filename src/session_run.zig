@@ -151,6 +151,7 @@ pub fn runFrontendCommands(gpa: Allocator, io: Io, environ_map: anytype, root: *
 pub fn runOneshotPrompt(gpa: Allocator, io: Io, arena: Allocator, root: *agent_mod.Agent, keys: *provider_mod.Keys, tracer: *trace.Tracer, out: *Io.Writer, prompt_text: []const u8) !void {
     if (@import("goal_pacing.zig").oneshotSlashRefusal(prompt_text)) |why| std.process.fatal("{s}", .{why}); // usage error, not a prompt
     main_mod.unattended = true;
+    @import("run_idle.zig").enabled = true; // nothing wakes a finished one-shot: wait for its background work
     @import("named_work.zig").rememberOn(root, prompt_text);
     root.in = null; // gate: deny instead of prompt; ask_user: self-decide
     root.out = null; // tool progress → stderr; stdout carries only the answer

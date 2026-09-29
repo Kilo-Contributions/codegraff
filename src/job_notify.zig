@@ -233,6 +233,13 @@ pub fn stillRunning(io: Io, id: u64, waited_ms: u64, unread: usize) void {
     tool_pulse.emitNotice(io, "· bash_output · job {d} still running · {s} · {d} unread byte(s)", .{ id, tool_pulse.formatElapsed(&ebuf, waited_ms), unread });
 }
 
+/// A notice is queued for the next step boundary (run_idle.zig's wait).
+pub fn pending(io: Io) bool {
+    mu.lockUncancelable(io);
+    defer mu.unlock(io);
+    return count > 0;
+}
+
 /// Drain queued notices into `buf` (step boundary: everything). Null when
 /// nothing finished.
 pub fn takeWake(io: Io, buf: []u8) ?[]const u8 {

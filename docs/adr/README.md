@@ -241,6 +241,7 @@ record only when you need the evidence or the edge cases.
 | [0212](0212-build-time-is-analysis-bound.md) | A cold build is ~16 s of single-core semantic analysis; codegen and link are nearly free. No redundant files to cut. Keep the default backend: `-fllvm` is 2x slower, `-fincremental`/`--watch` do not help on Zig 0.17-dev, and `-fno-llvm -fno-lld` exhausts memory. Iterate with `-Dtest-filter` (44 s → 13 s). |
 | [0213](0213-line-repl-paste-is-framed-and-typed.md) | Keep line-REPL paste framed through active turns; submit one draft on Enter, and stage or reject bounded image data URIs before text expansion. |
 | [0214](0214-evals-are-mined-and-hillclimbed-on-a-held-out-split.md) | Mine live eval tasks from merged PRs, with graders validated red on the parent and green and stable on the merge, and a person approving each. Hill-climb on a fixed held-out split with measured noise: keep a change only when train beats the noise band and test improves. Model-guide advice enters as candidates, not edits. |
+| [0215](0215-headless-runs-wait-until-idle.md) | Headless roots (`-p`, `--json`, `graff serve`, piped stdin) wait for their own background work to report before a plain final ends the run. Servers do not count, a 10-minute heartbeat wakes the model, and interactive surfaces keep their idle wake. |
 
 ## When to write one
 

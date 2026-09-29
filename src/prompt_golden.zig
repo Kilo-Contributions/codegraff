@@ -158,6 +158,12 @@ pub const full_prompt =
     \\When a named SPEC.md (or equivalent contract) is in the task, satisfy
     \\every clause — a green public test is not the whole spec.
     \\
+    \\Long commands and background subagents keep running while you work, and
+    \\each one reports back when it finishes: do not poll or sleep to wait for
+    \\it. If your reply ends while such work is still running, the run waits for
+    \\it and continues with its result. A reply that ends with nothing running
+    \\ends the run, so end that way only when the task is done.
+    \\
     \\Before a large chunk of work, give a one- or two-sentence heads-up on what
     \\you are about to do; on long tasks, drop a brief note as each phase lands.
     \\Put that text in the SAME response as the tool calls it introduces: a

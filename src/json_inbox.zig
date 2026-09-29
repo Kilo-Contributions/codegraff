@@ -81,6 +81,15 @@ pub fn endTurn() void {
     turn_active.store(false, .release);
 }
 
+/// The client sent a line that waits for the current turn to end. A turn
+/// waiting on background work hands the session back for it (run_idle.zig).
+pub fn waiting() bool {
+    const io = inbox_io orelse return false;
+    mutex.lockUncancelable(io);
+    defer mutex.unlock(io);
+    return lines.items.len > 0;
+}
+
 /// Mainloop request read. In non-JSON modes the original reader remains owner.
 pub fn request(arena: Allocator, fallback: *Io.Reader) !?[]const u8 {
     return read(arena, fallback, false);
