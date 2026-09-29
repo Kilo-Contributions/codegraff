@@ -224,6 +224,19 @@ pub const work_note =
     \\every clause — a green public test is not the whole spec.
 ;
 
+/// Gate: `caps.local_tools`. Run until idle (run_idle.zig): a reply that ends
+/// while background work runs waits for its result, and only a reply with
+/// nothing running ends the run.
+pub const background_note =
+    \\
+    \\
+    \\Long commands and background subagents keep running while you work, and
+    \\each one reports back when it finishes: do not poll or sleep to wait for
+    \\it. If your reply ends while such work is still running, the run waits for
+    \\it and continues with its result. A reply that ends with nothing running
+    \\ends the run, so end that way only when the task is done.
+;
+
 /// Always present: narration is a habit, not a capability. ADR 0061: the
 /// note used to say only THAT a heads-up is owed; a model that answers every
 /// step with bare function calls (Gemini flash: no text in any of 259
@@ -388,6 +401,13 @@ pub const lean_work_note =
     \\— a green public test is not the whole spec.
 ;
 
+pub const lean_background_note =
+    \\
+    \\Background jobs and subagents report back when they finish; do not poll.
+    \\Ending your reply while one runs waits for its result. Ending with nothing
+    \\running ends the run.
+;
+
 pub const lean_closing_note =
     \\
     \\Write the final message as a short teammate update. Use existing evidence;
@@ -407,6 +427,7 @@ pub fn leanSegment(name: []const u8, original: []const u8, is_lean: bool) ?[]con
     if (std.mem.eql(u8, name, "intro")) return lean_intro_note;
     if (std.mem.eql(u8, name, "local_tools")) return lean_local_tools_note;
     if (std.mem.eql(u8, name, "work")) return lean_work_note;
+    if (std.mem.eql(u8, name, "background")) return lean_background_note;
     if (std.mem.eql(u8, name, "closing")) return lean_closing_note;
     return original;
 }

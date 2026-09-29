@@ -63,6 +63,9 @@ pub const Ctx = struct {
 pub fn run(ctx: *Ctx) !void {
     @import("subagent_interactive.zig").configure(ctx.interactive);
     defer @import("subagent_interactive.zig").configure(false);
+    // --json, serve and piped stdin have no idle wake: a turn waits for its background work.
+    @import("run_idle.zig").enabled = !ctx.interactive;
+    defer @import("run_idle.zig").enabled = false;
     if (main_mod.json_mode) json_inbox.start(ctx.gpa, ctx.io, ctx.in);
     defer if (main_mod.json_mode) json_inbox.stop();
     var title_jobs: mainloop_title.Jobs = .{};

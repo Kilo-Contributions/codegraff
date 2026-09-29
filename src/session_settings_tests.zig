@@ -64,6 +64,7 @@ const knobs = [_]Knob{
     .{ .name = "GRAFF_XAI_X_SEARCH", .value = "0" },
     .{ .name = "GRAFF_JOB_IDLE_WARN_MINS", .value = "3" },
     .{ .name = "GRAFF_JOB_IDLE_STOP_MINS", .value = "0" },
+    .{ .name = "GRAFF_HEARTBEAT_SECS", .value = "600" },
 };
 
 /// A stand-in for the process environment that records which names were asked

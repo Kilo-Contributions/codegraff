@@ -157,8 +157,11 @@ pub fn handle(self: *Agent, final_text: []const u8, hist_len: usize) !bool {
 
 /// Plain finals bypass attempt_completion's gate (#745). Keep the allowance
 /// on the runTurn stack: tool progress and compaction must not reset it.
+/// Background work still running is live work too: after the reminder, a
+/// headless run waits for it to report (run_idle.zig).
 pub const PendingWork = struct {
     nudged: bool = false,
+    idle: @import("run_idle.zig").Hold = .{},
 
     pub const note = "Open-work reconciliation: your plain final reply would end root execution, but the current checklist is unfinished. " ++
         "If the user still wants this task done, continue actionable independent work now; collect required background results with agent_output/bash_output and wait_ms>0 when needed, rather than polling or promising future work. " ++
@@ -185,8 +188,9 @@ pub const PendingWork = struct {
     pub fn finish(state: *PendingWork, self: *Agent, text: []const u8) !?[]const u8 {
         if (!self.sub and Agent.esc_cancel.load(.acquire)) return error.Interrupted;
         const count = open(self);
-        if (count == 0) return text;
-        if (!state.nudged and canRequest(self)) {
+        // The reminder first, so independent work runs beside the background
+        // work; the wait applies once the model stops again.
+        if (count > 0 and !state.nudged and canRequest(self)) {
             state.nudged = true;
             const goals = @import("goal_state.zig");
             const body = try std.fmt.allocPrint(self.arena, "{s}\n\n{s}", .{ note, goals.renderTodos(self, goals.currentEpoch(self.goal)) });
@@ -194,6 +198,8 @@ pub const PendingWork = struct {
             if (self.tracer) |tr| tr.note("pending_work", "plain final reconciled; one retry granted");
             return null;
         }
+        if (canRequest(self) and try state.idle.wait(self)) return null;
+        if (count == 0) return text;
         const footer = try std.fmt.allocPrint(self.arena, "\n\n[Root execution has stopped with {d} open checklist items; background jobs may still run.]", .{count});
         if (self.tracer) |tr| tr.note("pending_work", "plain final stopped with open work; retry or budget exhausted");
         // The answer may already have streamed, so surface the new suffix too.
@@ -203,6 +209,10 @@ pub const PendingWork = struct {
         return try std.fmt.allocPrint(self.arena, "{s}{s}", .{ text, footer });
     }
 };
+
+test {
+    _ = @import("run_idle.zig");
+}
 
 fn pendingFixture(arena: std.mem.Allocator) Agent {
     var self: Agent = undefined;

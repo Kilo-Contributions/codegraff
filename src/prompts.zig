@@ -39,9 +39,8 @@ const tool_gates = @import("tool_gates.zig"); // #352's additive gate — the ot
 const tool_surface = @import("tool_surface.zig");
 const session_index = @import("session_index.zig"); // #410: where the durable transcript lives
 
-/// The prompt text itself lives next door; this file owns when each part
-/// of it is sent. `parallel_tools_note` is re-exported because
-/// `sub_system_prompt` composes it as a comptime whole.
+/// The prompt text lives next door; this file owns when each part is sent.
+/// `parallel_tools_note` is re-exported for `sub_system_prompt`'s comptime whole.
 pub const parallel_tools_note = text.parallel_tools_note;
 
 /// The capability a segment needs. `.always` is what survives every gate.
@@ -66,6 +65,7 @@ pub const segments = [_]Segment{
     .{ .name = "git_authoring", .text = text.git_authoring_note, .gate = .git_repo },
     .{ .name = "git_safety", .text = text.git_safety_note, .gate = .always },
     .{ .name = "work", .text = text.work_note, .gate = .always },
+    .{ .name = "background", .text = text.background_note, .gate = .local_tools },
     .{ .name = "headsup", .text = text.headsup_note, .gate = .always },
     .{ .name = "todo_progress", .text = text.todo_progress_note, .gate = .todos },
     .{ .name = "root_cause", .text = text.root_cause_note, .gate = .always },

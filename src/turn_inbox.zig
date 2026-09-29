@@ -14,6 +14,7 @@ pub fn deliver(self: *Agent) !void {
     @import("peer_channel.zig").deliverInbound(self);
     try @import("subagent_feedback.zig").deliverToAgent(self);
     @import("job_notify.zig").deliver(self);
+    _ = try @import("run_idle.zig").deliver(self); // headless roots: finished background subagents
     @import("schedule.zig").deliver(self);
     @import("channel_worker.zig").deliver(self);
     @import("hot_context.zig").deliver(self); // #1333: changed ambient keys, before the prompt
