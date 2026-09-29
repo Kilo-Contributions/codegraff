@@ -76,7 +76,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             // other anthropic-format providers (minimax) get a plain string.
             try s.objectField("system");
             const sys = try @import("agent_request_body_responses.zig").schemaAwarePrompt(self);
-            const cc = "{\"type\":\"ephemeral\"}";
+            const cc = @import("cache_ttl.zig").control(self); // #1320: 1h when calls outlive 5m
             if (std.mem.eql(u8, self.provider.id, "anthropic") or is_kimi) {
                 try s.beginArray();
                 try s.beginObject();
@@ -106,7 +106,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             // Anthropic API and Kimi's declared Anthropic transport. Kimi also
             // normalizes all string content into Anthropic text blocks.
             const cache_msgs = std.mem.eql(u8, self.provider.id, "anthropic") or is_kimi;
-            try writeAnthropicMessages(&s, self.messages, cache_msgs, is_kimi);
+            try writeAnthropicMessages(&s, self.messages, if (cache_msgs) cc else null, is_kimi);
         },
         .openai => {
             // graff's MakeOpenAiCompat: OpenAI deprecated max_tokens in

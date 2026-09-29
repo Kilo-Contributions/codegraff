@@ -202,6 +202,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     var openai404_retries: usize = 0; // #opencode-parity: bounded retries for OpenAI's spurious model 404s
     const max_openai404_retries: usize = 2;
     var gw_retry = policy.GatewayRetryState{}; // #gateway-artifact state (agent_gateway_retry.zig)
+    @import("cache_ttl.zig").begin(self); // #1320: before request_started moves
     rebuild: while (true) {
         if (@import("agent_async_tools.zig").started(self)) return error.AsyncToolStreamFailed;
         const live = self.usesLiveTransport();

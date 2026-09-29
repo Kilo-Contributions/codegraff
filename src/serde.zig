@@ -91,7 +91,7 @@ fn anthropicCacheableBlock(value: Value) bool {
     return false;
 }
 
-fn writeObjectWithCache(s: *std.json.Stringify, obj: std.json.ObjectMap) !void {
+fn writeObjectWithCache(s: *std.json.Stringify, obj: std.json.ObjectMap, cache_control: []const u8) !void {
     try s.beginObject();
     var it = obj.iterator();
     while (it.next()) |kv| {
@@ -100,16 +100,16 @@ fn writeObjectWithCache(s: *std.json.Stringify, obj: std.json.ObjectMap) !void {
     }
     if (obj.get("cache_control") == null) {
         try s.objectField("cache_control");
-        try s.print("{s}", .{"{\"type\":\"ephemeral\"}"});
+        try s.print("{s}", .{cache_control});
     }
     try s.endObject();
 }
 
 /// Serialize Anthropic messages. `normalize_blocks` matches the official Kimi
 /// adapter by turning every plain string into a `{type:text,text}` content
-/// array. `cache` marks the final cacheable block (including tool_result), not
-/// just the plain-string happy path.
-pub fn writeAnthropicMessages(s: *std.json.Stringify, messages: std.json.Array, cache: bool, normalize_blocks: bool) !void {
+/// array. `cache` (the cache_control object, #1320) marks the final cacheable
+/// block (including tool_result), not just the plain-string happy path.
+pub fn writeAnthropicMessages(s: *std.json.Stringify, messages: std.json.Array, cache: ?[]const u8, normalize_blocks: bool) !void {
     const items = messages.items;
     try s.beginArray();
     for (items, 0..) |m, i| {
@@ -118,7 +118,7 @@ pub fn writeAnthropicMessages(s: *std.json.Stringify, messages: std.json.Array, 
             continue;
         }
         const content = m.object.get("content").?;
-        const cache_this = cache and i + 1 == items.len;
+        const cache_this = cache != null and i + 1 == items.len;
         const string_content = content == .string;
         const array_cache = cache_this and content == .array and content.array.items.len > 0 and anthropicCacheableBlock(content.array.items[content.array.items.len - 1]);
         if (!normalize_blocks and !cache_this) {
@@ -147,7 +147,7 @@ pub fn writeAnthropicMessages(s: *std.json.Stringify, messages: std.json.Array, 
             try s.write(content.string);
             if (cache_this) {
                 try s.objectField("cache_control");
-                try s.print("{s}", .{"{\"type\":\"ephemeral\"}"});
+                try s.print("{s}", .{cache.?});
             }
             try s.endObject();
             try s.endArray();
@@ -155,7 +155,7 @@ pub fn writeAnthropicMessages(s: *std.json.Stringify, messages: std.json.Array, 
             try s.beginArray();
             for (content.array.items, 0..) |block, block_i| {
                 if (block_i + 1 == content.array.items.len and anthropicCacheableBlock(block))
-                    try writeObjectWithCache(s, block.object)
+                    try writeObjectWithCache(s, block.object, cache.?)
                 else
                     try s.write(block);
             }
@@ -203,7 +203,7 @@ pub fn writeAnthropicTools(s: *std.json.Stringify, arena: Allocator, raw: []cons
     try s.beginArray();
     for (value.array.items, 0..) |tool, i| {
         if (cache and i + 1 == value.array.items.len and tool == .object)
-            try writeObjectWithCache(s, tool.object)
+            try writeObjectWithCache(s, tool.object, @import("cache_ttl.zig").ephemeral)
         else
             try s.write(tool);
     }
