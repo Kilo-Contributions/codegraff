@@ -1,0 +1,14 @@
+{
+ "id": "pr-1257",
+ "suite": "mined-candidate",
+ "category": "live",
+ "source": "codegraff #1257 — mined (ADR 0214)",
+ "prompt": "stdin: read ACP and --json records past the 64 KiB buffer. Make the test named \"records larger than the reader buffer are returned whole\" in src/stdin_line.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "setup": [
+  "python3 \"$TASK_ROOT/live_setup.py\" pr-1257 ."
+ ],
+ "check": "sh \"$TASK_ROOT/live/pr-1257/check_public.sh\" && sh \"$TASK_ROOT/hidden/pr-1257.sh\"",
+ "timeout_s": 900,
+ "setup_timeout_s": 300,
+ "check_timeout_s": 420
+}

@@ -1,0 +1,14 @@
+{
+ "id": "pr-1254",
+ "suite": "mined-candidate",
+ "category": "live",
+ "source": "codegraff #1254 — mined (ADR 0214)",
+ "prompt": "Connect the MCP servers an ACP client passes. Make the test named \"parse: stdio with args and env, http with headers, sse and malformed left out\" in src/acp_mcp_servers.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "setup": [
+  "python3 \"$TASK_ROOT/live_setup.py\" pr-1254 ."
+ ],
+ "check": "sh \"$TASK_ROOT/live/pr-1254/check_public.sh\" && sh \"$TASK_ROOT/hidden/pr-1254.sh\"",
+ "timeout_s": 900,
+ "setup_timeout_s": 300,
+ "check_timeout_s": 420
+}

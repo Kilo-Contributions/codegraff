@@ -1,0 +1,14 @@
+{
+ "id": "pr-1309",
+ "suite": "mined-candidate",
+ "category": "live",
+ "source": "codegraff #1309 — mined (ADR 0214)",
+ "prompt": "ACP: report context left with the standard usage_update. Make the test named \"usage_update carries used and size, and cost only when known\" in src/acp_context_meter.zig pass. Do not edit that test. Do not add SPEC.md.",
+ "setup": [
+  "python3 \"$TASK_ROOT/live_setup.py\" pr-1309 ."
+ ],
+ "check": "sh \"$TASK_ROOT/live/pr-1309/check_public.sh\"",
+ "timeout_s": 900,
+ "setup_timeout_s": 300,
+ "check_timeout_s": 420
+}
