@@ -13,12 +13,11 @@ half are ordering rules that are easy to get subtly wrong.
 |---|---|---|
 | Linux / Windows tarballs | nobody | CI (`release.yml`) builds and uploads them |
 | macOS CLI tarballs | Developer ID Application, then Apple notarized | CI `macos-sign` job when the secrets exist; otherwise **locally**, after CI's draft exists |
-| macOS desktop app (DMG + update ZIP) | Developer ID Application, then Apple notarized and stapled | **locally**: `distribute.sh` + `publish-updates.sh` (see `apps/native/electron/README.md`) |
 
 ## The CI path
 
 `release.yml` runs `build` (cross-compile on Linux) → `macos-sign` (macOS
-runner) → `release` (checksums + draft) → `desktop-linux`. Nothing is uploaded
+runner) → `release` (checksums + draft). Nothing is uploaded
 until `macos-sign` has finished, so a release never holds unsigned macOS
 tarballs next to signed ones, and `SHA256SUMS` is computed once from the
 exact bytes that are uploaded. There is no replace-in-place step to race a
@@ -133,8 +132,7 @@ at first launch, and `install.sh` only requires the Developer ID signature
 plus strict verification. Do NOT modify the binary after submission — ship
 the exact bytes Apple scanned.
 
-(Stapling DOES work for `.app` bundles and DMGs — the desktop app path in
-`scripts/release-gui-update.sh` staples properly.)
+(Stapling DOES work for `.app` bundles and DMGs.)
 
 ### 4. Re-tar, refresh checksums, re-upload
 

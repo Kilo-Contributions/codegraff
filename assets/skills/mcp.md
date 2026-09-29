@@ -26,8 +26,8 @@ graff mcp add <name> --env KEY=VALUE -- <command> [args...]
    A name is looked up in the list at codegraff.com/mcp, then in the official
    MCP registry, where graff only picks a publisher that owns the name. If it
    lists registry candidates instead, show them to the user; do not pick one.
-   `--name <name>` overrides the inferred name. Never write the global file
-   unless the user said "every project". Do not put secrets in the chat.
+   `--name <name>` overrides the inferred name. Add `--everywhere` only
+   when the user wants it in every project (it writes ~/.codegraff/mcp.json). Do not put secrets in the chat.
 
 2. Read the result line:
    - `✓ <name> works: N tool(s) — …`: done.

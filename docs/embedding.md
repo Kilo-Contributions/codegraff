@@ -9,8 +9,8 @@ the same child.
 | `graff acp` | ACP v1 JSON-RPC, one message per line | The host wants thought / tool / text `session/update`s (Zed, a product UI) |
 | `@codegraff/sdk` `Harness` | `graff --json` — JSON requests in, JSONL events out | The host wants our event types (`text`, `tool_call`, `turn`, …) |
 
-The real ACP host in this repo is [`apps/native`](../apps/native): Next.js
-`/api/acp` → `graff acp --yolo`. Mid-turn updates map onto thinking and tool
+The desktop ACP host is [Harness](https://github.com/justrach/harness), which
+spawns `graff acp`. Mid-turn updates map onto thinking and tool
 chips (ADR [0032](adr/0032-acp-streams-mid-turn.md)). `graff serve` is not
 required.
 

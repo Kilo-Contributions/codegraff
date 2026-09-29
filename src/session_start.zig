@@ -175,7 +175,7 @@ pub fn setupWorktreeAndBanner(
         try arena.dupe(u8, wt.path)
     else if (std.process.currentPath(io, &cwd_buf)) |n|
         // Posix cwd is the spawn root. Io.Dir.cwd().realPath can name the
-        // parent host via inherited PWD (Next's apps/native) while sessions
+        // parent host via inherited PWD (a host that spawned graff) while sessions
         // still write to the requested workspace.
         try arena.dupe(u8, cwd_buf[0..n])
     else |_| if (Io.Dir.cwd().realPath(io, &cwd_buf)) |n|

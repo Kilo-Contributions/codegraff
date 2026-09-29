@@ -145,7 +145,7 @@ Hosts advertising `io.modelcontextprotocol/ui` with MIME type
 `ui://codegraff/task-result` and renders the bundled task panel in its sandbox.
 It shows completion status, configured limits, truncation, the task brief, and
 searchable output with a line-wrap control. Theme changes follow the host. The embedded conversation uses the desktop
-palette from `apps/native/app/ui-theme.css`, compiled into the MCP resource,
+palette from `src/ui_theme.css`, compiled into the MCP resource,
 with the same task chrome, user bubble and response layout.
 
 No extra server, package install, or network access is needed for the view.
@@ -192,10 +192,9 @@ Run the offline integration check with `python3 scripts/test-mcp-server.py`
 after `zig build`. It uses the local scripted model on port 1234.
 
 For the embedded view regression, run `node scripts/test-mcp-task-app.cjs`
-with the native app's Playwright dependencies and Chrome installed. It uses a
+with `@playwright/test` resolvable and Chrome installed. It uses a
 local opaque iframe and checks the handshake, presentation controls, themes,
 mobile layout, text-only rendering, cancellation notification and teardown.
 
-HTTP and setup checks: `python3 scripts/test-mcp-http.py`,
-`python3 scripts/test-install-mcp.py`, and
-`node --test apps/native/electron/mcp-install.test.cjs`.
+HTTP and setup checks: `python3 scripts/test-mcp-http.py`
+and `python3 scripts/test-install-mcp.py`.

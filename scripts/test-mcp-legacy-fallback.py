@@ -202,6 +202,9 @@ def run(graff: Path) -> None:
                     "GRAFF_FLEET": "off",
                     "GRAFF_NO_SMOLIFY": "1",
                     "GRAFF_NO_TELEMETRY": "1",
+                    # Private home: no user servers, no cached era from a past run.
+                    "HOME": str(workspace),
+                    "USERPROFILE": str(workspace),
                 }
             )
             completed = subprocess.run(

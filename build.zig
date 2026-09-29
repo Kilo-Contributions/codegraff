@@ -120,8 +120,8 @@ pub fn build(b: *std.Build) void {
     unit_tests.root_module.addImport("tui", tui_mod);
     // spec/ fixtures live outside src/; importing them here makes @embedFile
     // legal and rebuilds the suite when the exported semantics change.
-    exe.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("apps/native/app/ui-theme.css") });
-    unit_tests.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("apps/native/app/ui-theme.css") });
+    exe.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("src/ui_theme.css") });
+    unit_tests.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("src/ui_theme.css") });
     unit_tests.root_module.addAnonymousImport("spec_tool_catalog", .{ .root_source_file = b.path("spec/kernels/tool_catalog.json") });
     unit_tests.root_module.addAnonymousImport("spec_transport", .{ .root_source_file = b.path("spec/kernels/transport.json") });
     unit_tests.root_module.addAnonymousImport("spec_providers", .{ .root_source_file = b.path("spec/kernels/providers.json") });
@@ -147,12 +147,21 @@ pub fn build(b: *std.Build) void {
     const acp_startup_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-startup.py" });
     acp_startup_test.addArtifactArg(exe);
     test_step.dependOn(&acp_startup_test.step);
+    const acp_harness_room_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-harness-room.py" });
+    acp_harness_room_test.addArtifactArg(exe);
+    test_step.dependOn(&acp_harness_room_test.step);
     const acp_ask_user_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-ask-user.py" });
     acp_ask_user_test.addArtifactArg(exe);
     test_step.dependOn(&acp_ask_user_test.step);
     const mcp_client_spec_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-client-spec.py" });
     mcp_client_spec_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_client_spec_test.step);
+    const mcp_shared_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-shared.py" });
+    mcp_shared_test.addArtifactArg(exe);
+    test_step.dependOn(&mcp_shared_test.step);
+    const mcp_lazy_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-lazy.py" });
+    mcp_lazy_test.addArtifactArg(exe);
+    test_step.dependOn(&mcp_lazy_test.step);
     const mcp_add_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-add.py" });
     mcp_add_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_add_test.step);

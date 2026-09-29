@@ -26,9 +26,13 @@ pub const StdioTransport = struct {
     stdout_reader: Io.File.Reader,
 };
 
+/// A cached stdio server not spawned yet; woken before any request (mcp_lazy.zig).
+pub const DormantStdio = struct { cfg: std.json.ObjectMap };
+
 pub const Transport = union(enum) {
     stdio: StdioTransport,
     http: mcp_http.HttpTransport,
+    dormant: DormantStdio,
 };
 
 /// A property of the server, not the request (versioning § Backward
@@ -69,6 +73,7 @@ pub fn deinitServer(server: *Server, io: Io, budget: mcp_teardown.Budget) void {
     finishInitialized(server);
     switch (server.transport) {
         .stdio => |*stdio| mcp_stdio.stopChild(io, &stdio.child),
+        .dormant => {},
         .http => |*http| { // never waits on a peer: bounded by `budget` (#305)
             if (http.session_id) |session_id| http.client.allocator.free(session_id);
             http.session_id = null;
@@ -159,6 +164,7 @@ pub fn initializeServer(server: *Server, response_alloc: Allocator, session_allo
     const protocol_transport: mcp_protocol.Transport = switch (server.transport) {
         .stdio => .stdio,
         .http => .streamable_http,
+        .dormant => return error.McpServerNotStarted,
     };
     const protocol_version = try mcp_protocol.negotiatedProtocol(init_resp, protocol_transport);
     server.protocol_version = try session_alloc.dupe(u8, protocol_version);
@@ -221,6 +227,7 @@ pub fn request(server: *Server, response_alloc: Allocator, params: []const u8, m
             defer http.client.allocator.free(response_body);
             return mcp_http.parseHttpResponse(response_alloc, response_body, id) orelse error.BadMcpResponse;
         },
+        .dormant => return error.McpServerNotStarted,
     }
 }
 
@@ -248,6 +255,7 @@ pub fn notify(server: *Server, response_alloc: Allocator, method: []const u8) !v
                 http.client.allocator.free(response_body);
             }
         },
+        .dormant => return error.McpServerNotStarted,
     }
 }
 
@@ -279,7 +287,7 @@ pub fn finishInitialized(server: *Server) void {
     if (server.pending_initialized) |*fut| {
         const io = switch (server.transport) {
             .http => |*http| http.client.io,
-            .stdio => return,
+            .stdio, .dormant => return,
         };
         fut.await(io);
         server.pending_initialized = null;

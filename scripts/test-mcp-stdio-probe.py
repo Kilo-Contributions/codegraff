@@ -164,12 +164,20 @@ def run_graff(graff: Path, fixture: Path, probe: bool) -> subprocess.CompletedPr
                 "GRAFF_FLEET": "off",
                 "GRAFF_NO_SMOLIFY": "1",
                 "GRAFF_NO_TELEMETRY": "1",
+                # A private home per run: the user's own servers stay out, and
+                # the tools/list cache the gate-off run writes cannot turn the
+                # gate-on run into a cache hit that skips the probe.
+                "HOME": str(workspace),
+                "USERPROFILE": str(workspace),
             }
         )
         # The probe is ON unless GRAFF_MCP_PROBE=0, so "gate off" has to say
         # so explicitly — merely unsetting the variable ran scenario 1 with the
         # probe enabled and asserted nothing it claimed to.
         env["GRAFF_MCP_PROBE"] = "1" if probe else "0"
+        # The probe runs when a server connects. Keep the fixture from starting
+        # on first use (a cached catalog from the first scenario would).
+        env["GRAFF_MCP_EAGER"] = "1"
         return subprocess.run(
             [str(graff), "--json", "--yolo", "--model", "claude"],
             cwd=workspace,

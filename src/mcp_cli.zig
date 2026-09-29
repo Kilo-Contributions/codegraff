@@ -7,8 +7,9 @@
 //! Reads go through mcp_config.zig, so `list`, `login` and the consent count
 //! all see the workspace file merged with the user-level
 //! `~/.codegraff/mcp.json` (#345). Writes deliberately do not: `mcp add` and
-//! the `persistMcp*` helpers still target the project .mcp.json only, so
-//! adding a server to one repository never edits every other one.
+//! the `persistMcp*` helpers target the project .mcp.json, so adding a server
+//! to one repository never edits every other one, unless the person asks
+//! with `graff mcp add … --everywhere`.
 
 const std = @import("std");
 const Io = std.Io;
@@ -22,6 +23,10 @@ const mcp_config = @import("mcp_config.zig");
 const mcp_oauth = @import("mcp_oauth.zig");
 const mcp_config_path = root.mcp_config_path;
 const companion_servers = skills.companion_servers;
+
+/// Where `graff mcp add` writes: the project file, or with `--everywhere` the
+/// user-level file every workspace reads (Harness included, through graff).
+var write_path: []const u8 = mcp_config_path;
 
 fn trustedMcpEntry(name: []const u8, cfg: Value) bool {
     if (cfg != .object) return false;
@@ -65,7 +70,7 @@ pub fn persistMcpServer(io: Io, arena: Allocator, name: []const u8, command: []c
 
 fn persistMcpServerWithEnv(io: Io, arena: Allocator, name: []const u8, command: []const u8, args: []const []const u8, env: []const McpEnvPair) bool {
     var root_obj: std.json.ObjectMap = .empty;
-    if (Io.Dir.cwd().readFileAlloc(io, mcp_config_path, arena, .limited(1 << 20))) |text| {
+    if (Io.Dir.cwd().readFileAlloc(io, write_path, arena, .limited(1 << 20))) |text| {
         if (std.json.parseFromSliceLeaky(Value, arena, text, .{ .allocate = .alloc_always })) |v| {
             if (v == .object) root_obj = v.object;
         } else |_| {}
@@ -92,7 +97,7 @@ fn persistMcpServerWithEnv(io: Io, arena: Allocator, name: []const u8, command: 
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     s.write(Value{ .object = root_obj }) catch return false;
 
-    const f = Io.Dir.cwd().createFile(io, mcp_config_path, .{}) catch return false;
+    const f = Io.Dir.cwd().createFile(io, write_path, .{}) catch return false;
     defer f.close(io);
     var wbuf: [4096]u8 = undefined;
     var fw = f.writer(io, &wbuf);
@@ -105,7 +110,7 @@ fn persistMcpServerWithEnv(io: Io, arena: Allocator, name: []const u8, command: 
 /// the project .mcp.json, keeping every other server. False on any error.
 pub fn persistEntry(io: Io, arena: Allocator, name: []const u8, entry: std.json.ObjectMap) bool {
     var root_obj: std.json.ObjectMap = .empty;
-    if (Io.Dir.cwd().readFileAlloc(io, mcp_config_path, arena, .limited(1 << 20))) |text| {
+    if (Io.Dir.cwd().readFileAlloc(io, write_path, arena, .limited(1 << 20))) |text| {
         if (std.json.parseFromSliceLeaky(Value, arena, text, .{ .allocate = .alloc_always })) |v| {
             if (v == .object) root_obj = v.object;
         } else |_| {}
@@ -119,7 +124,7 @@ pub fn persistEntry(io: Io, arena: Allocator, name: []const u8, entry: std.json.
     var aw: Io.Writer.Allocating = .init(arena);
     var stringify: std.json.Stringify = .{ .writer = &aw.writer, .options = .{ .whitespace = .indent_2 } };
     stringify.write(Value{ .object = root_obj }) catch return false;
-    const file = Io.Dir.cwd().createFile(io, mcp_config_path, .{}) catch return false;
+    const file = Io.Dir.cwd().createFile(io, write_path, .{}) catch return false;
     defer file.close(io);
     var buffer: [4096]u8 = undefined;
     var writer = file.writer(io, &buffer);
@@ -133,7 +138,7 @@ pub fn persistEntry(io: Io, arena: Allocator, name: []const u8, entry: std.json.
 /// A server that wants OAuth is signed in on the spot when a person is at the
 /// terminal; an agent's shell gets the `graff mcp login` line instead.
 fn checkSaved(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, name: []const u8, out: *Io.Writer) !void {
-    const text = Io.Dir.cwd().readFileAlloc(io, mcp_config_path, arena, .limited(1 << 20)) catch return;
+    const text = Io.Dir.cwd().readFileAlloc(io, write_path, arena, .limited(1 << 20)) catch return;
     const v = std.json.parseFromSliceLeaky(Value, arena, text, .{ .allocate = .alloc_always }) catch return;
     const servers = if (v == .object) v.object.get("mcpServers") orelse return else return;
     const entry = if (servers == .object) servers.object.get(name) orelse return else return;
@@ -156,7 +161,7 @@ fn checkSaved(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, name: 
     switch (result) {
         .ok => |ok| try out.print("✓ {s} works: {d} tool(s){s}{s}\n", .{ name, ok.tools, if (ok.sample.len > 0) " — " else "", ok.sample }),
         .needs_login => try out.print("  {s} still needs sign-in: run `graff mcp login {s}`\n", .{ name, name }),
-        .failed => |err| try out.print("✗ saved {s}, but it did not connect ({t}): {s}\n  fix it and re-run `graff mcp add`, or remove it from .mcp.json\n", .{ name, err, add.failureHint(err, entry.object) }),
+        .failed => |err| try out.print("✗ saved {s}, but it did not connect ({t}): {s}\n  fix it and re-run `graff mcp add`, or remove it from {s}\n", .{ name, err, add.failureHint(err, entry.object), write_path }),
     }
 }
 
@@ -165,7 +170,7 @@ fn checkSaved(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, name: 
 /// until an authorization flow is configured.
 pub fn persistMcpUrl(io: Io, arena: Allocator, name: []const u8, url: []const u8, headers: []const McpHeaderPair) bool {
     var root_obj: std.json.ObjectMap = .empty;
-    if (Io.Dir.cwd().readFileAlloc(io, mcp_config_path, arena, .limited(1 << 20))) |text| {
+    if (Io.Dir.cwd().readFileAlloc(io, write_path, arena, .limited(1 << 20))) |text| {
         if (std.json.parseFromSliceLeaky(Value, arena, text, .{ .allocate = .alloc_always })) |v| {
             if (v == .object) root_obj = v.object;
         } else |_| {}
@@ -188,7 +193,7 @@ pub fn persistMcpUrl(io: Io, arena: Allocator, name: []const u8, url: []const u8
     var aw: Io.Writer.Allocating = .init(arena);
     var stringify: std.json.Stringify = .{ .writer = &aw.writer };
     stringify.write(Value{ .object = root_obj }) catch return false;
-    const file = Io.Dir.cwd().createFile(io, mcp_config_path, .{}) catch return false;
+    const file = Io.Dir.cwd().createFile(io, write_path, .{}) catch return false;
     defer file.close(io);
     var buffer: [4096]u8 = undefined;
     var writer = file.writer(io, &buffer);
@@ -206,6 +211,7 @@ fn mcpCliUsage(w: *Io.Writer) !void {
         \\  graff mcp import               copy Claude/Cursor MCP + skills into graff folders
         \\  graff mcp add <url | @scope/package | uvx:package | '{json}' | ->   infer, save, then connect to check it
         \\  graff mcp add <name> [--env K=V] [--header K=V]   look up a server (codegraff.com/mcp, then the MCP registry)
+        \\  graff mcp add … --everywhere   save to ~/.codegraff/mcp.json (every project) instead of ./.mcp.json
         \\  graff mcp add <name> --url <https://...> [--header KEY=VALUE ...]
         \\  graff mcp login <name>        OAuth login for a remote server
         \\  graff mcp add <name> [--env KEY=VALUE ...] -- <command> [args...]
@@ -253,14 +259,14 @@ fn addInferred(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, envir
     } else return false;
     for (entries) |e| {
         if (e.cfg.get("url")) |u| if (!mcp.validRemoteUrl(u.string)) std.process.fatal("mcp add: {s}: URL must use HTTPS (HTTP is allowed only for localhost)", .{e.name});
-        if (!persistEntry(io, arena, e.name, e.cfg)) std.process.fatal("mcp add: could not write .mcp.json", .{});
+        if (!persistEntry(io, arena, e.name, e.cfg)) std.process.fatal("mcp add: could not write {s}", .{write_path});
         if (e.cfg.get("url")) |u| {
-            try out.print("✓ added {s} ({s}) to .mcp.json\n", .{ e.name, u.string });
+            try out.print("✓ added {s} ({s}) to {s}\n", .{ e.name, u.string, write_path });
         } else {
             try out.print("✓ added {s} (", .{e.name});
             try out.writeAll(e.cfg.get("command").?.string);
             if (e.cfg.get("args")) |argv| for (argv.array.items) |x| try out.print(" {s}", .{x.string});
-            try out.writeAll(") to .mcp.json\n");
+            try out.print(") to {s}\n", .{write_path});
         }
         if (verify_after) try checkSaved(io, gpa, arena, home, e.name, out);
     }
@@ -337,6 +343,15 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         return;
     }
 
+    if (std.mem.eql(u8, args[0], "attach") or std.mem.eql(u8, args[0], "broker")) {
+        // Internal: the relay and the per-machine broker of a `"shared": true` server.
+        const share = @import("mcp_share.zig");
+        const idle_s = std.fmt.parseInt(u32, environ_map.get("GRAFF_MCP_SHARED_IDLE_S") orelse "60", 10) catch 60;
+        const run = if (args[0][0] == 'a') share.attach(io, gpa, arena, home, args[1..]) else share.broker(io, gpa, arena, home, idle_s, args[1..]);
+        run catch |err| std.process.fatal("mcp {s}: {t}", .{ args[0], err });
+        return;
+    }
+
     if (std.mem.eql(u8, args[0], "login")) {
         if (args.len != 2) {
             try out.interface.writeAll("usage: graff mcp login <name>\n");
@@ -380,6 +395,10 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
                 break;
             } else if (std.mem.eql(u8, args[k], "--no-verify")) {
                 verify_after = false;
+            } else if (std.mem.eql(u8, args[k], "--everywhere") or std.mem.eql(u8, args[k], "--global")) {
+                write_path = mcp_config.globalPath(arena, home, environ_map) orelse
+                    std.process.fatal("mcp add: --everywhere needs a home directory", .{});
+                if (std.fs.path.dirname(write_path)) |dir| Io.Dir.cwd().createDirPath(io, dir) catch {};
             } else if (std.mem.eql(u8, args[k], "--name") and k + 1 < args.len) {
                 k += 1;
                 name_flag = args[k];
@@ -418,8 +437,8 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
             const eq = std.mem.indexOfScalar(u8, raw, '=') orelse std.process.fatal("mcp add: --header expects KEY=VALUE", .{});
             try headers.append(arena, .{ .key = raw[0..eq], .value = raw[eq + 1 ..] });
         }
-        if (!persistMcpUrl(io, arena, name, url, headers.items)) std.process.fatal("could not write .mcp.json", .{});
-        try out.interface.print("saved Streamable HTTP MCP server '{s}' to .mcp.json\n", .{name});
+        if (!persistMcpUrl(io, arena, name, url, headers.items)) std.process.fatal("could not write {s}", .{write_path});
+        try out.interface.print("saved Streamable HTTP MCP server '{s}' to {s}\n", .{ name, write_path });
         if (verify_after) try checkSaved(io, gpa, arena, home, name, &out.interface);
         try out.interface.flush();
         return;
@@ -460,8 +479,8 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         }
     }
     if (!persistMcpServerWithEnv(io, arena, name, command, command_args, env_pairs.items))
-        std.process.fatal("mcp add: failed to write .mcp.json", .{});
-    try out.interface.print("✓ added MCP server {s} to .mcp.json\n", .{name});
+        std.process.fatal("mcp add: failed to write {s}", .{write_path});
+    try out.interface.print("✓ added MCP server {s} to {s}\n", .{ name, write_path });
     if (verify_after) try checkSaved(io, gpa, arena, home, name, &out.interface);
     try out.interface.writeAll("  a running session connects it before its next request; otherwise `/mcp trust` if startup is waiting for consent.\n");
     try out.interface.flush();

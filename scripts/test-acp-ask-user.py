@@ -3,7 +3,7 @@
 
 - no capability: the tool returns at once and the turn ends (no freeze)
 - clientCapabilities.elicitation.form: standard elicitation/create, answer flows back
-- _meta["graff/askUser"]: graff's gui_ask_user + session/answer (apps/native)
+- _meta["graff/askUser"]: graff's gui_ask_user + session/answer
 - a `questions: [{question, options: [{label}]}]` call still carries its
   question and choices to the form (#1308)
 """

@@ -2,9 +2,9 @@
 """Offline engine integration: render_html -> one private snapshot -> model-safe text.
 
 Mirrors scripts/test-mcp-apps.py for the model's own drawing surface. The
-checks that matter are the ones the GUI depends on: the result text carries
+checks that matter are the ones a client depends on: the result text carries
 the opaque `[Rendered view](.../.graff/views/<id>.html)` marker (the exact
-shape apps/native/lib/mcp-apps.ts matches), the file is the model's page
+shape a client matches), the file is the model's page
 byte-for-byte with no host wrapper, it is private, and the page does not come
 back to the model a second time.
 """

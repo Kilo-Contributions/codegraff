@@ -24,7 +24,8 @@ pub fn promptTurn(d: *engine.Dispatch, arena: Allocator, w: *Io.Writer, req: pro
     const config_before = engine.configOptions(d, arena) catch |err|
         return engine.respondError(w, req, proto.err_internal, @errorName(err));
     const workspace_before = acp_workspace.snapshot(d.workspace, arena);
-    const text = try proto.flattenPrompt(arena, prompt);
+    // Before slash handling: an agent's room line must not run as a command.
+    const text = try @import("acp_room.zig").frame(arena, req.params, try proto.flattenPrompt(arena, prompt));
     var id_buf: [48]u8 = undefined;
     const message_id = v2.mint(&id_buf, "user");
     if (req.id != null) try proto.writeResult(w, req.id, .{ .messageId = message_id });
