@@ -71,7 +71,7 @@ fn mentions(contents: []const []const u8, content: []const u8) bool {
 /// back with thirteen [x] entries spanning goals that had nothing to do with the
 /// prompt in front of the model, and every new prompt inherited the pile.
 /// The boundary is the cheapest honest one available in the loop: a user turn
-/// (goal_state.beginTurn's `new_ask` - never a /loop continuation, which is the
+/// (goal_state.beginTurn's `new_ask` - never a run's continuation, which is the
 /// same ask still running) whose current epoch is FULLY completed. An unfinished
 /// checklist is live work and crosses the turn untouched, which is what the
 /// compaction handoff and every cross-turn resume depend on.
@@ -104,7 +104,7 @@ pub const WriteResult = struct { text: []const u8, rejected: bool = false, dropp
 /// items without a content string) is REJECTED without touching anything:
 /// under the preserve rule it would have left the epoch holding only
 /// completed survivors - allDone true, todos_dirty true - so one malformed
-/// call ended a /loop as accepted and retired the goal (#318, proven by the
+/// call ended a run as accepted and retired the goal (#318, proven by the
 /// round-4 verifier). It must also never count as completion evidence, so
 /// noteTodoWrite runs only on the accepted path.
 pub fn applyTodoWrite(root: *Agent, list: ?Value) !WriteResult {
@@ -269,7 +269,7 @@ test "a write with zero usable items is rejected untouched, never completion evi
     // The round-4 verifier's exact trace: under the preserve rule, an empty or
     // malformed write used to strip the open items and leave only completed
     // survivors - allDone true, todos_dirty true - so one typo'd call ended a
-    // /loop as accepted and retired the goal. It is rejected outright instead.
+    // run as accepted and retired the goal. It is rejected outright instead.
     for ([_]?Value{ try todosArg(ar, "{\"todos\":[]}"), null, try todosArg(ar, "{\"todos\":[{\"status\":\"pending\"}]}") }) |bad| {
         const r = try applyTodoWrite(&root, bad);
         try std.testing.expect(r.rejected);

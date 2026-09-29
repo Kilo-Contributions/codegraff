@@ -77,7 +77,7 @@ pub fn run(ctx: *Ctx) !void {
     defer @import("line_repl_terminal.zig").release(ctx.out); // #396: registered LAST so LIFO runs it FIRST — the tty goes back before the save/telemetry/learning phases that can take seconds
     var prev_turn_id: u64 = 0;
     var prev_prompt_fp: [16]u8 = scoring.promptFingerprint(ctx.root.systemPrompt());
-    // Armed only after a clean /loop turn and consumed by the next read (#226).
+    // Armed only after a clean /goal run turn and consumed by the next read (#226).
     var loop_run: @import("loop_run.zig").LoopRun = .{};
 
     while (true) {
@@ -88,9 +88,9 @@ pub fn run(ctx: *Ctx) !void {
         repl_glue.resetSteerPartial();
         const steer_entry: ?repl_glue.SteerEntry = repl_glue.popSteer();
         defer if (steer_entry) |e| std.heap.page_allocator.free(e.text);
-        var is_loop_continuation = false; // #226: this iteration is an autonomous /loop continuation turn
+        var is_loop_continuation = false; // #226: this iteration is an autonomous run's continuation turn
         const raw_line: []const u8 = if (steer_entry) |e| blk: {
-            loop_run.cancel(ctx.root); // #226: a user steer/force cancels the autonomous /loop run
+            loop_run.cancel(ctx.root); // #226: a user steer/force cancels the autonomous run
             if (e.force) {
                 try ctx.out.print("{s}↳ force ›{s} {s}\n", .{ style.yellow, style.reset, e.text });
             } else {
@@ -99,7 +99,7 @@ pub fn run(ctx: *Ctx) !void {
             try ctx.out.flush();
             break :blk e.text;
         } else if (loop_run.armed) blk: {
-            // #226: autonomous /loop continuation — synthesize the next turn from the
+            // #226: autonomous run continuation — synthesize the next turn from the
             // continuation steering note instead of reading a new user line.
             is_loop_continuation = true;
             break :blk try loop_run.continuation(ctx.arena, ctx.root, util.unixMs(ctx.io), "");
@@ -117,11 +117,11 @@ pub fn run(ctx: *Ctx) !void {
         recap_jobs.poll(ctx);
         const line = std.mem.trim(u8, raw_line, " \t\r");
         if (line_repl_disclosure.handleInput(ctx.root.io, ctx.out, line)) continue;
-        // `/goal [30m] <objective>` and `/loop [30m] <prompt>` are ONE autonomous run: same
-        // plan-act-verify machine, same controller, same optional wall clock. Only /goal also
-        // adopts a standing objective (goal_pacing.autonomousFromLine).
+        // `/goal [30m] <objective>` adopts the objective and starts ONE autonomous run: the
+        // plan-act-verify machine, its controller and an optional wall clock. A continuation
+        // turn stays in its run (goal_pacing.autonomousFromLine).
         const goal_objective: ?[]const u8 = if (main_mod.json_mode) null else repl_glue.goalPromptFromLine(line);
-        const auto: ?goal_pacing.Autonomous = if (main_mod.json_mode) null else try goal_pacing.autonomousFromLine(ctx.arena, line, goal_objective);
+        const auto: ?goal_pacing.Autonomous = if (main_mod.json_mode) null else try goal_pacing.autonomousFromLine(ctx.arena, line, goal_objective, is_loop_continuation);
         const loop_prompt: ?[]const u8 = if (auto) |a| a.prompt else null;
         // A fresh line starts (or ends) a run: wall clock begins here; stale todos_dirty is
         // dropped, and an armed budget is echoed — a silently-eaten "5m" reads like a truncated prompt.
@@ -321,7 +321,7 @@ pub fn run(ctx: *Ctx) !void {
         );
         if (eval_note.len > 0) goal_msg = try std.fmt.allocPrint(ctx.arena, "{s}\n\n{s}", .{ goal_msg, eval_note });
 
-        // /goal and /loop both ask the model to work autonomously (plan→act→verify).
+        // A /goal run asks the model to work autonomously (plan→act→verify).
         const loop_msg: []const u8 = if (loop_prompt != null) try std.fmt.allocPrint(ctx.arena,
             \\{s}
             \\
@@ -555,8 +555,8 @@ pub fn run(ctx: *Ctx) !void {
             ctx.root.autocompact(session_context_tokens); // loop_run.list re-carries via root.history_rewrites, incl. MID-turn rewrites this block never sees (#318)
         }
 
-        // #226: /loop controller-authorized continuation. After a cleanly-
-        // completed autonomous /loop turn the CONTROLLER decides whether to run
+        // #226: controller-authorized continuation. After a cleanly-
+        // completed autonomous run turn the CONTROLLER decides whether to run
         // another turn — not the model merely stopping (loop_run.zig). The armed
         // continuation is consumed at the next read, so an interrupted/errored
         // turn (which `continue`s past here) never resumes the loop; a run with

@@ -145,7 +145,7 @@ const meta_specs = [_]ToolSpec{
     .{ .name = mcp_select.select_name, .desc = mcp_select.select_desc, .schema = mcp_select.select_schema },
     .{
         .name = "clock_sleep",
-        .desc = "Pause the current turn for up to 12 hours of wall-clock time; interruptible by user input, and reported as a normal (non-error) result either way. For autonomous /loop runs that need to wait before re-checking something (e.g. a long external job). Root-only; off unless --clock-sleep/GRAFF_CLOCK_SLEEP=1 is set.",
+        .desc = "Pause the current turn for up to 12 hours of wall-clock time; interruptible by user input, and reported as a normal (non-error) result either way. For autonomous /goal runs that need to wait before re-checking something (e.g. a long external job). Root-only; off unless --clock-sleep/GRAFF_CLOCK_SLEEP=1 is set.",
         .schema =
         \\{"type": "object", "properties": {"ms": {"type": "integer", "description": "Milliseconds to sleep (0 returns immediately; clamped to the 12h/43200000ms cap)"}, "reason": {"type": "string", "description": "Optional: why you're sleeping, for the trace/UX"}}, "required": ["ms"]}
         ,

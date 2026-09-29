@@ -7,7 +7,7 @@ or --json path before src/mainloop.zig even exists, so nothing headless can
 reach the WIRING: whether typing `/goal <objective>` in the interactive REPL
 actually adopts a standing goal AND fires a turn, whether a duration prefix
 is stripped before the objective is recorded, and whether the continuation
-turn the /loop controller queues really carries the pacing note. This drives
+turn the run controller queues really carries the pacing note. This drives
 a real PTY against a scripted codex mock and inspects what was SENT, the
 only way to prove the seam in mainloop.zig (`goal_pacing.autonomousFromLine`
 -> `goal_flow.loopTurnDecision` -> the synthesized continuation line) is
@@ -20,7 +20,7 @@ fixed input sequence below):
   2  second exchange of that same turn, after the tool result -> a final
      message with no further tool call. tool_calls_this_turn ends at 1, so
      goal_flow.loopTurnDecision authorizes one continuation.
-  3  the synthesized continuation turn ("/loop [continuing...]\\n[pace: ...]")
+  3  the synthesized continuation turn ("[continuing...]\\n[pace: ...]")
      -> a final message with no tool call, so tool_calls_this_turn is 0 and
      the loop stops `idle` (clean, no 25-iteration runaway).
   4  the "/goal 30m ship the thing" turn -> a final message with no tool
@@ -139,7 +139,7 @@ def main() -> None:
                 # the /goal command line.
                 cursor = len(session.raw)
                 session.send_line("/goal 30m ship the thing")
-                session.wait_for_literal("/loop budget: 30m", start=cursor)
+                session.wait_for_literal("run budget: 30m", start=cursor)
                 session.wait_for_literal("Goal set: ship the thing", start=cursor)
                 session.wait_for_literal("run stopped — idle", start=cursor, timeout=10.0)
                 session.wait_for_prompt(start=cursor)
@@ -177,7 +177,7 @@ def main() -> None:
         raise AssertionError("the standing-goal steering note was not sent on the /goal turn")
 
     # 3. The continuation turn (request 3: turn 1's tool call authorized exactly
-    # one continuation) carries the pacing line — proof the /loop controller,
+    # one continuation) carries the pacing line — proof the run controller,
     # not just the parser, actually ran.
     continuation = json.dumps(requests[2].body)
     if "continuation" not in continuation or "elapsed" not in continuation:

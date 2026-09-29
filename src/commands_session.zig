@@ -1,5 +1,5 @@
 //! Session/environment slash commands, split out of main.zig's handleCommand
-//! (600-line goal, issue #123): /clear /new /rename /goal /loop /bash /agents
+//! (600-line goal, issue #123): /clear /new /rename /goal /bash /agents
 //! /animation /theme /hooks /skills /plan (/trajectory lives in commands_trajectory.zig), plus #554's /snapshot
 //! and the snapshot half of /rewind (dispatched to commands_sandbox.zig).
 
@@ -68,7 +68,7 @@ const setTerminalTitle = title_mod.setTerminalTitle;
 pub fn resetConversationSteering(root: *Agent) void {
     root.goal = null;
     root.completion_gate_armed = false; // a dropped goal re-arms the completion double-check (#318)
-    root.todos_dirty = false; // the conversation's checklist dies with it; nothing survives as /loop evidence (#318)
+    root.todos_dirty = false; // the conversation's checklist dies with it; nothing survives as run evidence (#318)
     root.ultracode_mode = false;
     root.pending_goal_note = null; // a queued supersession note dies with the conversation (#318)
     root.goal_note_fp = 0;
@@ -235,10 +235,10 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
         try out.flush();
         return true;
     }
-    if (std.mem.eql(u8, line, "/loop")) {
-        // "stops it when the time is up" overpromised: the deadline is checked
-        // between turns, so a long turn runs to completion past it.
-        try out.writeAll("usage: /loop [30m] <prompt> — run an autonomous plan→act→verify pass. A leading 30s/30m/2h paces the run and stops it at the first turn boundary after the time is up.\n");
+    if (std.mem.eql(u8, line, "/loop") or std.mem.startsWith(u8, line, "/loop ")) {
+        // Retired (ADR 0216): a run continues when its background work
+        // reports, and /goal is the autonomous run.
+        try out.writeAll("/loop was removed. Ask directly: a run continues when its background work reports. For autonomous work toward an objective, use /goal [30m] <objective>.\n");
         try out.flush();
         return true;
     }

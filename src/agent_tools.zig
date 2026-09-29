@@ -310,7 +310,7 @@ pub fn handleMeta(self: *Agent, call: ToolCall) !ExecResult {
                 "completion blocked: the latest verifier contradicted the plan; repair the failure and run eval until it meets the target"
             else
                 "completion blocked: workspace state is not verified; run eval and meet the target after the final change";
-            self.completion_refused = true; // blocked, not silence: attempt_completion skips the tool counter, and /loop must give the model a turn to run eval (#318)
+            self.completion_refused = true; // blocked, not silence: attempt_completion skips the tool counter, and the run must give the model a turn to run eval (#318)
             return .{ .text = message, .is_error = true };
         }
         if (try goal_verify.completionGate(self.arena, self)) |refusal| {

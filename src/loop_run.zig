@@ -1,13 +1,13 @@
-//! One line-REPL /loop run (#226): its iteration credits, the queued
+//! One line-REPL autonomous /goal run (#226): its iteration credits, the queued
 //! continuation, the checklist gate and the wall clock. Moved out of
 //! mainloop.zig (600-line cap) when #1278 added the hold.
 //!
-//! #1278: a loop turn that only started or waited on background work makes no
+//! #1278: a run turn that only started or waited on background work makes no
 //! tool calls, so the controller read it as `idle` and ended the run. The
-//! work's completion wake then ran as an ordinary turn, outside the loop's
+//! work's completion wake then ran as an ordinary turn, outside the run's
 //! credits and steering. Now, while the root still owns a running shell job or
 //! background subagent that will report, the run holds instead: the next idle
-//! wake continues it as a loop turn. A typed line ends the hold like a steer.
+//! wake continues it as a run turn. A typed line ends the hold like a steer.
 
 const std = @import("std");
 const Io = std.Io;
@@ -28,7 +28,7 @@ pub const LoopRun = struct {
     armed: bool = false, // a continuation turn is queued for the next read
     holding: bool = false, // #1278: waiting for the root's background work to report
     list: goal_flow.LoopListGate = .{}, // diff-gate for the checklist copy (#318)
-    clock: goal_pacing.LoopClock = .{}, // `/loop 30m <prompt>` deadline + pacing
+    clock: goal_pacing.LoopClock = .{}, // `/goal 30m <objective>` deadline + pacing
 
     /// A user steer or typed line, or the run's end: nothing continues.
     pub fn cancel(self: *LoopRun, root: *Agent) void {
@@ -49,8 +49,8 @@ pub const LoopRun = struct {
         // it changed or a history rewrite destroyed the pasted copies (#318).
         const note = try self.list.note(arena, root);
         const pace = try goal_pacing.pacingNote(arena, now_ms, self.clock, iter_cap - self.iters_left, iter_cap);
-        if (wake.len == 0) return std.fmt.allocPrint(arena, "/loop {s}\n{s}", .{ note, pace });
-        return std.fmt.allocPrint(arena, "/loop {s}\n\n{s}\n{s}", .{ wake, note, pace });
+        if (wake.len == 0) return std.fmt.allocPrint(arena, "{s}\n{s}", .{ note, pace });
+        return std.fmt.allocPrint(arena, "{s}\n\n{s}\n{s}", .{ wake, note, pace });
     }
 
     /// A line read while holding. An idle wake (the work reporting) continues
@@ -68,7 +68,7 @@ pub const LoopRun = struct {
         return try self.continuation(arena, root, now_ms, line);
     }
 
-    /// After a clean /loop turn the CONTROLLER decides whether another runs,
+    /// After a clean run turn the CONTROLLER decides whether another runs,
     /// not the model merely stopping (goal_flow.loopTurnDecision).
     pub fn afterTurn(self: *LoopRun, root: *Agent, io: Io, out: *Io.Writer, is_continuation: bool) !void {
         if (!is_continuation) {
@@ -144,7 +144,7 @@ test "#1278: a wake during a hold continues the run; a typed line or a spent run
 
     var run: LoopRun = .{ .iters_left = 3, .holding = true };
     const line = (try run.afterRead(arena, &root, 1_000, wake, true)).?;
-    try std.testing.expect(std.mem.startsWith(u8, line, "/loop " ++ wake ++ "\n\n[continuing autonomously (/loop)"));
+    try std.testing.expect(std.mem.startsWith(u8, line, wake ++ "\n\n[continuing autonomously:"));
     try std.testing.expect(!run.holding and run.iters_left == 2);
 
     var typed: LoopRun = .{ .iters_left = 3, .holding = true };

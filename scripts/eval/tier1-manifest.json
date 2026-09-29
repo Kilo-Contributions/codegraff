@@ -35,18 +35,18 @@
     },
     {
       "id": "loop-expired",
-      "test": "/loop: a passed wall-clock deadline stops as expired and flips nothing",
+      "test": "goal run: a passed wall-clock deadline stops as expired and flips nothing",
       "why": "6300514: a timed run past its deadline must stop as expired, not as accepted."
     },
     {
       "id": "loop-idle",
-      "test": "/loop: a restored all-[x] list is idle, not accepted (#318)",
-      "why": "#318: a leftover finished checklist ended a fresh /loop at iteration 1."
+      "test": "goal run: a restored all-[x] list is idle, not accepted (#318)",
+      "why": "#318: a leftover finished checklist ended a fresh run at iteration 1."
     },
     {
       "id": "goal-loop-one-run",
-      "test": "/goal and /loop produce the same run; only /goal adopts the objective",
-      "why": "010b9ad: /goal and /loop are one autonomous run; they must not drift apart."
+      "test": "/goal is the one autonomous run; /loop no longer starts one",
+      "why": "010b9ad, ADR 0216: /goal is the autonomous run; the retired /loop must not come back as a second entry point."
     },
     {
       "id": "compaction-keeps-goal",
@@ -61,7 +61,7 @@
     {
       "id": "child-deadline",
       "test": "childTaskPrompt: the same absolute deadline reaches every child, minus a margin",
-      "why": "d33c4a4: a timed /loop must hand its deadline down, or children outlive the run."
+      "why": "d33c4a4: a timed /goal run must hand its deadline down, or children outlive the run."
     },
     {
       "id": "cache-affinity-scratch",

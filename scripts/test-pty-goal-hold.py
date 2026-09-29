@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Real-PTY regression for #1278: /loop holds for its own background work.
+"""Real-PTY regression for #1278: a /goal run holds for its own background work.
 
-A /loop turn that starts a background shell job yields the prompt at once
+A run turn that starts a background shell job yields the prompt at once
 (subagent_interactive), so the turn makes no further model call and the
 controller used to read it as `idle` and end the run. The job's completion
-wake then ran as an ordinary turn, outside the loop's credits and steering.
+wake then ran as an ordinary turn, outside the run's credits and steering.
 
 Mock script (by request ordinal):
-  1  "/loop wait for the build" -> one shell call with run_in_background.
+  1  "/goal wait for the build" -> one shell call with run_in_background.
      The turn yields; the job (a short sleep) is still running, so the run
      must HOLD instead of stopping.
   2  the job's completion wake -> a final message with no tool call. It must
-     arrive as a /loop continuation: the wake text plus the continuation
+     arrive as a run continuation: the wake text plus the continuation
      steering and pacing note. With the job gone, the run then stops idle.
 """
 
@@ -55,11 +55,11 @@ def main() -> None:
     mock = CodexMock(events_for_request=events)
     port = mock.start()
     try:
-        with tempfile.TemporaryDirectory(prefix="graff-loop-hold-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="graff-goal-hold-") as tmp:
             codex_home = os.path.join(tmp, "codex-home")
             os.makedirs(codex_home)
             with open(os.path.join(codex_home, "auth.json"), "w", encoding="utf-8") as fh:
-                json.dump({"tokens": {"access_token": "loop-hold-mock", "account_id": "acct-loop-hold"}}, fh)
+                json.dump({"tokens": {"access_token": "goal-hold-mock", "account_id": "acct-goal-hold"}}, fh)
             harness_dir = os.path.join(tmp, ".harness")
             os.makedirs(harness_dir)
             with open(os.path.join(harness_dir, "settings.json"), "w", encoding="utf-8") as fh:
@@ -89,7 +89,7 @@ def main() -> None:
             ) as session:
                 session.wait_for_prompt()
                 cursor = len(session.raw)
-                session.send_line("/loop wait for the build")
+                session.send_line("/goal wait for the build")
                 session.wait_for_literal("run waiting", start=cursor, timeout=15.0)
                 # The job's wake continues the run; with the job gone it stops idle.
                 session.wait_for_literal("run stopped — idle", start=cursor, timeout=20.0)
@@ -105,10 +105,10 @@ def main() -> None:
     if len(requests) != 2:
         raise AssertionError(f"expected exactly 2 model requests, got {len(requests)}")
     wake_turn = json.dumps(requests[1].body)
-    for needle in ("HOLD_BUILD_DONE", "continuing autonomously (/loop)", "[pace: continuation"):
+    for needle in ("HOLD_BUILD_DONE", "continuing autonomously", "[pace: continuation"):
         if needle not in wake_turn:
-            raise AssertionError(f"the wake turn did not continue the /loop run ({needle!r} missing): {wake_turn[-600:]!r}")
-    print("ok    /loop holds for its background job, and the job's wake continues the run with its steering")
+            raise AssertionError(f"the wake turn did not continue the /goal run ({needle!r} missing): {wake_turn[-600:]!r}")
+    print("ok    a /goal run holds for its background job, and the job's wake continues the run with its steering")
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@
 //! The cost of that layering, stated rather than hidden: a worker whose stream
 //! stalls hopelessly now spends up to 3 asks x (1 + 2 reconnects) instead of
 //! 1 x 3 before giving up. That ceiling is fixed, it is the price of not
-//! discarding a nearly-finished worker over one bad socket, and a /loop
+//! discarding a nearly-finished worker over one bad socket, and a run
 //! deadline (pastDeadline) cuts it short whenever the run has one.
 
 const std = @import("std");
@@ -153,7 +153,7 @@ pub fn backoffMs(kind: FailKind, attempts_done: u8) u64 {
     };
 }
 
-/// A /loop deadline the run has already passed buys nothing by being waited
+/// A run deadline that has already passed buys nothing by being waited
 /// out — the parent will discard the late answer anyway. Pure so the call site
 /// stays testable without a clock.
 pub fn pastDeadline(now_ms: i64, deadline_ms: ?i64) bool {
@@ -292,7 +292,7 @@ test "backoffMs: bounded waits; a named limit waits longer than a flake" {
     }
 }
 
-test "pastDeadline: no /loop deadline never blocks a retry; a passed one always does" {
+test "pastDeadline: no run deadline never blocks a retry; a passed one always does" {
     try std.testing.expect(!pastDeadline(1_000, null));
     try std.testing.expect(!pastDeadline(999, 1_000));
     try std.testing.expect(pastDeadline(1_000, 1_000));

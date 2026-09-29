@@ -166,15 +166,15 @@ pub fn applyGoalSet(root: *Agent, objective: []const u8, now_ms: i64) GoalSetRes
     return .{ .superseded = superseded, .parked_open = parked_open };
 }
 
-/// The /loop controller's per-turn decision, assembled from root state. Split
+/// The autonomous run controller's per-turn decision, assembled from root state. Split
 /// out of mainloop (#318) so the composition itself is testable: which turns
 /// count as work, which count as silence, and which goal status is read.
 /// work_done is the only evidence that may complete the goal and the only
 /// thing that earns `accepted` - a checklist restored from disk is not it
 /// (checklistFinished gates on this-process freshness). A zero-tool turn ends
-/// the LOOP as `idle` (codex RegularTask semantics: no /loop burns 25
+/// the LOOP as `idle` (codex RegularTask semantics: no run burns 25
 /// continuations on a one-turn prompt), but a REFUSED attempt_completion is
-/// work, not silence. A session with no goal reads as .active, so a bare /loop
+/// work, not silence. A session with no goal reads as .active, so a goal-less run
 /// is governed by its work and its iteration bound alone.
 pub fn loopTurnDecision(root: *Agent, iters_left: u32, now_ms: i64) repl_glue.ContinuationDecision {
     if (@import("subagent_interactive.zig").enabled.load(.acquire) and @import("subagent_interactive.zig").yielded) return .{ .stop = .idle };
@@ -195,12 +195,12 @@ pub fn loopTurnDecision(root: *Agent, iters_left: u32, now_ms: i64) repl_glue.Co
     return d;
 }
 
-/// The steering appended to each autonomous /loop continuation turn (the
+/// The steering appended to each autonomous run's continuation turn (the
 /// continuation_steering_item analog): keep working the checklist, verify, and
 /// stop only when done or blocked - not a per-turn user note. Moved here from
 /// repl_glue.zig, which is at the 600-line cap.
 /// `paste_list` is the diff-gate's verdict (goal_state.steeringGate over the
-/// render). It used to be unconditional, so a 25-iteration /loop wrote up to 25
+/// render). It used to be unconditional, so a 25-iteration run wrote up to 25
 /// near-identical checklist copies into root.messages - autosaved, and fed
 /// verbatim into the next compaction's summary input. That is the exact
 /// re-pasting this branch removed from the goal note, left behind in its one
@@ -210,13 +210,13 @@ pub fn loopTurnDecision(root: *Agent, iters_left: u32, now_ms: i64) repl_glue.Co
 /// copies died with the old history.
 pub fn continuationSteeringNote(arena: Allocator, todos_render: []const u8, paste_list: bool) ![]const u8 {
     if (todos_render.len == 0)
-        return "[continuing autonomously (/loop): make the next concrete step toward the goal, then verify it. Do not ask for confirmation between routine steps. Stop only when the work is complete or you hit a blocker that needs the user.]";
+        return "[continuing autonomously: make the next concrete step toward the goal, then verify it. Do not ask for confirmation between routine steps. Stop only when the work is complete or you hit a blocker that needs the user.]";
     if (!paste_list)
-        return "[continuing autonomously (/loop): keep working the current checklist (unchanged, see your latest todo_write result, or call todo_read) - do the next incomplete item, mark it in_progress then completed, and verify. Do not ask for confirmation between routine steps. Stop only when every item is done or you are blocked.]";
-    return std.fmt.allocPrint(arena, "[continuing autonomously (/loop): keep working the checklist below — do the next incomplete item, mark it in_progress then completed, and verify. Do not ask for confirmation between routine steps. Stop only when every item is done or you are blocked.\n\nChecklist so far:\n{s}]", .{todos_render});
+        return "[continuing autonomously: keep working the current checklist (unchanged, see your latest todo_write result, or call todo_read) - do the next incomplete item, mark it in_progress then completed, and verify. Do not ask for confirmation between routine steps. Stop only when every item is done or you are blocked.]";
+    return std.fmt.allocPrint(arena, "[continuing autonomously: keep working the checklist below — do the next incomplete item, mark it in_progress then completed, and verify. Do not ask for confirmation between routine steps. Stop only when every item is done or you are blocked.\n\nChecklist so far:\n{s}]", .{todos_render});
 }
 
-/// Loop-LOCAL diff-gate state for the checklist copy in the /loop continuation
+/// Run-LOCAL diff-gate state for the checklist copy in the run's continuation
 /// prompt (#318). Deliberately not an Agent field and never persisted: it
 /// describes what THIS run has already handed the model, so a fresh run, a
 /// user steer, a stop and a compaction all reset it.
@@ -248,7 +248,7 @@ pub const LoopListGate = struct {
     }
 };
 
-/// The goal-side effect of a /loop run that stopped as `accepted`: the loop
+/// The goal-side effect of a run that stopped as `accepted`: the run
 /// drove the objective to done, so it retires. Returns true when it flipped.
 /// A standing --goal is the user's policy for the whole session and outlives
 /// any single completion (#318); a paused or already-complete goal is not the
@@ -294,7 +294,7 @@ test "a --goal standing objective outlives the model's own completion (#318)" {
 
     // The completion CLAIM is double-checked exactly like a /goal objective:
     // an unearned "done" is worst in the flag's own headless sessions, where it
-    // ended a /loop as accepted with open work. Only RETIREMENT is exempt.
+    // ended a run as accepted with open work. Only RETIREMENT is exempt.
     const r1 = try goal_state.completionGate(ar, &root);
     try std.testing.expect(r1 != null and std.mem.indexOf(u8, r1.?, "no checklist") != null);
     try std.testing.expect(std.mem.indexOf(u8, r1.?, "keeps steering") != null); // the refusal never promises a close
@@ -365,9 +365,9 @@ test "--goal seeded onto a resumed session lands above every restored epoch (#31
     try std.testing.expectEqual(@as(usize, 2), root.todos.items.len); // and nothing was deleted
 }
 
-test "a leftover complete goal cannot end a fresh /loop at iteration 1 (#318)" {
+test "a leftover complete goal cannot end a fresh run at iteration 1 (#318)" {
     // After a resume reconciliation - or any earlier run that retired the goal -
-    // root.goal is .complete while a NEW /loop starts. The controller read the
+    // root.goal is .complete while a NEW run starts. The controller read the
     // status before the work and stopped at its first decision as `accepted`, so
     // a run that had done nothing reported success.
     const zero_tools = repl_glue.turnStopped(0, false);
@@ -402,7 +402,7 @@ test "a cleared goal's finished checklist cannot be reborn as the next goal's li
 
     // /goal B. nextEpoch used to read the live goal only, so this was epoch 1
     // again and B inherited A's finished list: born done, the first
-    // attempt_completion accepted with zero work, and a /loop under B stopped
+    // attempt_completion accepted with zero work, and a run under B stopped
     // at iteration 1 as `accepted` while flipping B to complete.
     const epoch_b = goal_state.nextEpoch(root.goal, root.todos.items);
     try std.testing.expectEqual(@as(u64, 2), epoch_b);
@@ -411,7 +411,7 @@ test "a cleared goal's finished checklist cannot be reborn as the next goal's li
     try std.testing.expect(!goal_state.hasCurrent(root.todos.items, epoch_b)); // B starts with no plan
     const refusal = try goal_state.completionGate(ar, &root);
     try std.testing.expect(refusal != null and std.mem.indexOf(u8, refusal.?, "no checklist") != null);
-    try std.testing.expect(!goal_state.checklistFinished(&root)); // and no all-done list for /loop to read
+    try std.testing.expect(!goal_state.checklistFinished(&root)); // and no all-done list for the run to read
     // A's work is retained and parked, exactly where it was left.
     try std.testing.expectEqual(@as(usize, 1), root.todos.items.len);
     try std.testing.expectEqual(@as(u64, 1), root.todos.items[0].epoch);
@@ -500,7 +500,7 @@ test "LoopListGate pastes the checklist once per change, not once per turn (#318
     var gate: LoopListGate = .{};
 
     // Turn 1 of a run carries the list; the next turns do not, so a 25-turn
-    // /loop no longer writes 25 near-identical copies into root.messages (all
+    // run no longer writes 25 near-identical copies into root.messages (all
     // autosaved, and all fed verbatim into the next compaction's summary).
     try std.testing.expect(std.mem.indexOf(u8, try gate.note(ar, &root), "[ ] a") != null);
     var i: usize = 0;

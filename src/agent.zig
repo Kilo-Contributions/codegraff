@@ -37,7 +37,7 @@ pub const TodoItem = struct {
     retired: bool = false, // a LATER user ask retired this finished item (#394): kept as the session's archive, invisible to every epoch-scoped query
 };
 /// Governed-run status for a standing /goal (#223). Only `.active` steers turns;
-/// pause/resume and the /loop continuation gate (#226) key off the others.
+/// pause/resume and the run continuation gate (#226) key off the others.
 pub const GoalStatus = enum { active, paused, blocked, complete };
 /// A structured standing objective: the /goal text plus its lifecycle status and
 /// created/updated timestamps. Replaces the bare `?[]const u8` so /goal can
@@ -165,11 +165,11 @@ pub const Agent = struct {
     pending_goal_note: ?[]const u8 = null, // one-shot supersession note for the next turn (/goal replace|clear)
     startup_effort_notice: ?[]const u8 = null, // ACP presents a corrected stale effort setting after session/new
     completion_gate_armed: bool = false, // attempt_completion was refused; the promised second call closes the goal. Persists ACROSS turns (a model emits one per turn) until the checklist or goal changes (#318)
-    completion_refused: bool = false, // a refused attempt_completion this turn: work the model must react to, so /loop must not read the turn as zero-tool (#318)
+    completion_refused: bool = false, // a refused attempt_completion this turn: work the model must react to, so the run must not read the turn as zero-tool (#318)
     todos_dirty: bool = false, // todo_write ran in THIS process: a checklist restored from disk is persisted state, never evidence that the current prompt is done (#318)
     goal_flag: ?[]const u8 = null, // --goal objective verbatim: re-applied over EVERY loadSession, including /resume, so the flag's contract survives restores (#318)
-    loop_deadline_ms: ?i64 = null, // the running /loop's wall-clock deadline (goal_pacing.LoopClock); read by the subagent spawn path so a child inherits it. Run-local: never saved, cleared on stop/steer
-    history_rewrites: u32 = 0, // bumped by compact()/emergencyTrim; state pasted into the dead history (e.g. the /loop checklist copy) must be re-carried (#318)
+    loop_deadline_ms: ?i64 = null, // the running /goal run's wall-clock deadline (goal_pacing.LoopClock); read by the subagent spawn path so a child inherits it. Run-local: never saved, cleared on stop/steer
+    history_rewrites: u32 = 0, // bumped by compact()/emergencyTrim; state pasted into the dead history (e.g. the run's checklist copy) must be re-carried (#318)
     worker_family: ?[]const u8 = null,
     worker_id: ?[]const u8 = null,
     session_name: []const u8 = "last", // autosave/resume target (<name>.session.json)
