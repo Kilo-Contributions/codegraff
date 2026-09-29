@@ -237,7 +237,7 @@ if wanted tests; then
     fi
     if ((status != 0)); then
       printf '    fix: the failing test names are above; rerun one with\n'
-      printf '         zig build test -Dtest-filter="<part of the name>"\n'
+      printf '         zig build unit -Dtest-filter="<part of the name>"\n'
       record_fail tests
     else
       count=$(suite_count "$out")
