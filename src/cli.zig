@@ -25,6 +25,7 @@ pub const changelog_text =
     \\──────────
     \\0.0.302.9
     \\  • macOS CLI signed and notarized by the release workflow
+    \\  • local MCP servers start on first use; "shared": true runs one per machine
     \\  • graff mcp add --everywhere saves to the user-level MCP config
     \\  • Harness room messages from other agents arrive framed as advisory
     \\

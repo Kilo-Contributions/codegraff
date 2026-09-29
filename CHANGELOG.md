@@ -20,6 +20,9 @@ This is the first published release since v0.0.302.6. v0.0.302.7 and v0.0.302.8 
 
 ### MCP
 
+- Local (stdio) MCP servers start on first use. When a server's tool list is already cached, a session advertises those tools and spawns the process only when a tool is called, so a chat with many configured servers no longer runs them all. A server with no cached list still starts at once to learn its tools. `"startup": "eager"` on an entry, or `GRAFF_MCP_EAGER=1`, keeps the old behavior.
+- `"shared": true` on a stateless stdio server runs one process per machine, shared by every session through a local broker (not on Windows).
+- The `tools/list` cache is written under a lock. Servers connecting at the same time could overwrite each other's entries, so a server could look uncached and start eagerly every session.
 - `graff mcp add … --everywhere` (alias `--global`) saves to the user-level `~/.codegraff/mcp.json`, which every workspace already merges, so one add applies to every project and to Harness. The verify step, the "saved to" message and live join follow the file that was written.
 - ADR 0211 records how MCP servers are named, scoped and synced: a bare name resolves from the codegraff.com catalog and then the MCP registry (only for a matching namespace owner), and cross-device sync carries non-secret rows through Harness while env values, headers and OAuth tokens stay on each device.
 
