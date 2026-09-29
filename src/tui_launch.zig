@@ -129,6 +129,8 @@ pub fn run(
     acp_session.ensure();
     tui.setFollowupFn(noteFollowupCb);
     defer tui.setFollowupFn(null);
+    tui.setSteerFns(@import("steer_now.zig").send, @import("steer_now.zig").reclaim);
+    defer tui.setSteerFns(null, null);
     try tui.run(gpa, io, environ_map, .{
         .turn_ctx = &repl_ctx,
         .turn_fn = turnCb,

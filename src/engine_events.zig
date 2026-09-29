@@ -37,6 +37,7 @@ pub const StreamAbort = enum {
     stalled,
     /// The provider closed/reset the socket before its terminal event (#133).
     dropped,
+    steered, // a follow-up superseded the streaming reply; the request is rebuilt with it (steer_now.zig)
 };
 
 /// A streamed content chunk. `text` is never empty — emitters drop empty

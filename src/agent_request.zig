@@ -254,6 +254,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     // transport. In particular, session-close cancellation of a
                     // detached title must not launch a replacement request.
                     if (err == error.Interrupted) return error.Interrupted;
+                    if (err == error.Steered) if (@import("steer_now.zig").supersede(self)) continue :rebuild;
                     if (err == error.Canceled) return error.Canceled;
                     // #56: a mid-stream idle stall or a connection drop (the
                     // provider closed/reset before its terminal event) — NOT a

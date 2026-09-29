@@ -268,6 +268,7 @@ fn tuiEmit(ctx: *anyopaque, ev: Stamped) void {
                 .interrupted => {}, // a deliberate Esc needs no notice
                 .stalled => notice(a, "\n⚠ stream stalled — ending turn\n"),
                 .dropped => notice(a, "\n⚠ connection dropped — response ended early\n"),
+                .steered => notice(a, "\n↳ follow-up received — restarting the reply\n"),
             }
         },
         .stream_complete => |c| {
@@ -477,7 +478,7 @@ pub fn compactArg(input: std.json.Value) []const u8 {
 fn transportEndingNotice(t: engine_events.TransportAbort) ?[]const u8 {
     if (!t.turn_ending or t.reason == .interrupted) return null;
     return switch (t.reason) {
-        .interrupted => null,
+        .interrupted, .steered => null,
         .stalled => "\n⚠ stream stalled — ending turn\n",
         .dropped => "\n⚠ connection dropped — response ended early\n",
     };

@@ -66,6 +66,14 @@ pub var g_raw: ?*StreamBuf = null;
 pub const FollowupFn = *const fn () void;
 pub var g_followup_fn: ?FollowupFn = null;
 
+/// Host sets these so a plain-text follow-up typed mid-turn joins the running
+/// turn: `send` hands it over (a streaming reply restarts with it), and
+/// `reclaim` takes back any the turn ended before delivering, to run next.
+pub const SteerSendFn = *const fn (text: []const u8) bool;
+pub var g_steer_send_fn: ?SteerSendFn = null;
+pub const SteerReclaimFn = *const fn (gpa: std.mem.Allocator, out: *std.array_list.Managed([]const u8)) void;
+pub var g_steer_reclaim_fn: ?SteerReclaimFn = null;
+
 /// Idle auto-wake: a finished background job wants a turn (grok-build notify).
 pub const IdleWakeFn = *const fn (turn_ctx: ?*anyopaque, buf: []u8) ?[]const u8;
 pub var g_idle_wake_fn: ?IdleWakeFn = null;
