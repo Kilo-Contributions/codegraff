@@ -151,9 +151,12 @@ def append_log(entry: dict) -> None:
 
 
 def run_eval(harnesses: str, model: str, suite: str, tasks: list[str] | None, reps: int, jobs: int) -> str:
+    # run.py writes each run to its own directory (measurement.isolated_paths);
+    # name it here so this loop reads exactly the run it started.
+    out_root = os.path.join(ROOT, "results", "hc-" + time.strftime("%Y%m%d-%H%M%S") + f"-{os.getpid()}")
     cmd = [sys.executable, os.path.join(ROOT, "run.py"),
            "--harness", harnesses, "--model", model, "--suite", suite,
-           "--reps", str(reps), "-j", str(jobs)]
+           "--reps", str(reps), "-j", str(jobs), "--output-root", out_root]
     if tasks:
         for t in tasks:
             cmd += ["--task", t]
@@ -161,11 +164,10 @@ def run_eval(harnesses: str, model: str, suite: str, tasks: list[str] | None, re
     proc = subprocess.run(cmd, cwd=ROOT)
     if proc.returncode != 0:
         raise SystemExit(f"run.py exited {proc.returncode}")
-    results = os.path.join(ROOT, "results")
-    files = sorted(n for n in os.listdir(results) if n.startswith("run-") and n.endswith(".jsonl"))
-    if not files:
-        raise SystemExit("run.py produced no results/run-*.jsonl")
-    return os.path.join(results, files[-1])
+    path = os.path.join(out_root, "results.jsonl")
+    if not os.path.exists(path):
+        raise SystemExit(f"run.py produced no {path}")
+    return path
 
 
 def cmd_score(args) -> None:
