@@ -64,8 +64,6 @@ All of these are offline and need no model:
 ```sh
 zig test src/html_view.zig        # the snapshot: verbatim bytes, opaque id, 0600, size bound
 python3 scripts/test-render-html.py zig-out/bin/graff   # the engine: marker, verbatim file, refusal
-cd apps/native && bun test lib/mcp-apps.test.ts   # link matcher + store guards
-cd apps/native && bun run test:views              # containment in real Chrome
 ```
 
 The engine fixture (`scripts/test-render-html.py`) drives the real binary with

@@ -6,7 +6,7 @@ control can demonstrate that its invariants detect the intended mistake.
 
 | Priority | Lifecycle | Properties to check | Implementation anchors |
 | --- | --- | --- | --- |
-| 1 | ACP permissions | Only a pending request on the owning live transport accepts an offered option; stale or duplicate replies cannot grant; cancellation denies pending input. | `src/acp_permission.zig`, `apps/native/lib/acp-transport.ts`, ADR 0180 |
+| 1 | ACP permissions | Only a pending request on the owning live transport accepts an offered option; stale or duplicate replies cannot grant; cancellation denies pending input. | `src/acp_permission.zig`, ADR 0180 |
 | 2 | HTTP/2 lease ownership | A connection has at most one active owner; idle and leased sets are disjoint; cancellation closes only its lease; only completed streams return to the idle slot. | `src/http2_pool.zig`, `src/agent_stream_h2.zig`, ADR 0162 |
 | 3 | Retry and usage accounting | An ambiguous send cannot silently fall back; every retry crosses request admission; an unresolved attempt remains unknown after later success; cleanup cannot count it twice. | `src/agent_request.zig`, `src/request_usage_attempts.zig`, ADR 0183 |
 | 4 | Shared descendant budgets | Concurrent tool reservations cannot exceed a finite limit; failed tools still consume admission; each concurrency permit releases once; cancellation can retire a waiter. | `src/run_budget.zig`, ADR 0169 |

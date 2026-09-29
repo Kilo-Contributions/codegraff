@@ -414,15 +414,15 @@ The repository is organized as follows:
 | path | what it is |
 |---|---|
 | `src/`, `TUI/` | harness + terminal |
-| `apps/` | older Electron desktop and iOS |
+| `apps/` | iOS and Chrome extensions |
 | `graff-evals/` | live, in-house, FrontierHarness |
 | `docs/` | ADRs, architecture, images, install, embedding |
 | `sdk/` | generated TypeScript / Python |
-| `scripts/` | tier-1/2, PTY probes, release, desktop launch |
+| `scripts/` | tier-1/2, PTY probes, release |
 
 The desktop app, Harness, has its own repository:
-[justrach/harness](https://github.com/justrach/harness). The older Electron app
-is in `apps/native`, and evaluation tooling is in `graff-evals`.
+[justrach/harness](https://github.com/justrach/harness). Evaluation tooling is
+in `graff-evals`.
 
 ```bash
 scripts/install-hooks.sh          # once
@@ -434,36 +434,6 @@ Tier 1 is `zig fmt`, the 600-line ceiling, test reachability, `zig build test`
 (suite count never shrinks), named goal/loop/todo invariants, and SDK drift.
 Docs-only pushes skip it. In-house PR fixtures: `graff-evals/`
 (`--suite inhouse`).
-
-<details>
-<summary>Build and test the older Electron desktop (<code>apps/native</code>) from source</summary>
-
-Build on Apple Silicon macOS 14+ with Bun, Zig, and Xcode command-line tools:
-
-```sh
-./scripts/build_and_run.sh
-```
-
-The development bundle starts its own local server and uses local development
-signing. Downloadable releases are signed and notarized.
-
-**Profile and test without a model.** The Performance menu and desktop profiler
-tool record bounded, local measurement reports. Startup paint timing, streaming
-responsiveness, process resources and acceleration status are measured separately.
-No reports are uploaded automatically. From `apps/native`:
-
-```sh
-bun run build
-bun run test:desktop
-bun run test:visual
-bun run test:performance
-```
-
-The visual and performance scenarios use production GUI components with scripted
-inputs and block engine/model API calls. See the [desktop guide](apps/native/electron/README.md)
-and [visual test guide](apps/native/electron/VISUAL-TESTS.md) for scope and limitations.
-
-</details>
 
 ## License
 

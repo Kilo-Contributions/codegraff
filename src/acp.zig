@@ -317,7 +317,7 @@ test "userMessage sends a Codex GPT-6 Sol GUI attachment as a native vision bloc
     try testing.expectEqualStrings("read @[build.zig] please", txt.object.get("content").?.string);
 
     // An image path becomes text + input_image blocks.
-    const img = try userMessage(a, &root, "look @[gui/public/favicon.png]");
+    const img = try userMessage(a, &root, "look @[docs/images/harness-chat-dark.png]");
     const content = img.object.get("content").?.array.items;
     try testing.expectEqual(@as(usize, 2), content.len);
     try testing.expectEqualStrings("input_image", content[1].object.get("type").?.string);

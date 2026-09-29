@@ -63,7 +63,7 @@ def main():
         resource = replies[3]["result"]["contents"][0]
         assert replies[2]["result"]["resources"][0]["uri"] == resource["uri"]
         assert resource["mimeType"] == "text/html;profile=mcp-app"
-        assert resource["text"] == (Path(__file__).resolve().parent.parent / "src/mcp_task_app.html").read_text().replace("/* CODEGRAFF_THEME */", (Path(__file__).resolve().parent.parent / "apps/native/app/ui-theme.css").read_text())
+        assert resource["text"] == (Path(__file__).resolve().parent.parent / "src/mcp_task_app.html").read_text().replace("/* CODEGRAFF_THEME */", (Path(__file__).resolve().parent.parent / "src/ui_theme.css").read_text())
         assert resource["_meta"]["ui"]["csp"]["connectDomains"] == []
         assert replies[4]["error"]["code"] == -32002
         assert replies[5]["result"]["resourceTemplates"] == []

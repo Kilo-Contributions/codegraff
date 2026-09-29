@@ -1,7 +1,7 @@
 //! In-process ACP client for the fullscreen TUI (ADR 0041).
 //!
 //! Same initialize / session/new / prompt / cancel envelopes as Zed and
-//! `apps/native`. Thought, tools, and answer text render from `session/update`.
+//! Harness. Thought, tools, and answer text render from `session/update`.
 //! No child `graff acp` — one Agent, one conversation.
 
 const std = @import("std");
