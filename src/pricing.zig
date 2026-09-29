@@ -142,12 +142,11 @@ pub fn printUsageFooter(io: Io) void {
     } else |_| {}
 }
 
-// Known models per provider: context window in tokens. Direct-provider
-// numbers from models.dev/api.json, codegraff numbers from the gateway's
-// /v1/models endpoint (both snapshot 2026-06-10). The same model name can
-// appear under several providers with different limits — routing picks the
-// first row whose provider has an API key. Compaction triggers at 80% of
-// the context; unknown models fall back to a conservative 200k.
+// Known models per provider: context window in tokens. Direct-provider numbers
+// from models.dev/api.json, codegraff numbers from the gateway's /v1/models
+// (both snapshot 2026-06-10). One name can appear under several providers with
+// different limits; routing picks the first row whose provider has an API key.
+// Compaction triggers at 80% of the context; unknown models fall back to 200k.
 pub const ModelInfo = struct {
     provider: []const u8,
     name: []const u8,
@@ -201,6 +200,7 @@ pub const model_table = [_]ModelInfo{
     .{ .provider = "deepseek", .name = "deepseek-reasoner", .context = 1_000_000 },
     .{ .provider = "openai", .name = "gpt-6-astra", .context = 1_050_000 },
     .{ .provider = "openai", .name = "gpt-6-sol", .context = 1_050_000 },
+    .{ .provider = "openai", .name = "gpt-6.1-sol", .context = 1_050_000 },
     .{ .provider = "openai", .name = "gpt-6-luna", .context = 1_050_000 },
     .{ .provider = "openai", .name = "gpt-5.6", .context = 1_050_000 },
     .{ .provider = "openai", .name = "gpt-5.6-terra", .context = 1_050_000 },
