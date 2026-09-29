@@ -3,7 +3,7 @@
  "suite": "mined-candidate",
  "category": "live",
  "source": "codegraff #1348 — mined (ADR 0214)",
- "prompt": "PR readiness keys checks by what they run; rlm says when sleep_ms is capped. Make the test named \"one check in one directory is one entry whatever its spelling\" in src/pr_local_checks.zig run and pass in the project's unit tests (`zig build test`), not only in isolation. Do not edit that test. Do not add SPEC.md.",
+ "prompt": "PR readiness keys checks by what they run; rlm says when sleep_ms is capped. Make the test named \"one check in one directory is one entry whatever its spelling\" in src/pr_local_checks.zig pass in the project's unit-test binary, not only in isolation: `zig build test-bin -Dtest-filter=\"one check in one directory is one entry whatever its spelling\"` compiles it (the newest `.zig-cache/o/*/test`), and running that binary must report the test OK. The full `zig build test` also runs integration scripts this task does not need. Do not edit that test. Do not add SPEC.md.",
  "setup": [
   "python3 \"$TASK_ROOT/live_setup.py\" pr-1348 ."
  ],

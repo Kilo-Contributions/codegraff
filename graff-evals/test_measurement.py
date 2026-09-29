@@ -4,6 +4,7 @@ import contextlib
 import io
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -255,6 +256,97 @@ class MeasurementTests(unittest.TestCase):
             self.assertTrue(measurement.verifiers_unchanged(snap))
             path.write_text('pass')
             self.assertFalse(measurement.verifiers_unchanged(snap))
+
+    def test_a_zig_tree_test_root_is_not_a_visible_verifier(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / 'src').mkdir()
+            hooks = Path(temp) / 'src' / 'test_hooks.zig'
+            hooks.write_text('test { _ = @import("a.zig"); }\n')
+            public = Path(temp) / 'test_public.py'
+            public.write_text('raise AssertionError()')
+            snap = measurement.verifier_snapshot(temp, {}, temp)
+            # Registering a new test file in the test root is part of a fix.
+            hooks.write_text('test { _ = @import("a.zig"); _ = @import("b.zig"); }\n')
+            self.assertTrue(measurement.verifiers_unchanged(snap))
+            public.write_text('pass')
+            self.assertFalse(measurement.verifiers_unchanged(snap))
+
+    def test_a_mined_task_protects_its_named_test_not_the_file_it_sits_in(self):
+        task = {'setup': ['python3 "$TASK_ROOT/live_setup.py" pr-9999 .']}
+        body = 'pub fn f() u8 {\n    return 1;\n}\n\ntest "f is two" {\n    try std.testing.expect(f() == 2);\n}\n'
+        with tempfile.TemporaryDirectory() as temp, \
+                patch('live_setup.named_case', return_value=('src/f.zig', 'f is two')):
+            (Path(temp) / 'src').mkdir()
+            source = Path(temp) / 'src' / 'f.zig'
+            source.write_text(body)
+            snap = measurement.verifier_snapshot(temp, task, temp)
+            source.write_text(body.replace('return 1;', 'return 2;'))  # the fix, same file
+            self.assertTrue(measurement.verifiers_unchanged(snap))
+            source.write_text(body.replace('f() == 2', 'f() == 1'))  # the test itself
+            self.assertFalse(measurement.verifiers_unchanged(snap))
+            # Line endings are not an edit: a CRLF file still holds the block.
+            source.write_bytes(body.replace('return 1;', 'return 2;').replace('\n', '\r\n').encode())
+            self.assertTrue(measurement.verifiers_unchanged(snap))
+
+    def test_a_sandbox_gets_its_own_repository_holding_the_task(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as outer:
+            subprocess.run(['git', 'init', '-q', outer], check=True)
+            sandbox = Path(outer) / 'sandboxes' / 'one'
+            (sandbox / '.zig-cache').mkdir(parents=True)
+            (sandbox / 'note.txt').write_text('task\n')
+            (sandbox / '.zig-cache' / 'x').write_text('cache')
+            top = lambda: subprocess.run(['git', '-C', str(sandbox), 'rev-parse', '--show-toplevel'],
+                                         capture_output=True, text=True).stdout.strip()
+            self.assertEqual(Path(top()).resolve(), Path(outer).resolve())  # the enclosing checkout
+            measurement.isolate_git(str(sandbox))
+            self.assertEqual(Path(top()).resolve(), sandbox.resolve())
+            status = subprocess.run(['git', '-C', str(sandbox), 'status', '--porcelain'],
+                                    capture_output=True, text=True, check=True).stdout
+            self.assertEqual(status, '')
+            shown = subprocess.run(['git', '-C', str(sandbox), 'show', 'HEAD:note.txt'],
+                                   capture_output=True, text=True, check=True).stdout
+            self.assertEqual(shown, 'task\n')
+            # A task that made its own repository keeps it.
+            head = subprocess.run(['git', '-C', str(sandbox), 'rev-parse', 'HEAD'],
+                                  capture_output=True, text=True, check=True).stdout
+            measurement.isolate_git(str(sandbox))
+            self.assertEqual(subprocess.run(['git', '-C', str(sandbox), 'rev-parse', 'HEAD'],
+                                            capture_output=True, text=True, check=True).stdout, head)
+
+    @unittest.skipIf(os.name != 'posix', 'POSIX sessions')
+    def test_a_run_s_leftover_jobs_are_swept_with_its_session(self):
+        import subprocess, time
+        # A harness in its own session starts a job in its own process group
+        # (as graff does), then dies: the job is orphaned but keeps the session.
+        with tempfile.TemporaryDirectory() as temp:
+            pidfile = Path(temp) / 'job.pid'
+            # The job leads its own group, as graff's jobs do; dash's `set -m`
+            # does not do that without a terminal, so setpgrp it directly.
+            script = ('import os, subprocess, sys, time\n'
+                      'p = subprocess.Popen(["sleep", "60"], preexec_fn=os.setpgrp)\n'
+                      'open(sys.argv[1], "w").write(str(p.pid))\n'
+                      'time.sleep(60)\n')
+            harness = subprocess.Popen([sys.executable, '-c', script, str(pidfile)],
+                                       start_new_session=True)
+            for _ in range(100):
+                if pidfile.exists() and pidfile.read_text().strip():
+                    break
+                time.sleep(0.05)
+            job = int(pidfile.read_text())
+            self.assertNotEqual(os.getpgid(job), harness.pid)  # not in the harness's group
+            os.killpg(harness.pid, 9)  # what the harness used to do
+            harness.wait()
+            os.kill(job, 0)  # still running
+            self.assertGreaterEqual(measurement.kill_session(harness.pid), 1)
+            for _ in range(100):
+                try:
+                    os.kill(job, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail('the orphaned job survived the session sweep')
 
     def test_untracked_source_is_in_snapshot_receipt(self):
         import subprocess

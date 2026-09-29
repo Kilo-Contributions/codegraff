@@ -330,7 +330,9 @@ def tree_cpu_s(pid):
 
 def dir_bytes(path):
     total = 0
-    for root, _dirs, files in os.walk(path):
+    for root, dirs, files in os.walk(path):
+        # The repository isolate_git made holds a second copy of the task tree.
+        dirs[:] = [d for d in dirs if not (root == path and d == ".git")]
         for name in files:
             try:
                 total += os.path.getsize(os.path.join(root, name))
@@ -348,6 +350,7 @@ def one_run(hname, harness, task, model, rep, live=False):
     sandbox = os.path.join(SANDBOX_DIR, f"{hname}-{task['id']}-r{rep}")
     try:
         materialize(task, sandbox)
+        measurement.isolate_git(sandbox)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         return {"harness": hname, "task": task["id"], "suite": task.get("suite", "core"),
                 "rep": rep, "error": f"environment setup failed: {error}", "outcome_ok": False}
@@ -429,6 +432,9 @@ def one_run(hname, harness, task, model, rep, live=False):
             p.wait(timeout=10)
         else:
             timed_out = False
+        # Whatever the run left in its session (background jobs keep their own
+        # process groups) must not run on into the next task.
+        measurement.kill_session(p.pid)
         sel.close()
         p.stdout.close()
         p.stderr.close()
