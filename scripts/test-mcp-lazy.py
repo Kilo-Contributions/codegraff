@@ -99,13 +99,16 @@ def main():
         run(binary, work, env, [{'text': 'hello'}])
         assert len(starts('lazy')) == 1, events(logs['lazy'], 'lazy')
         cache = json.loads((temp / '.codegraff/mcp-list-cache.json').read_text())
-        assert any(str(temp / 'server.py') in k for k in cache['servers']), cache
+        # Both servers connect at once; each must keep its own entry.
+        for n in ('lazy', 'pinned'):
+            assert any(str(logs[n]) in k for k in cache['servers']), (n, cache)
         print('PASS a new server starts once so its tools can be learned and cached', flush=True)
 
         # 2. Later session, no MCP call: tools advertised from cache, process never spawned.
         before = len(starts('lazy'))
         model = run(binary, work, env, [{'text': 'hello again'}])
-        assert len(starts('lazy')) == before, 'the lazy server started without being used'
+        assert len(starts('lazy')) == before, 'the lazy server started without being used\n' + \
+            (temp / '.codegraff/mcp-list-cache.json').read_text()[:1500] + '\n' + model.stderr[-2500:]
         assert '[mcp:lazy] ready — 1 tool(s), starts on first use' in model.stderr, model.stderr[-800:]
         assert len(starts('pinned')) == 2, 'a "startup":"eager" server must still start with every session'
         print('PASS a cached server is registered from its cached tools but not spawned; "startup": "eager" still starts at boot', flush=True)

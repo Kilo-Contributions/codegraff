@@ -97,10 +97,24 @@ pub fn socketPath(a: Allocator, home: []const u8, key: []const u8) ![]const u8 {
 fn privateDir(a: Allocator, dir: []const u8, uid: std.c.uid_t) !void {
     const z = try a.dupeSentinel(u8, dir, 0);
     _ = std.c.mkdir(z, 0o700);
-    var st: std.c.Stat = undefined;
-    if (std.c.fstatat(std.c.AT.FDCWD, z, &st, std.c.AT.SYMLINK_NOFOLLOW) != 0) return error.SharedMcpDirUnavailable;
+    const st = try lstatOwner(z);
     const is_dir = (st.mode & std.c.S.IFMT) == std.c.S.IFDIR;
     if (!is_dir or st.uid != uid or (st.mode & 0o077) != 0) return error.SharedMcpDirNotPrivate;
+}
+
+/// Mode and owner of `z` itself, not a symlink's target. Linux libc has no
+/// `fstatat` binding here, so it goes through `statx`.
+fn lstatOwner(z: [*:0]const u8) !struct { mode: u32, uid: std.c.uid_t } {
+    if (builtin.os.tag == .linux) {
+        const linux = std.os.linux;
+        var sx: linux.Statx = undefined;
+        const rc = linux.statx(linux.AT.FDCWD, z, linux.AT.SYMLINK_NOFOLLOW, .{ .TYPE = true, .MODE = true, .UID = true }, &sx);
+        if (linux.errno(rc) != .SUCCESS) return error.SharedMcpDirUnavailable;
+        return .{ .mode = sx.mode, .uid = sx.uid };
+    }
+    var st: std.c.Stat = undefined;
+    if (std.c.fstatat(std.c.AT.FDCWD, z, &st, std.c.AT.SYMLINK_NOFOLLOW) != 0) return error.SharedMcpDirUnavailable;
+    return .{ .mode = st.mode, .uid = st.uid };
 }
 
 // ── JSON-RPC id plumbing (pure; unit-tested) ──────────────────────────────
@@ -470,10 +484,8 @@ test "socketPath fits the socket limit for any HOME, in a private directory" {
     try std.testing.expect(p1.len < 104); // sockaddr_un sun_path on macOS
     const p2 = try socketPath(a, "/home/other", "0123456789abcdef");
     try std.testing.expect(!std.mem.eql(u8, p1, p2)); // two homes never share a broker
-    var st: std.c.Stat = undefined;
-    const dir = try a.dupeSentinel(u8, std.fs.path.dirname(p1).?, 0);
-    try std.testing.expectEqual(@as(c_int, 0), std.c.fstatat(std.c.AT.FDCWD, dir, &st, std.c.AT.SYMLINK_NOFOLLOW));
-    try std.testing.expectEqual(@as(@TypeOf(st.mode), 0), st.mode & 0o077);
+    const st = try lstatOwner(try a.dupeSentinel(u8, std.fs.path.dirname(p1).?, 0));
+    try std.testing.expectEqual(@as(u32, 0), st.mode & 0o077);
 }
 
 test "wantsShared: only an explicit true on a stdio entry" {

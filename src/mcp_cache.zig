@@ -162,6 +162,15 @@ pub fn store(
     const tools = if (result == .object) result.object.get("tools") else null;
     if (tools == null or tools.? != .array) return;
     const ttl = ttlFromResult(result);
+    const path = cachePath(arena, home);
+    if (path.len == 0) return;
+    if (std.fs.path.dirname(path)) |dir| Io.Dir.cwd().createDirPath(io, dir) catch {};
+    // Servers connect concurrently (and sessions run side by side): without a
+    // lock two read-modify-writes race and the later one drops the other's
+    // entry, so that server looks uncached and starts eagerly next time.
+    const lock_path = std.fmt.allocPrint(arena, "{s}.lock", .{path}) catch return;
+    const lock = Io.Dir.cwd().createFile(io, lock_path, .{ .truncate = false, .lock = .exclusive }) catch return;
+    defer lock.close(io);
 
     var root_map: std.json.ObjectMap = .empty;
     if (readFile(io, arena, home)) |data| {
@@ -184,9 +193,6 @@ pub fn store(
     var aw: Io.Writer.Allocating = .init(arena);
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     s.write(Value{ .object = root_map }) catch return;
-    const path = cachePath(arena, home);
-    if (path.len == 0) return;
-    if (std.fs.path.dirname(path)) |dir| Io.Dir.cwd().createDirPath(io, dir) catch {};
     credential_store.replaceFile(io, Io.Dir.cwd(), path, aw.writer.buffered(), .default_file) catch {};
 }
 
@@ -266,6 +272,34 @@ test "loadEra survives tools TTL so Auto can skip the modern probe" {
     store(io, a, home, key, .legacy, "2025-11-25", .{ .object = result }, 1_000);
     try std.testing.expect(load(io, a, home, key, 1_000 + 70_000) == null);
     try std.testing.expectEqual(mcp_rpc.Era.legacy, loadEra(io, a, home, key));
+}
+
+test "concurrent stores keep every server's entry" {
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const home = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const Worker = struct {
+        fn run(h: []const u8, i: usize) void {
+            var ta = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer ta.deinit();
+            const wa = ta.allocator();
+            var result: std.json.ObjectMap = .empty;
+            result.put(wa, "tools", .{ .array = std.json.Array.init(wa) }) catch return;
+            const key = std.fmt.allocPrint(wa, "cmd:server {d}", .{i}) catch return;
+            store(std.testing.io, wa, h, key, .legacy, "2025-11-25", .{ .object = result }, 1_000);
+        }
+    };
+    var threads: [8]std.Thread = undefined;
+    for (&threads, 0..) |*t, i| t.* = try std.Thread.spawn(.{}, Worker.run, .{ home, i });
+    for (threads) |t| t.join();
+    for (0..threads.len) |i| {
+        const key = try std.fmt.allocPrint(a, "cmd:server {d}", .{i});
+        try std.testing.expect(lookupAnyAge(io, a, home, key) != null);
+    }
 }
 
 test "HTTP cache hit skips handshake; stdio legacy still initializes" {
