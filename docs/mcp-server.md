@@ -2,16 +2,10 @@
 
 ## Automatic HTTP setup
 
-The packaged GUI installs its bundled `graff` command into `~/.local/bin` on
-launch (and `~/bin` plus Homebrew/`/usr/local/bin` when those dirs are writable)
-and prepends `~/.local/bin` on zsh/bash login and interactive startup files.
-Open a new terminal if your current one was started before that PATH line.
-GUI updates refresh this managed launcher; an existing independently installed
-command is preserved. `HARNESS_NO_PATH=1` skips PATH edits.
-
-The CLI installer and first launch of the packaged GUI run `graff mcp install`.
-The GUI also offers **Tools → Configure MCP clients**. Setup requires Python 3
-(Python 3.11+ to validate Codex TOML), and macOS launchd or Linux user systemd.
+The CLI installer runs `graff mcp install`. If `graff` came with the desktop
+app, [Harness](https://github.com/justrach/harness), run `graff mcp install` yourself once. Setup
+requires Python 3 (Python 3.11+ to validate Codex TOML), and macOS launchd or
+Linux user systemd.
 
 Setup starts a shared service at `http://127.0.0.1:7720/mcp`, creates a private
 bearer token, and adds HTTP entries for detected Claude Code, Codex, Cursor,
@@ -30,10 +24,9 @@ graff mcp install --directory /absolute/path/to/project --port 7720
 Subsequent installs retain that directory and port. Changing the port refreshes installer-owned entries; user-modified entries
 remain yours to update. Service
 installation restarts the managed listener, so finish active tasks first.
-The GUI runs setup once per app version after successful setup; the Tools action
-can retry or configure clients installed later.
+Run `graff mcp install` again to configure clients installed later.
 
-Set `GRAFF_NO_MCP=1` when installing or launching the GUI to skip automatic setup.
+Set `GRAFF_NO_MCP=1` when running the CLI installer to skip automatic setup.
 This does not stop a previously installed service. Stop/disable it using:
 
 - macOS: `launchctl bootout gui/$(id -u)/dev.codegraff.mcp`, then remove

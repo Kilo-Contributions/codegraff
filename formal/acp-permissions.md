@@ -1,5 +1,7 @@
 # ACP permission ownership model
 
+> The desktop transport modeled here was the desktop app that used to live in this repository. The desktop app is now [Harness](https://github.com/justrach/harness); the server-side half of the model still describes `graff acp`.
+
 `AcpPermissions.tla` checks the permission decision path across a server bridge and the desktop transport. The finite baseline has two worker generations. Both use the same saved session name and the same server request ID (`1`); their token atoms differ. This makes a stale desktop response meaningful even when ordinary ID and session checks would pass. The token atoms abstract unpredictable, distinct UUIDs, not their random number generator.
 
 The model separates parsing a server request (`FrontendReceive`) from delivering it to the GUI (`GuiDeliver`), choosing a response (`FrontendRespond`), and reading that response on server stdin (`ServerAccept`). It also separates frontend cancellation (`FrontendCancel`) from server cancellation (`ServerCancel`). This allows a response to be accepted before cancel, or to be queued and rejected after cancel. `Restart` changes the active worker and clears its live token while leaving a historical GUI token available for a stale-click test. A queued wire response remains addressed to its original transport.

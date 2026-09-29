@@ -1,5 +1,7 @@
 # MCP Apps in Codegraff
 
+> This page describes the desktop app that used to live in this repository. The desktop app is now [Harness](https://github.com/justrach/harness), which drives graff over ACP. Harness does not render MCP Apps views yet; the tool result text and images still reach the transcript.
+
 Call a connected MCP tool that declares an MCP Apps UI. In the native GUI, its tool result includes an **Interactive MCP result** view. Close/reopen controls dispose and restore the view. Text and image output stays available in the transcript.
 
 In the REPL, run **`/mcp apps`** after the tool completes to open its latest saved view in the default browser. The link in the tool result also identifies the standalone HTML file. This works with the existing MCP server configuration and consent process; it does not install or authorize additional servers.
