@@ -99,6 +99,32 @@ grok-build's heap or a 4-tool catalog (ADR 0024). First keep:
 #   hillclimb/frontier-inhouse-20260830.svg
 ```
 
+### Mined tasks and the held-out loop (ADR 0214)
+
+New live tasks come from merged PRs, and a candidate is judged on tasks it was
+not tuned against.
+
+```sh
+./design/mine_trajectories.py --days 14     # what goes wrong in real runs (design/local/, never commit)
+./design/mine_prs.py list --days 21         # merged PRs that add named tests and change code
+./design/mine_prs.py build 1386             # task pr-1386: parent tree, public test, hidden sibling test
+./design/mine_prs.py validate pr-1386       # red on the parent, green and stable on the merge (3 filtered builds)
+./design/mine_prs.py review                 # design/local/review.md for a person to approve
+./design/mine_prs.py approve pr-1386        # into the `mined` suite
+
+./hillclimb.py split --suite mined          # fixed train/test split; never redrawn between rounds
+./hillclimb.py noise --suite mined --harness graff-dev --model gpt-6-sol --reps 3
+./hillclimb.py round --suite mined --champion graff-dev --candidate graff-dev-g6-followthrough --model gpt-6-sol
+```
+
+A round keeps the candidate only when its train score beats the measured
+noise band and its test score improves. Train up with test flat is
+overfitting and is reverted. `--goal usd|wall|tokens` optimizes cost or
+latency without letting the pass rate drop. After three rounds without a keep,
+the loop lists what still fails on train, and never shows test-set details. The
+GPT-6 prompting guide's recommendations are the first candidates
+(`graff-dev-g6-*`). Validation and rounds run one heavy build at a time.
+
 ## Harnesses
 
 `harnesses.json` declares each harness as a command template plus parsers:

@@ -1,0 +1,120 @@
+{
+ "note": "Machine-managed by design/mine_prs.py (ADR 0214). catalog.json stays hand-edited.",
+ "candidates": [
+  {
+   "id": "pr-1376",
+   "pr": "codegraff #1376",
+   "why": "ACP room deliveries: name another account's agent as such",
+   "repo": "justrach/codegraff",
+   "historical_parent": "b87ef82729afce53551312278530a6d900e40218",
+   "historical_merge": "8cf29ff2490d58bb10a174af51a64a6c4d3a4cce",
+   "source": "local-git",
+   "public_filter": "another account's agent is named as such, and framed text must say so to be kept",
+   "public_file": "src/acp_room.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "another account's agent is named as such, and framed text must say so to be kept": "fail"
+    },
+    "green": {
+     "another account's agent is named as such, and framed text must say so to be kept": "pass"
+    },
+    "stable": {
+     "another account's agent is named as such, and framed text must say so to be kept": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1339",
+   "pr": "codegraff #1339",
+   "why": "ask_user: a question that comes back unanswered is not a cancel",
+   "repo": "justrach/codegraff",
+   "historical_parent": "d760017cb9adef0ad17fb0125b7cb61da85758ce",
+   "historical_merge": "b73193713c1eccd1f0547e7aa25af8ad864c353d",
+   "source": "local-git",
+   "public_filter": "decline, cancel, an empty accept and an error each end the question as themselves (#1322)",
+   "public_file": "src/acp_elicit.zig",
+   "hidden": "hidden/pr-1339.sh",
+   "hidden_filter": "noAnswerText keeps cancel as cancel and never calls a lost question a cancel (#1322)",
+   "hidden_file": "src/ask_user.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "decline, cancel, an empty accept and an error each end the question as themselves (#1322)": "compile-error",
+     "noAnswerText keeps cancel as cancel and never calls a lost question a cancel (#1322)": "compile-error"
+    },
+    "green": {
+     "decline, cancel, an empty accept and an error each end the question as themselves (#1322)": "pass",
+     "noAnswerText keeps cancel as cancel and never calls a lost question a cancel (#1322)": "pass"
+    },
+    "stable": {
+     "decline, cancel, an empty accept and an error each end the question as themselves (#1322)": "pass",
+     "noAnswerText keeps cancel as cancel and never calls a lost question a cancel (#1322)": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1365",
+   "pr": "codegraff #1365",
+   "why": "Anthropic: refuse a cut-off tool input instead of running it as {} (refs #1218)",
+   "repo": "justrach/codegraff",
+   "historical_parent": "2012f565fc20b1b50bfb9293020fef95cd5f1591",
+   "historical_merge": "a945ac7c53a6a53a52211abf898b56e669ebd45c",
+   "source": "local-git",
+   "public_filter": "a cut-off Anthropic tool input is refused, not run as {} (#1218)",
+   "public_file": "src/tool_call_args.zig",
+   "hidden": null,
+   "hidden_filter": null,
+   "hidden_file": null,
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "a cut-off Anthropic tool input is refused, not run as {} (#1218)": "compile-error"
+    },
+    "green": {
+     "a cut-off Anthropic tool input is refused, not run as {} (#1218)": "pass"
+    },
+    "stable": {
+     "a cut-off Anthropic tool input is refused, not run as {} (#1218)": "pass"
+    },
+    "ok": true
+   }
+  },
+  {
+   "id": "pr-1386",
+   "pr": "codegraff #1386",
+   "why": "graff/models: each row names the model's maker",
+   "repo": "justrach/codegraff",
+   "historical_parent": "f9e82eb164a498d4ae8ee23c39ffeaf4dfc2a79a",
+   "historical_merge": "29a6b7a03033b2c2acf8f7db725ae4569c11a8b4",
+   "source": "local-git",
+   "public_filter": "maker: the gateway serves other labs' models",
+   "public_file": "src/model_maker.zig",
+   "hidden": "hidden/pr-1386.sh",
+   "hidden_filter": "maker: routers' vendor prefixes and nested slugs",
+   "hidden_file": "src/model_maker.zig",
+   "check_timeout_s": 420,
+   "validation": {
+    "red": {
+     "maker: the gateway serves other labs' models": "missing",
+     "maker: routers' vendor prefixes and nested slugs": "missing"
+    },
+    "green": {
+     "maker: the gateway serves other labs' models": "pass",
+     "maker: routers' vendor prefixes and nested slugs": "pass"
+    },
+    "stable": {
+     "maker: the gateway serves other labs' models": "pass",
+     "maker: routers' vendor prefixes and nested slugs": "pass"
+    },
+    "ok": true
+   }
+  }
+ ],
+ "mined": []
+}

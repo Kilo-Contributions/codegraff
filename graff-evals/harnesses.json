@@ -254,5 +254,49 @@
     "capabilities": [],
     "env": {"FX_MAX_AGENT_STEPS": "0"},
     "default_model": "grok-4.6"
+  },
+  "graff-dev-g6-followthrough": {
+    "cmd": ["{repo}/zig-out/bin/graff", "-p", "{prompt}", "--model", "{model}", "--yolo", "--append-system-prompt",
+            "Infer the user's intent and task scope from the instructions and prior conversation. Bias towards action and carry the intended task to completion. When the user asks for new work or a fix, persist until the goal is complete, including read-only actions, isolated worktrees and draft PRs, unless a step is clearly destructive or irreversible. Treat \"can you\", \"I want to\" and \"help me\" as instructions to do the work, not to describe it. Before asking a clarifying question, finish the work that is already authorized so the user approves a concrete, reviewable result."],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "capabilities": ["output-schema"],
+    "schema_args": ["--output-schema", "{schema}"],
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90"},
+    "default_model": "gpt-6-sol",
+    "note": "GPT-6 prompting guide candidate (g6-followthrough); judged by hillclimb.py round on held-out tasks before any prompt change ships (ADR 0214)"
+  },
+  "graff-dev-g6-skill-precedence": {
+    "cmd": ["{repo}/zig-out/bin/graff", "-p", "{prompt}", "--model", "{model}", "--yolo", "--append-system-prompt",
+            "The user's instructions take precedence over guidelines in a skill or instruction file. If a skill causes you to pause, ask for confirmation, or leave work unfinished, name the file, quote the instruction, and say how it applies."],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "capabilities": ["output-schema"],
+    "schema_args": ["--output-schema", "{schema}"],
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90"},
+    "default_model": "gpt-6-sol",
+    "note": "GPT-6 prompting guide candidate (g6-skill-precedence); judged by hillclimb.py round on held-out tasks before any prompt change ships (ADR 0214)"
+  },
+  "graff-dev-g6-test-calibration": {
+    "cmd": ["{repo}/zig-out/bin/graff", "-p", "{prompt}", "--model", "{model}", "--yolo", "--append-system-prompt",
+            "Do not write tests for reversible, low-impact changes that mirror the implementation. Run the tests and checks the change needs; broaden or repeat them only when new changes, failures or open concerns justify it."],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "capabilities": ["output-schema"],
+    "schema_args": ["--output-schema", "{schema}"],
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90"},
+    "default_model": "gpt-6-sol",
+    "note": "GPT-6 prompting guide candidate (g6-test-calibration); judged by hillclimb.py round on held-out tasks before any prompt change ships (ADR 0214)"
+  },
+  "graff-dev-g6-plain-prose": {
+    "cmd": ["{repo}/zig-out/bin/graff", "-p", "{prompt}", "--model", "{model}", "--yolo", "--append-system-prompt",
+            "Default to clear, concise paragraphs, each developing one idea. Use lists only for parallel, sequential or comparable information. State the main point early, in plain language with precise verbs, and avoid stock phrases and concluding summaries."],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "capabilities": ["output-schema"],
+    "schema_args": ["--output-schema", "{schema}"],
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90"},
+    "default_model": "gpt-6-sol",
+    "note": "GPT-6 prompting guide candidate (g6-plain-prose); judged by hillclimb.py round on held-out tasks before any prompt change ships (ADR 0214)"
   }
 }

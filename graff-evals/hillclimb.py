@@ -9,10 +9,20 @@ Never keep grok-build's heap or a 4-tool catalog (ADR 0024).
     ./hillclimb.py score results/run-….jsonl
     ./hillclimb.py decide --champion results/a.jsonl --candidate results/b.jsonl
     ./hillclimb.py iterate --suite core --task exact-reply,fix-fib,file-ops
+
+Held-out loop (ADR 0214): fix a train/test split once, measure noise from
+repeated baseline runs, then judge one candidate per round. A candidate is
+kept only when its train score beats the noise band AND its test score
+improves; train up with test flat is overfitting and is reverted. Only train
+failures are ever printed; the test set is scores only.
+
+    ./hillclimb.py split --suite mined [--test-frac 0.33]
+    ./hillclimb.py noise --suite mined --harness graff-dev --model gpt-6-sol --reps 3
+    ./hillclimb.py round --suite mined --champion graff-dev --candidate graff-dev-x --model gpt-6-sol
 """
 from __future__ import annotations
 
-import argparse, json, os, subprocess, sys, time
+import argparse, hashlib, json, math, os, statistics, subprocess, sys, time
 
 from list_price import attach, self_test as price_self_test
 
@@ -233,12 +243,189 @@ def cmd_iterate(args) -> None:
         print("\nblocked-honest:", "; ".join(blocked))
 
 
+# ── held-out loop (ADR 0214) ─────────────────────────────────────────────
+
+TASKS_DIR = os.path.join(ROOT, "tasks")
+GOALS = {"pass": +1, "usd": -1, "wall": -1, "tokens": -1}  # +1: higher is better
+STALL_ROUNDS = 3
+HEADROOM = 0.95
+
+
+def suite_tasks(suite: str) -> list[str]:
+    ids = []
+    for name in sorted(os.listdir(TASKS_DIR)):
+        if name.endswith(".json"):
+            with open(os.path.join(TASKS_DIR, name)) as f:
+                t = json.load(f)
+            if t.get("suite") == suite:
+                ids.append(t["id"])
+    return ids
+
+
+def make_split(ids: list[str], test_frac: float, seed: str) -> dict:
+    if len(ids) < 3:
+        raise SystemExit(f"need at least 3 tasks to hold some out, have {len(ids)}")
+    order = sorted(ids, key=lambda i: hashlib.sha256(f"{seed}:{i}".encode()).hexdigest())
+    n_test = min(len(ids) - 1, max(1, round(len(ids) * test_frac)))
+    return {"seed": seed, "test": sorted(order[:n_test]), "train": sorted(order[n_test:])}
+
+
+def split_path(suite: str) -> str:
+    return os.path.join(LOG_DIR, f"split-{suite}.json")
+
+
+def load_split(suite: str) -> dict:
+    path = split_path(suite)
+    if not os.path.exists(path):
+        raise SystemExit(f"no split for {suite}; run: hillclimb.py split --suite {suite}")
+    with open(path) as f:
+        return json.load(f)
+
+
+def metric(rows: list[dict], goal: str) -> float:
+    if not rows:
+        return 0.0
+    if goal == "pass":
+        return sum(bool(r.get("outcome_ok")) for r in rows) / len(rows)
+    key = {"usd": "list_usd", "wall": "wall_s", "tokens": "list_tokens"}[goal]
+    vals = [r.get(key) or 0 for r in rows]
+    return sum(vals) / len(vals)
+
+
+def rep_scores(rows: list[dict], harness: str, tasks: list[str], goal: str) -> list[float]:
+    """One score per repetition: the goal metric over that rep's tasks."""
+    by_rep: dict[int, list[dict]] = {}
+    for r in rows:
+        if r.get("harness") == harness and r.get("task") in tasks:
+            by_rep.setdefault(int(r.get("rep") or 0), []).append(r)
+    return [metric(v, goal) for _, v in sorted(by_rep.items())]
+
+
+def band(sd: float, reps: int) -> float:
+    """Two standard errors of a difference between two `reps`-rep means."""
+    return 2 * sd * math.sqrt(2 / max(1, reps))
+
+
+def noise_summary(rows: list[dict], harness: str, split: dict, reps: int) -> dict:
+    out = {"harness": harness, "reps": reps, "sets": {}}
+    for name in ("train", "test"):
+        entry = {}
+        for goal in GOALS:
+            scores = rep_scores(rows, harness, split[name], goal)
+            sd = statistics.pstdev(scores) if len(scores) > 1 else 0.0
+            entry[goal] = {"mean": round(statistics.mean(scores), 6) if scores else 0.0,
+                           "rep_sd": round(sd, 6), "band": round(band(sd, reps), 6)}
+        flaky = sorted({r["task"] for r in rows if r.get("harness") == harness and r.get("task") in split[name]
+                        and len({bool(x.get("outcome_ok")) for x in rows
+                                 if x.get("harness") == harness and x.get("task") == r["task"]}) > 1})
+        entry["flaky_tasks"] = flaky if name == "train" else len(flaky)  # never name test tasks
+        out["sets"][name] = entry
+    out["headroom_warning"] = out["sets"]["train"]["pass"]["mean"] >= HEADROOM
+    return out
+
+
+def judge(champ_train: float, cand_train: float, champ_test: float, cand_test: float,
+          min_effect: float, goal: str = "pass") -> tuple[bool, str]:
+    sign = GOALS[goal]
+    d_train = (cand_train - champ_train) * sign
+    d_test = (cand_test - champ_test) * sign
+    if d_train < -min_effect or d_test < 0:
+        return False, f"regressed (train {d_train:+.3f}, test {d_test:+.3f})"
+    if d_train > min_effect and d_test > 0:
+        return True, f"kept: train {d_train:+.3f} beats the noise band {min_effect:.3f} and test improved {d_test:+.3f}"
+    if d_train > min_effect:
+        return False, f"overfit: train {d_train:+.3f} improved but test is flat ({d_test:+.3f})"
+    return False, f"within noise: train {d_train:+.3f} vs band {min_effect:.3f}"
+
+
+def stalled(suite: str) -> int:
+    """Consecutive non-kept rounds for this suite, most recent first."""
+    if not os.path.exists(LOG_PATH):
+        return 0
+    n = 0
+    with open(LOG_PATH) as f:
+        rounds = [json.loads(l) for l in f if l.strip()]
+    for e in reversed([r for r in rounds if r.get("kind") == "round" and r.get("suite") == suite]):
+        if e.get("keep"):
+            break
+        n += 1
+    return n
+
+
+def cmd_split(args) -> None:
+    path = split_path(args.suite)
+    if os.path.exists(path) and not args.force:
+        raise SystemExit(f"{path} exists; the test set must stay fixed across rounds (--force to redraw)")
+    split = make_split(suite_tasks(args.suite), args.test_frac, args.seed)
+    split["suite"] = args.suite
+    os.makedirs(LOG_DIR, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(split, f, indent=1)
+        f.write("\n")
+    print(f"{args.suite}: {len(split['train'])} train, {len(split['test'])} held out -> {path}")
+
+
+def cmd_noise(args) -> None:
+    split = load_split(args.suite)
+    path = run_eval(args.harness, args.model, args.suite, split["train"] + split["test"], args.reps, args.jobs)
+    summary = noise_summary(load_jsonl(path), args.harness, split, args.reps)
+    summary.update(suite=args.suite, model=args.model, results=path)
+    out = os.path.join(LOG_DIR, f"noise-{args.suite}-{args.harness}-{args.model}.json")
+    with open(out, "w") as f:
+        json.dump(summary, f, indent=1)
+        f.write("\n")
+    tr = summary["sets"]["train"]
+    print(f"train pass {tr['pass']['mean']:.3f} (rep sd {tr['pass']['rep_sd']:.3f}, band {tr['pass']['band']:.3f});"
+          f" flaky: {', '.join(tr['flaky_tasks']) or 'none'}")
+    if summary["headroom_warning"]:
+        print(f"WARNING: baseline is at or above {HEADROOM:.0%} on train; improvements will be hard to see")
+    print(f"-> {out}")
+
+
+def cmd_round(args) -> None:
+    split = load_split(args.suite)
+    noise_file = os.path.join(LOG_DIR, f"noise-{args.suite}-{args.champion}-{args.model}.json")
+    min_effect = args.min_effect
+    reps = args.reps
+    if min_effect is None:
+        if not os.path.exists(noise_file):
+            raise SystemExit(f"no noise measurement ({noise_file}); run hillclimb.py noise first or pass --min-effect")
+        with open(noise_file) as f:
+            noise = json.load(f)
+        min_effect = noise["sets"]["train"][args.goal]["band"]
+        reps = reps or noise["reps"]
+    reps = reps or 3
+    path = run_eval(f"{args.champion},{args.candidate}", args.model, args.suite,
+                    split["train"] + split["test"], reps, args.jobs)
+    rows = load_jsonl(path)
+    pick = lambda h, s: [r for r in rows if r.get("harness") == h and r.get("task") in split[s]]
+    scores = {h: {s: metric(pick(h, s), args.goal) for s in ("train", "test")} for h in (args.champion, args.candidate)}
+    keep, why = judge(scores[args.champion]["train"], scores[args.candidate]["train"],
+                      scores[args.champion]["test"], scores[args.candidate]["test"], min_effect, args.goal)
+    guard = metric(pick(args.candidate, "train"), "pass") < metric(pick(args.champion, "train"), "pass") - min_effect
+    if keep and args.goal != "pass" and guard:
+        keep, why = False, "pass rate dropped while chasing " + args.goal
+    print(f"{args.goal}: champion train {scores[args.champion]['train']:.4f} test {scores[args.champion]['test']:.4f}"
+          f" | candidate train {scores[args.candidate]['train']:.4f} test {scores[args.candidate]['test']:.4f}")
+    print(("KEEP " if keep else "REVERT ") + why)
+    append_log({"kind": "round", "suite": args.suite, "goal": args.goal, "candidate_id": args.candidate_id or args.candidate,
+                "champion": args.champion, "candidate": args.candidate, "model": args.model, "reps": reps,
+                "min_effect": min_effect, "scores": scores, "keep": keep, "why": why, "results": path})
+    n = stalled(args.suite)
+    if n >= STALL_ROUNDS:
+        print(f"\nstalled: {n} rounds without a kept change. Analyze what still fails on TRAIN by root cause:")
+        for r in pick(args.champion, "train"):
+            if not r.get("outcome_ok"):
+                print(f"  {r['task']} rep {r.get('rep')}: {(r.get('check_note') or r.get('error') or '')[:160]}")
+        print("If no single fix could beat the noise band, add repetitions or tasks instead of more rounds.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("self-test")
-    p.set_defaults(fn=lambda _: (price_self_test(), _decide_self_test(), print("hillclimb self-test ok")))
+    p.set_defaults(fn=lambda _: (price_self_test(), _decide_self_test(), _heldout_self_test(), print("hillclimb self-test ok")))
 
     p = sub.add_parser("score")
     p.add_argument("jsonl")
@@ -267,6 +454,33 @@ def main() -> None:
     p.add_argument("--only", default="")
     p.set_defaults(fn=cmd_iterate)
 
+    p = sub.add_parser("split")
+    p.add_argument("--suite", required=True)
+    p.add_argument("--test-frac", type=float, default=0.33)
+    p.add_argument("--seed", default="graff")
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(fn=cmd_split)
+
+    p = sub.add_parser("noise")
+    p.add_argument("--suite", required=True)
+    p.add_argument("--harness", default=OURS_DEFAULT)
+    p.add_argument("--model", default="grok-4.6")
+    p.add_argument("--reps", type=int, default=3)
+    p.add_argument("--jobs", "-j", type=int, default=1)
+    p.set_defaults(fn=cmd_noise)
+
+    p = sub.add_parser("round")
+    p.add_argument("--suite", required=True)
+    p.add_argument("--champion", default=OURS_DEFAULT)
+    p.add_argument("--candidate", required=True)
+    p.add_argument("--candidate-id", default="")
+    p.add_argument("--model", default="grok-4.6")
+    p.add_argument("--goal", choices=sorted(GOALS), default="pass")
+    p.add_argument("--reps", type=int, default=None)
+    p.add_argument("--min-effect", type=float, default=None)
+    p.add_argument("--jobs", "-j", type=int, default=1)
+    p.set_defaults(fn=cmd_round)
+
     args = ap.parse_args()
     if args.cmd == "decide" and not args.candidate and not args.same_file:
         ap.error("decide needs --candidate or --same-file")
@@ -289,6 +503,32 @@ def _decide_self_test() -> None:
     assert not d["keep"]
     catalog = decide(champ, better, candidate_id="four-tool-copy")
     assert not catalog["keep"]
+
+
+
+def _heldout_self_test() -> None:
+    ids = [f"t{i}" for i in range(12)]
+    a, b = make_split(ids, 0.33, "graff"), make_split(list(reversed(ids)), 0.33, "graff")
+    assert a == b, "split must not depend on listing order"
+    assert not set(a["train"]) & set(a["test"]) and sorted(a["train"] + a["test"]) == sorted(ids)
+    assert len(a["test"]) == 4
+    assert make_split(ids, 0.33, "other") != a
+    rows = [{"harness": "h", "task": t, "rep": rep, "outcome_ok": not (t == "t0" and rep == 1)}
+            for rep in range(3) for t in ids]
+    split = {"train": [t for t in ids if t != "t11"], "test": ["t11"]}
+    n = noise_summary(rows, "h", split, 3)
+    assert n["sets"]["train"]["pass"]["rep_sd"] > 0 and n["sets"]["test"]["pass"]["rep_sd"] == 0
+    assert n["sets"]["train"]["flaky_tasks"] == ["t0"] and n["headroom_warning"]
+    keep, why = judge(0.60, 0.80, 0.50, 0.60, 0.05)
+    assert keep, why
+    keep, why = judge(0.60, 0.80, 0.50, 0.50, 0.05)
+    assert not keep and why.startswith("overfit"), why
+    keep, why = judge(0.60, 0.62, 0.50, 0.60, 0.05)
+    assert not keep and why.startswith("within noise"), why
+    keep, why = judge(0.60, 0.70, 0.50, 0.40, 0.05)
+    assert not keep and why.startswith("regressed"), why
+    keep, why = judge(0.050, 0.030, 0.050, 0.040, 0.005, goal="usd")
+    assert keep, why
 
 
 if __name__ == "__main__":
