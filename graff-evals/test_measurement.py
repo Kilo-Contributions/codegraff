@@ -4,6 +4,7 @@ import contextlib
 import io
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -320,9 +321,14 @@ class MeasurementTests(unittest.TestCase):
         # (as graff does), then dies: the job is orphaned but keeps the session.
         with tempfile.TemporaryDirectory() as temp:
             pidfile = Path(temp) / 'job.pid'
-            harness = subprocess.Popen(
-                ['/bin/sh', '-c', f'set -m; sleep 60 & echo $! > {pidfile}; wait'],
-                start_new_session=True)
+            # The job leads its own group, as graff's jobs do; dash's `set -m`
+            # does not do that without a terminal, so setpgrp it directly.
+            script = ('import os, subprocess, sys, time\n'
+                      'p = subprocess.Popen(["sleep", "60"], preexec_fn=os.setpgrp)\n'
+                      'open(sys.argv[1], "w").write(str(p.pid))\n'
+                      'time.sleep(60)\n')
+            harness = subprocess.Popen([sys.executable, '-c', script, str(pidfile)],
+                                       start_new_session=True)
             for _ in range(100):
                 if pidfile.exists() and pidfile.read_text().strip():
                     break
