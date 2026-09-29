@@ -190,9 +190,9 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
             const name = if (block.object.get("name")) |n| (if (n == .string) n.string else "") else "";
             if (name.len == 0) continue;
             const id = if (block.object.get("id")) |x| (if (x == .string) x.string else "") else "";
-            const args_ok = !@import("tool_call_args.zig").takeInvalidMark(&block.object);
+            const why = tool_call_args.takeInvalidMark(&block.object);
             const input = block.object.get("input") orelse Value{ .object = .empty };
-            try calls.append(self.gpa, .{ .id = id, .name = name, .input = input, .args_ok = args_ok });
+            try calls.append(self.gpa, .{ .id = id, .name = name, .input = input, .args_ok = why == .none, .cut = why == .cut });
         }
     }
     self.pairContextMeterWithCurrentLocal();
@@ -279,8 +279,9 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
     var calls: std.ArrayList(ToolCall) = .empty;
     defer calls.deinit(self.gpa);
     if (msg_obj.get("tool_calls")) |tcs| if (tcs == .array) {
-        for (tcs.array.items) |tc| {
-            if (tc != .object) continue;
+        for (tcs.array.items) |*tc| { // by pointer: the cut marker is removed in place
+            if (tc.* != .object) continue;
+            const why = tool_call_args.takeInvalidMark(&tc.object);
             const function = tc.object.get("function") orelse continue;
             if (function != .object) continue;
             const args_str = if (function.object.get("arguments")) |a| (if (a == .string) a.string else "") else "";
@@ -288,7 +289,7 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
             const name = if (function.object.get("name")) |n| (if (n == .string) n.string else "") else "";
             if (name.len == 0) continue; // can't dispatch a nameless call
             const id = if (tc.object.get("id")) |x| (if (x == .string) x.string else "") else "";
-            try calls.append(self.gpa, .{ .id = id, .name = name, .input = parsed.input, .args_ok = parsed.valid });
+            try calls.append(self.gpa, .{ .id = id, .name = name, .input = parsed.input, .args_ok = parsed.valid and why == .none, .cut = why == .cut });
         }
     };
     tool_call_args.repairMessage(self.gpa, self.arena, &self.messages.items[self.messages.items.len - 1]);
@@ -350,101 +351,7 @@ pub fn assembleStream(self: *Agent, body: []const u8) !?std.json.ObjectMap {
     };
 }
 
-/// One in-flight content block while reassembling an Anthropic stream.
-const BlockAcc = struct {
-    obj: std.json.ObjectMap = .empty,
-    text: std.ArrayList(u8) = .empty,
-    json: std.ArrayList(u8) = .empty,
-    thinking: std.ArrayList(u8) = .empty,
-    signature: std.ArrayList(u8) = .empty,
-};
-
-/// message_start carries the message skeleton (role, model, input-token
-/// usage); content blocks open with content_block_start and accumulate
-/// via content_block_delta (text / partial_json / thinking / signature);
-/// message_delta carries stop_reason and output-token usage.
-pub fn assembleAnthropic(self: *Agent, body: []const u8) !?std.json.ObjectMap {
-    // #124 slice 2b: the whole assembly — per-event parse trees, delta
-    // accumulators, the stitched message — lives on the per-request scratch
-    // arena; the finished message is deep-copied onto the session arena once
-    // at return (it becomes the assistant history message, so it must survive
-    // the next request's scratch reset). Previously every event's parse tree
-    // landed on the session arena for the life of the process.
-    const scratch = self.scratchAlloc();
-    const result_arena = self.messageMutationAlloc();
-    var root: ?std.json.ObjectMap = null;
-    var blocks: std.ArrayList(BlockAcc) = .empty;
-    var stop_reason: ?Value = null;
-    var usage_delta: ?Value = null;
-    var it = std.mem.tokenizeScalar(u8, body, '\n');
-    while (it.next()) |raw_line| {
-        const payload = ssePayload(raw_line) orelse continue;
-        const v = std.json.parseFromSliceLeaky(Value, scratch, payload, .{ .allocate = .alloc_always }) catch continue;
-        if (v != .object) continue;
-        const t = v.object.get("type") orelse continue;
-        if (t != .string) continue;
-        if (std.mem.eql(u8, t.string, "message_start")) {
-            if (v.object.get("message")) |m| if (m == .object) {
-                root = m.object;
-            };
-        } else if (std.mem.eql(u8, t.string, "content_block_start")) {
-            const idx = sseIndex(v.object) orelse continue;
-            while (blocks.items.len <= idx) try blocks.append(scratch, .{});
-            if (v.object.get("content_block")) |cb| if (cb == .object) {
-                blocks.items[idx].obj = cb.object;
-            };
-        } else if (std.mem.eql(u8, t.string, "content_block_delta")) {
-            const idx = sseIndex(v.object) orelse continue;
-            if (idx >= blocks.items.len) continue;
-            const d = v.object.get("delta") orelse continue;
-            if (d != .object) continue;
-            const b = &blocks.items[idx];
-            if (d.object.get("text")) |x| if (x == .string) try b.text.appendSlice(scratch, x.string);
-            if (d.object.get("partial_json")) |x| if (x == .string) try b.json.appendSlice(scratch, x.string);
-            if (d.object.get("thinking")) |x| if (x == .string) try b.thinking.appendSlice(scratch, x.string);
-            if (d.object.get("signature")) |x| if (x == .string) try b.signature.appendSlice(scratch, x.string);
-        } else if (std.mem.eql(u8, t.string, "message_delta")) {
-            if (v.object.get("delta")) |d| if (d == .object) {
-                if (d.object.get("stop_reason")) |sr| if (sr == .string) {
-                    stop_reason = sr;
-                };
-            };
-            if (v.object.get("usage")) |u| if (u == .object) {
-                usage_delta = u;
-            };
-        } else if (std.mem.eql(u8, t.string, "error")) {
-            // Hand the envelope back as the root: request()'s existing
-            // type=="error" check reports it. Detached from scratch — the
-            // rebuild loop can reset the scratch arena before the message
-            // is done being read.
-            return (try util.dupeJsonValue(result_arena, v)).object;
-        }
-    }
-    var r = root orelse return null;
-    var content = std.json.Array.init(scratch);
-    for (blocks.items) |*b| {
-        if (b.obj.get("type") == null) continue; // never started
-        if (b.text.items.len > 0) try b.obj.put(scratch, "text", .{ .string = b.text.items });
-        if (b.thinking.items.len > 0) try b.obj.put(scratch, "thinking", .{ .string = b.thinking.items });
-        if (b.signature.items.len > 0) try b.obj.put(scratch, "signature", .{ .string = b.signature.items });
-        if (b.json.items.len > 0) try @import("tool_call_args.zig").putStreamedInput(scratch, &b.obj, b.json.items); // #1218
-        try content.append(.{ .object = b.obj });
-    }
-    try r.put(scratch, "content", .{ .array = content });
-    try r.put(scratch, "stop_reason", stop_reason orelse Value{ .string = "end_turn" });
-    if (stop_reason == null) try r.put(scratch, "incomplete", .{ .bool = true });
-    if (usage_delta) |ud| {
-        var usage: std.json.ObjectMap = .empty;
-        if (r.get("usage")) |base| if (base == .object) {
-            var e = base.object.iterator();
-            while (e.next()) |kv| try usage.put(scratch, kv.key_ptr.*, kv.value_ptr.*);
-        };
-        var e = ud.object.iterator();
-        while (e.next()) |kv| try usage.put(scratch, kv.key_ptr.*, kv.value_ptr.*);
-        try r.put(scratch, "usage", .{ .object = usage });
-    }
-    return (try util.dupeJsonValue(result_arena, .{ .object = r })).object;
-}
+pub const assembleAnthropic = @import("anthropic_assemble.zig").assembleAnthropic;
 
 const chat_tool_calls = @import("chat_tool_calls.zig");
 
@@ -461,9 +368,13 @@ pub fn assembleOpenAI(self: *Agent, body: []const u8) !?std.json.ObjectMap {
     var thought_signature: []const u8 = "";
     var extra_content: ?Value = null;
     var saw_chunk = false;
+    var saw_done = false; // `data: [DONE]`: the stream ended on purpose even without a finish_reason
     var it = std.mem.tokenizeScalar(u8, body, '\n');
     while (it.next()) |raw_line| {
-        const payload = ssePayload(raw_line) orelse continue;
+        const payload = ssePayload(raw_line) orelse {
+            saw_done = saw_done or std.mem.eql(u8, std.mem.trim(u8, raw_line, " \r"), "data: [DONE]");
+            continue;
+        };
         const v = std.json.parseFromSliceLeaky(Value, self.scratchAlloc(), payload, .{ .allocate = .alloc_always }) catch continue; // #124: per-event parse tree is transient (deltas are appendSlice'd into session accumulators)
         if (v != .object) continue;
         // Error-only SSE (`event: error` / `data: {"error":…}`) has no
@@ -540,6 +451,8 @@ pub fn assembleOpenAI(self: *Agent, body: []const u8) !?std.json.ObjectMap {
         };
     }
     if (!saw_chunk) return null;
+    const stop: ?[]const u8 = if (finish) |f| (if (f == .string) f.string else null) else if (saw_done) "stop" else null;
+    calls.markCut(tool_call_args.responseCut(stop)); // #1218
 
     var message: std.json.ObjectMap = .empty;
     try message.put(result_arena, "role", .{ .string = try result_arena.dupe(u8, role) }); // #124: role slices the scratch parse tree; dupe so it survives the per-request scratch reset
@@ -567,6 +480,7 @@ pub fn assembleOpenAI(self: *Agent, body: []const u8) !?std.json.ObjectMap {
             const call_sig = if (c.thought_signature.len > 0) c.thought_signature else thought_signature;
             if (call_sig.len > 0) try tc.put(result_arena, "thought_signature", .{ .string = try result_arena.dupe(u8, call_sig) });
             if (c.extra_content) |ec| try tc.put(result_arena, "extra_content", try util.dupeJsonValue(result_arena, ec));
+            if (c.cut) try tool_call_args.markChatCut(result_arena, &tc);
             try tcs.append(.{ .object = tc });
         }
         if (tcs.items.len > 0) try message.put(result_arena, "tool_calls", .{ .array = tcs });
@@ -585,4 +499,5 @@ pub fn assembleOpenAI(self: *Agent, body: []const u8) !?std.json.ObjectMap {
 
 test {
     _ = @import("agent_steps_tests.zig");
+    _ = @import("anthropic_assemble.zig");
 }

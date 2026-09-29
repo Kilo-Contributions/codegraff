@@ -11,6 +11,12 @@ const Allocator = std.mem.Allocator;
 
 pub const empty_object = "{}";
 pub const invalid_exec_message = "tool call arguments were truncated or not a JSON object; the call was not executed";
+/// #1218: the response stopped (output limit, or a stream that ended before
+/// its terminal event) while this call was still being written. The model
+/// gets the cause and the fix, not a malformed-JSON guess it retries as-is.
+pub const cut_exec_message = "tool call arguments were truncated: the response ended before this call was complete (output limit or cut-off stream), so it was not executed. Re-issue it, with fewer or smaller calls per response";
+/// Both refusals start with this; broken-call loop detection keys on it.
+pub const truncated_prefix = "tool call arguments were truncated";
 
 pub const Parsed = struct {
     input: Value,
@@ -29,21 +35,49 @@ pub fn parse(alloc: Allocator, s: []const u8) Parsed {
     return .{ .input = value, .valid = true };
 }
 
+/// Why a streamed call is not executed. `cut`: the response stopped while
+/// the call was still streaming (#1218), as opposed to one that finished
+/// streaming but is not a JSON object.
+pub const Refusal = enum { none, malformed, cut };
+
+/// Stop reasons that end a response mid-output. None at all means the stream
+/// ended before its terminal event.
+pub fn responseCut(stop_reason: ?[]const u8) bool {
+    const s = stop_reason orelse return true;
+    return std.mem.eql(u8, s, "max_tokens") or std.mem.eql(u8, s, "length") or
+        std.mem.eql(u8, s, "model_context_window_exceeded");
+}
+
+/// A cut call is refused unless its arguments already close as an object.
+fn refusalFor(parsed: Parsed, raw: []const u8, cut: bool) Refusal {
+    const finished = parsed.valid and std.mem.trim(u8, raw, &std.ascii.whitespace).len > 0;
+    if (cut and !finished) return .cut;
+    return if (parsed.valid) .none else .malformed;
+}
+
 /// Anthropic streams `tool_use.input` as partial_json. A fragment that is not
 /// a JSON object (a cut-off stream, #1218) used to become `{}` and run as an
 /// empty call (`missing or non-string argument: path`). It is stored as `{}`
 /// so history replays, with a marker the step removes before refusing it.
 const invalid_mark = "graff_invalid_input";
 
-pub fn putStreamedInput(alloc: Allocator, block: *std.json.ObjectMap, json: []const u8) !void {
+pub fn putStreamedInput(alloc: Allocator, block: *std.json.ObjectMap, json: []const u8, cut: bool) !void {
     const parsed = parse(alloc, json);
     try block.put(alloc, "input", parsed.input);
-    if (!parsed.valid) try block.put(alloc, invalid_mark, .{ .bool = true });
+    const why = refusalFor(parsed, json, cut);
+    if (why != .none) try block.put(alloc, invalid_mark, .{ .string = @tagName(why) });
 }
 
-/// True, with the marker removed, when putStreamedInput flagged this block.
-pub fn takeInvalidMark(block: *std.json.ObjectMap) bool {
-    return block.orderedRemove(invalid_mark);
+/// The refusal putStreamedInput (or markChatCut) recorded, with the marker
+/// removed so it is never replayed to the provider.
+pub fn takeInvalidMark(block: *std.json.ObjectMap) Refusal {
+    const kv = block.fetchOrderedRemove(invalid_mark) orelse return .none;
+    return if (kv.value == .string and std.mem.eql(u8, kv.value.string, "cut")) .cut else .malformed;
+}
+
+/// Chat wire: mark an assembled `tool_calls[]` entry the response cut off.
+pub fn markChatCut(alloc: Allocator, call: *std.json.ObjectMap) !void {
+    try call.put(alloc, invalid_mark, .{ .string = "cut" });
 }
 
 test "a cut-off Anthropic tool input is refused, not run as {} (#1218)" {
@@ -51,14 +85,29 @@ test "a cut-off Anthropic tool input is refused, not run as {} (#1218)" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     var cut: std.json.ObjectMap = .empty;
-    try putStreamedInput(arena, &cut, "{\"path\":\"src/ma");
+    try putStreamedInput(arena, &cut, "{\"path\":\"src/ma", false);
     try std.testing.expectEqual(@as(usize, 0), cut.get("input").?.object.count());
-    try std.testing.expect(takeInvalidMark(&cut));
+    try std.testing.expectEqual(Refusal.malformed, takeInvalidMark(&cut));
     try std.testing.expect(cut.get(invalid_mark) == null); // never replayed
     var whole: std.json.ObjectMap = .empty;
-    try putStreamedInput(arena, &whole, "{\"path\":\"src/main.zig\"}");
-    try std.testing.expect(!takeInvalidMark(&whole));
+    try putStreamedInput(arena, &whole, "{\"path\":\"src/main.zig\"}", false);
+    try std.testing.expectEqual(Refusal.none, takeInvalidMark(&whole));
     try std.testing.expectEqualStrings("src/main.zig", whole.get("input").?.object.get("path").?.string);
+    // A response that stopped mid-call: nothing streamed, or a fragment, is cut;
+    // arguments that already closed as an object still run.
+    var empty: std.json.ObjectMap = .empty;
+    try putStreamedInput(arena, &empty, "", true);
+    try std.testing.expectEqual(Refusal.cut, takeInvalidMark(&empty));
+    var partial: std.json.ObjectMap = .empty;
+    try putStreamedInput(arena, &partial, "{\"path\":\"src/ma", true);
+    try std.testing.expectEqual(Refusal.cut, takeInvalidMark(&partial));
+    var closed: std.json.ObjectMap = .empty;
+    try putStreamedInput(arena, &closed, "{\"path\":\"src/main.zig\"}", true);
+    try std.testing.expectEqual(Refusal.none, takeInvalidMark(&closed));
+    try std.testing.expect(std.mem.startsWith(u8, cut_exec_message, truncated_prefix));
+    try std.testing.expect(std.mem.startsWith(u8, invalid_exec_message, truncated_prefix));
+    try std.testing.expect(responseCut(null) and responseCut("max_tokens") and responseCut("length"));
+    try std.testing.expect(!responseCut("tool_use") and !responseCut("tool_calls") and !responseCut("end_turn"));
 }
 
 /// `gpa` must free (session arena is bump-only). Used only to validate.

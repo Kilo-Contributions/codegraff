@@ -26,6 +26,8 @@ pub const ToolCall = struct {
     input: Value,
     /// False when assembled `arguments` were not a JSON object (#752).
     args_ok: bool = true,
+    /// With !args_ok: the response stopped while this call streamed (#1218).
+    cut: bool = false,
 };
 
 /// A tool's outcome, arena-owned, ready to wire into either format.
