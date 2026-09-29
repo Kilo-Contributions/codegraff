@@ -211,7 +211,7 @@ const Client = struct {
     alive: bool = true,
 };
 
-const Pending = struct { client: *Client, id: Value, is_initialize: bool };
+const Pending = struct { client: *Client, id: Value };
 
 const Broker = struct {
     io: Io,
@@ -221,6 +221,11 @@ const Broker = struct {
     pending: std.AutoHashMapUnmanaged(i64, Pending) = .empty,
     next_id: i64 = 1,
     init_result: ?[]const u8 = null, // the first initialize result, as JSON
+    // An initialize is at the server: later ones wait for its answer here
+    // instead of reaching the server a second time.
+    init_inflight: bool = false,
+    init_server_id: i64 = 0,
+    init_waiters: std.ArrayList(Pending) = .empty,
     initialized_sent: bool = false,
     server_in: Io.File.Writer,
     last_client_left_ms: i64 = 0,
@@ -245,6 +250,28 @@ const Broker = struct {
         };
     }
 
+    /// `{"jsonrpc":"2.0","id":<id>,"<field>":<json>}` to one client.
+    fn replyWith(b: *Broker, a: Allocator, c: *Client, id: Value, field: []const u8, json: []const u8) void {
+        const id_json = std.json.Stringify.valueAlloc(a, id, .{}) catch return;
+        const reply = std.fmt.allocPrint(a, "{{\"jsonrpc\":\"2.0\",\"id\":{s},\"{s}\":{s}}}", .{ id_json, field, json }) catch return;
+        b.toClient(c, reply);
+    }
+
+    /// The server answered the one initialize it was sent: keep a result for
+    /// later clients and answer the ones that queued behind it. An error
+    /// goes to them too, and the next initialize tries the server again.
+    fn finishInitialize(b: *Broker, a: Allocator, msg: Value) void {
+        b.init_inflight = false;
+        defer b.init_waiters.clearRetainingCapacity();
+        const is_result = msg.object.get("result") != null;
+        const field = if (is_result) "result" else "error";
+        const body = msg.object.get(field) orelse return;
+        const keep = is_result and b.init_result == null; // outlives this line's arena
+        const json = std.json.Stringify.valueAlloc(if (keep) b.ids_arena.allocator() else a, body, .{}) catch return;
+        if (keep) b.init_result = json;
+        for (b.init_waiters.items) |w| b.replyWith(a, w.client, w.id, field, json);
+    }
+
     /// One line from a client.
     fn fromClient(b: *Broker, c: *Client, line: []const u8) void {
         var arena = std.heap.ArenaAllocator.init(b.gpa);
@@ -258,15 +285,21 @@ const Broker = struct {
                 const method = msg.object.get("method").?;
                 const is_init = method == .string and std.mem.eql(u8, method.string, "initialize");
                 if (is_init) if (b.init_result) |cached| {
-                    const id_json = std.json.Stringify.valueAlloc(a, msg.object.get("id").?, .{}) catch return;
-                    const reply = std.fmt.allocPrint(a, "{{\"jsonrpc\":\"2.0\",\"id\":{s},\"result\":{s}}}", .{ id_json, cached }) catch return;
-                    b.toClient(c, reply);
+                    b.replyWith(a, c, msg.object.get("id").?, "result", cached);
                     return;
                 };
+                const orig = cloneId(b.ids_arena.allocator(), msg.object.get("id").?) catch return;
+                if (is_init and b.init_inflight) {
+                    b.init_waiters.append(b.gpa, .{ .client = c, .id = orig }) catch {};
+                    return;
+                }
                 const id = b.next_id;
                 b.next_id += 1;
-                const orig = cloneId(b.ids_arena.allocator(), msg.object.get("id").?) catch return;
-                b.pending.put(b.gpa, id, .{ .client = c, .id = orig, .is_initialize = is_init }) catch return;
+                if (is_init) {
+                    b.init_inflight = true;
+                    b.init_server_id = id;
+                }
+                b.pending.put(b.gpa, id, .{ .client = c, .id = orig }) catch return;
                 b.toServer(withId(a, msg, .{ .integer = id }) catch return);
             },
             .notification => {
@@ -296,13 +329,10 @@ const Broker = struct {
             .response => {
                 const idv = msg.object.get("id").?;
                 if (idv != .integer) return;
+                // Matched by server id: the waiters still need it if the
+                // client that sent it has gone.
+                if (b.init_inflight and idv.integer == b.init_server_id) b.finishInitialize(a, msg);
                 const p = b.pending.fetchRemove(idv.integer) orelse return;
-                if (p.value.is_initialize and b.init_result == null) if (msg.object.get("result")) |r| {
-                    var aw: Io.Writer.Allocating = .init(b.ids_arena.allocator());
-                    var js: std.json.Stringify = .{ .writer = &aw.writer };
-                    js.write(r) catch {};
-                    b.init_result = aw.writer.buffered();
-                };
                 b.toClient(p.value.client, withId(a, msg, p.value.id) catch return);
             },
             .notification => for (b.clients.items) |c| b.toClient(c, line),
@@ -330,6 +360,10 @@ const Broker = struct {
         defer stale.deinit(b.gpa);
         while (it.next()) |e| if (e.value_ptr.client == c) stale.append(b.gpa, e.key_ptr.*) catch {};
         for (stale.items) |k| _ = b.pending.remove(k);
+        var w: usize = 0;
+        while (w < b.init_waiters.items.len) {
+            if (b.init_waiters.items[w].client == c) _ = b.init_waiters.swapRemove(w) else w += 1;
+        }
         if (b.clients.items.len == 0) b.last_client_left_ms = nowMs(b.io);
         c.stream.close(b.io);
     }

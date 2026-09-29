@@ -2,7 +2,8 @@
 """A "shared": true MCP server runs once per machine for every session.
 
 - two concurrent sessions calling the shared server reach ONE process: one
-  start, one initialize (the second is answered by the broker), every call
+  start, one initialize (the second, even while the first is still at the
+  server, is answered by the broker), every call
   answered with that process's pid, each session getting its own replies
 - an ordinary server beside it still runs once per session
 - when the sessions end, the broker exits on its idle timer: the server
@@ -14,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / 'eval'))
 from mock_model import ScriptedModel
 
 SERVER = r"""
-import json, os, sys
+import json, os, sys, time
 log = sys.argv[1]
 def rec(o):
     with open(log, "a") as f: f.write(json.dumps(o) + "\n")
@@ -27,6 +28,7 @@ for line in sys.stdin:
     rec({"event": "method", "method": meth})
     if mid is None: continue
     if meth == "initialize":
+        time.sleep(1)  # both sessions' initialize reach the broker before this answer
         out({"jsonrpc": "2.0", "id": mid, "result": {"protocolVersion": "2025-11-25", "capabilities": {"tools": {}}, "serverInfo": {"name": "s", "version": "1"}}})
     elif meth == "server/discover":
         out({"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "Method not found"}})
