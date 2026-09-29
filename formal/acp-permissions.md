@@ -7,9 +7,9 @@ The model separates parsing a server request (`FrontendReceive`) from delivering
 | Model step or guard | Current implementation |
 | --- | --- |
 | `ServerAsk`, one pending request, offered choices | `src/acp_permission.zig` `Bridge.ask`, especially the `closed`/`pending` check, sequence assignment, and option array |
-| `FrontendReceive`, transport-local token | `apps/native/lib/acp-transport.ts` `feed` creates a token and stores request ID, session, and offered options in that transport's `permissions` map |
-| `GuiDeliver` | `feed` notifies/subscribes listeners; `apps/native/lib/acp-client.ts` maps requests to `gui_permission` for prompt and idle streams |
-| `FrontendRespond` and token consumption | `apps/native/app/api/acp/route.ts` handles `session/permission` against the current chat slot; `AcpTransport.respondPermission` checks token, session, option, and failure, deletes the token before writing |
+| `FrontendReceive`, transport-local token | The ACP client (Harness; formerly this repository's desktop app) creates a token and stores request ID, session, and offered options per transport |
+| `GuiDeliver` | The ACP client shows the request for prompt and idle streams |
+| `FrontendRespond` and token consumption | The ACP client answers against the current chat; it checks token, session, option, and failure, and deletes the token before writing |
 | `ServerAccept` | `src/acp_permission.zig` `Bridge.accept` checks the pending server ID, closed/decision state, and offered `allow_always`; an unknown result becomes denial |
 | `FrontendCancel` | `AcpTransport.notify("session/cancel")`, `clearPermissions`, transport failure, or prompt completion clears live tokens |
 | `ServerCancel` | `Bridge.cancel`, called from `src/acp_inbox.zig` on cancellation or EOF and from `src/acp_live_turn.zig` on turn exit |

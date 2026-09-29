@@ -5,7 +5,6 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--graff', type=Path, default=root / 'zig-out/bin/graff')
 parser.add_argument('--evidence', type=Path, required=True)
-parser.add_argument('--gui', action='store_true', help='Also exercise the GUI API replacement path; requires Bun and native app dependencies')
 args = parser.parse_args()
 out = args.evidence.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -25,16 +24,11 @@ def run_case(mode):
         env = {k: v for (k, v) in os.environ.items() if not k.endswith('_API_KEY')}
         env.update(HOME=temp, LMSTUDIO_API_KEY='local', GRAFF_NO_TELEMETRY='1', GRAFF_FLEET='off', GRAFF_NO_SMOLIFY='1', GRAFF_NO_CODEDB_GUARD='1', NO_COLOR='1', GRAFF_JOB_IDLE_WARN_MINS='0', GRAFF_JOB_IDLE_STOP_MINS='1', GRAFF_MCP_CONFIG=str(work / 'mcp.json'))
         model = reg.ScriptedModel([{'tool': 'bash', 'arguments': {'command': shlex.quote(sys.executable) + ' listener.py', 'run_in_background': True}}, reg.tool(shlex.quote(sys.executable) + ' ready.py'), {'text': 'The isolated listener is ready.'}])
-        if mode == 'gui':
-            model.script.extend([reg.tool(shlex.quote(sys.executable) + ' ready.py'), {'text': 'Still reachable.'}])
         model.start(1234)
         pid = None
         try:
             command = [str(graff), '--json', '--yolo', '--old', '--model', 'lmstudio']
             prompt = json.dumps({'type': 'user', 'text': 'Start the isolated listener and verify readiness.'}) + '\n'
-            if mode == 'gui':
-                env.update(GRAFF_BIN=str(graff), GRAFF_CWD=str(work), GRAFF_RETENTION_WORKSPACE=str(work), GRAFF_RETENTION_EVIDENCE=str(out))
-                command = ['bun', str(root / 'apps/native/scripts/test-server-retention-route.ts')]
             if mode != 'crash':
                 done = reg.bounded_run(command, cwd=work, env=env, text=True, capture_output=True, timeout=110, input=prompt)
             else:
@@ -103,5 +97,5 @@ def run_case(mode):
                 except ProcessLookupError:
                     pass
 
-for mode in (('normal', 'crash', 'gui') if args.gui else ('normal', 'crash')):
+for mode in ('normal', 'crash'):
     run_case(mode)

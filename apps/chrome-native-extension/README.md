@@ -1,7 +1,6 @@
 # Graff Browser Connect — experimental native-messaging variant
 
 Requires Google Chrome, Node 22+, macOS or Linux. No dependencies or build step.
-This variant is isolated from the separate `apps/chrome-extension` sidecar.
 
 1. In Chrome open `chrome://extensions`, enable Developer mode, choose Load
    unpacked, and select **apps/chrome-native-extension** from this checkout.

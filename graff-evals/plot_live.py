@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish the live 12-PR board as summary.json + a codegraff.com card.
 
-Palette is the website token set (apps/native/app/appearance.css website theme):
+Palette is the website token set (the website theme):
   page #fafaf8 · ink #18231e · accent #059669.
 
   python3 plot_live.py --from-jsonl   # rebuild summary from local results/

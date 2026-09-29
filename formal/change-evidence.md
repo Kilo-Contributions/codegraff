@@ -28,7 +28,7 @@ For each behavioral change, retain this chain:
 | A repeated tool ID must not execute twice | `AtMostOnceExecution` | `src/agent_async_tools.zig`: `async tools complete call dispatches once in headless mode and claims once` |
 | A synchronous predecessor stops early admission | `NoLateAdmission` | `src/agent_async_tools.zig`: `async tools do not cross a synchronous predecessor or execute partial arguments` |
 | Owned workers retire before their storage is freed | Async cancellation/reset model | `src/agent_async_tools.zig`: `async tools reset cancels and joins workers before freeing owned state` |
-| Permission replies belong to their live transport and session | ACP permission extension | `apps/native/lib/acp-permission.test.ts`: `permission replies bind process, session, original ID and offered option exactly once` |
+| Permission replies belong to their live transport and session | ACP permission extension | Client-side evidence moved with the desktop app to Harness |
 
 These anchors connect intent and implementation tests. They do not establish
 that every modeled interleaving is exercised by a runtime test, or that the
