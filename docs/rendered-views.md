@@ -1,5 +1,7 @@
 # Rendered views
 
+> This page describes the desktop app that used to live in this repository. The desktop app is now [Harness](https://github.com/justrach/harness), which drives graff over ACP. Harness does not show rendered views yet; the page is still written to `.graff/views/` and its path is in the tool result.
+
 The model can draw. When a result is easier to see than to read — a chart, a
 timeline, a layout mock, a before/after — it calls **`render_html`** with one
 self-contained page and the desktop app shows that page inline in the

@@ -6,6 +6,8 @@
 
 <p align="center">An AI coding agent for your terminal. One small binary, no dependencies.</p>
 
+<p align="center">Want a desktop app? <a href="https://github.com/justrach/harness"><strong>Harness</strong></a> runs graff with chat, review, files, and terminals in one window.</p>
+
 <p align="center">
   <img alt="macOS · Linux · Windows" src="https://img.shields.io/badge/macOS%20·%20Linux%20·%20Windows-555">
   <img alt="One binary, 3.7 MB" src="https://img.shields.io/badge/one%20binary-3.7%20MB-44cc11">
@@ -37,8 +39,8 @@ curl -fsSL https://github.com/justrach/codegraff/releases/latest/download/instal
 
 On Windows, unpack `graff-x86_64-windows.tar.gz` (or `aarch64`) from the
 [latest release](https://github.com/justrach/codegraff/releases/latest) and put
-`graff.exe` on your `PATH`. The [desktop app](#desktop-app) installs `graff`
-for you.
+`graff.exe` on your `PATH`. The desktop app, [Harness](https://github.com/justrach/harness), installs
+`graff` for you.
 
 ```sh
 graff login                      # sign in

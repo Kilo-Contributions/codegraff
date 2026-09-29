@@ -1,5 +1,7 @@
 # GUI child feedback integration
 
+> This page describes the desktop app that used to live in this repository. The desktop app is now [Harness](https://github.com/justrach/harness), which drives graff over ACP. The analysis below applies to any ACP client, including Harness.
+
 Status: investigated; the GUI transport below is not implemented.
 
 ## Current behavior

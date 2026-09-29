@@ -1,5 +1,7 @@
 # Agents panel
 
+> This page describes the desktop app that used to live in this repository. The desktop app is now [Harness](https://github.com/justrach/harness), which drives graff over ACP; see its repository for its Agents settings.
+
 Open **Agents** in the desktop toolbar. The panel starts with **This workspace**;
 choose **All local Graffs** to include sessions in other workspaces on the same
 computer. Drag the divider to resize it.
