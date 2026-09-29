@@ -346,6 +346,16 @@ included), `cache_read_tokens`, `cache_write_tokens`, `output_tokens`, and
 `chained` (sent as `previous_response_id` plus new items). A cache hit rate is
 `cache_read_tokens / input_tokens` from `usage`, never from `context_tokens`.
 
+`usage` also says why a read dropped (#1320). It records `gap_ms` (time since
+this agent's previous request began), `cache_ttl` (`"1h"` when requested),
+`prefix_changed` and `prefix_bust` (the root's system+tools prefix moved, and
+the named reason: tools, mcp, mode, compact, …), and, on a request with real
+input that read nothing, `cache_miss`: `prefix_changed`, `first_request`,
+`idle_gap` (5+ minutes since the previous request, past a default entry's
+life), or `unknown`. On the Anthropic API a request whose predecessor began
+3+ minutes earlier asks for the 1-hour TTL, so a slow call no longer returns
+to an expired prefix.
+
 ## Session persistence
 
 `/save` serializes `{provider, model, strict, messages}` with

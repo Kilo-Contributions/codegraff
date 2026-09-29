@@ -142,7 +142,7 @@ test "notification metadata stays off chat, responses and anthropic wires includ
         if (mode == 0) try writeWireArray(&s, msgs.items) else if (mode == 1)
             try serde.writeOpenAIMessageNormalized(&s, m)
         else
-            try serde.writeAnthropicMessages(&s, msgs, mode & 1 == 1, mode & 2 == 2);
+            try serde.writeAnthropicMessages(&s, msgs, if (mode & 1 == 1) @import("cache_ttl.zig").ephemeral else null, mode & 2 == 2);
         try std.testing.expect(std.mem.indexOf(u8, aw.written(), origin_key) == null);
         try std.testing.expect(std.mem.indexOf(u8, aw.written(), "wake up") != null);
         try std.testing.expect(std.mem.indexOf(u8, aw.written(), "\"role\":\"user\"") != null);
