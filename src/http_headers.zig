@@ -215,6 +215,13 @@ pub fn providerHeadersWithConv(io: Io, provider: Provider, bearer: []const u8, b
     if (provider.kind == .anthropic) {
         buf[count] = .{ .name = "anthropic-version", .value = root.anthropic_version };
         count += 1;
+        // ADR 0219: the beta that goes with the body's thinking.block_binding,
+        // on the Anthropic API and the models that check it (claude_wire).
+        const claude = @import("claude_wire.zig");
+        if (std.mem.eql(u8, provider.id, "anthropic") and claude.bindsThinking(provider.model)) {
+            buf[count] = .{ .name = "anthropic-beta", .value = claude.binding_beta };
+            count += 1;
+        }
     }
     if (std.mem.eql(u8, provider.id, "kimi")) {
         const identity = kimi_catalog.identityHeaders(buf[count..]);
@@ -570,4 +577,22 @@ test "Kimi chat sends graff identity and kimi-code device headers (#617)" {
     };
     if (prefix.len != 0) try std.testing.expect(std.mem.startsWith(u8, model, prefix));
     try std.testing.expect(!std.mem.eql(u8, headerValue(headers, "X-Msh-Os-Version").?, @tagName(@import("builtin").os.tag)));
+}
+
+test "the thinking-binding beta rides only 5.5-era Claude models on the Anthropic API (ADR 0219)" {
+    const io = std.testing.io;
+    var buf: [12]std.http.Header = undefined;
+    const beta = struct {
+        fn of(headers: []const std.http.Header) ?[]const u8 {
+            for (headers) |h| if (std.mem.eql(u8, h.name, "anthropic-beta")) return h.value;
+            return null;
+        }
+    }.of;
+    var p: Provider = .{ .id = "anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "k", .model = "claude-opus-5-5", .context = 1_000_000 };
+    try std.testing.expectEqualStrings("thinking-binding-controls-2026-08-01", beta(providerHeaders(io, p, "", &buf)).?);
+    p.model = "claude-opus-5";
+    try std.testing.expect(beta(providerHeaders(io, p, "", &buf)) == null);
+    // An Anthropic-format provider that is not Anthropic never sees it.
+    p = .{ .id = "minimax", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "k", .model = "claude-opus-5-5", .context = 1_000_000 };
+    try std.testing.expect(beta(providerHeaders(io, p, "", &buf)) == null);
 }

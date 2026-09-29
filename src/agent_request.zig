@@ -20,7 +20,6 @@ const RetryPlan = http.RetryPlan;
 
 const tools_mod = @import("tools.zig");
 const apiErrorMessage = tools_mod.apiErrorMessage;
-const mentionsReasoningEffort = tools_mod.mentionsReasoningEffort;
 const telemetry = @import("telemetry.zig");
 const tool_spill = @import("tool_spill.zig"); // #409: did the cap preserve the bytes, or destroy them?
 const run_budget_mod = @import("run_budget.zig");
@@ -483,6 +482,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     const emsg = if (eo) |e| (if (e.get("message")) |mv| (if (mv == .string) mv.string else "") else "") else "";
                     const ecode = if (eo) |e| (if (e.get("code")) |cv| (if (cv == .string) cv.string else null) else null) else null;
                     if (recoverContextOverflow(self, emsg, ecode, &context_retried)) continue; // #193/#203: streamed error event overflow (by code or phrasing) → trim + retry
+                    if (policy.retryWithout(self, emsg, &force, &stream_usage)) continue; // ADR 0219: Anthropic errors take the ladder too
                     if (try policy.afterServerErrorOrParseReject(self, etype, ecode, emsg, &server_retries, &gw_retry)) continue;
                     if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, ms, body.len, resp_body.len, 0, 0, true);
                     try sayTypedApiError(self, etype, ecode, emsg, errorRequestId(root));
@@ -532,39 +532,14 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
             const emsg = if (eo) |e| (if (e.get("message")) |mv| (if (mv == .string) mv.string else "") else "") else "";
             const ecode = if (eo) |e| (if (e.get("code")) |cv| (if (cv == .string) cv.string else null) else null) else null;
             if (recoverContextOverflow(self, emsg, ecode, &context_retried)) continue; // #193/#203: {"type":"error"} overflow (by code or phrasing) → trim + retry
+            if (policy.retryWithout(self, emsg, &force, &stream_usage)) continue; // ADR 0219: Anthropic errors take the ladder too
             if (try policy.afterServerErrorOrParseReject(self, etype, ecode, emsg, &server_retries, &gw_retry)) continue;
             if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, ms, body.len, resp_body.len, 0, 0, true);
             try sayTypedApiError(self, etype, ecode, emsg, errorRequestId(root));
             return error.ApiError;
         };
         if (apiErrorMessage(root)) |msg| {
-            if (force and std.mem.indexOf(u8, msg, "tool_choice") != null) {
-                force = false; // provider can't force a tool; soft-strict
-                continue;
-            }
-            if (stream_usage and std.mem.indexOf(u8, msg, "stream_options") != null) {
-                stream_usage = false; // provider can't report streamed usage
-                continue;
-            }
-            if (!self.cap_new and std.mem.indexOf(u8, msg, "max_completion_tokens") != null) {
-                self.cap_new = true; // provider wants the post-deprecation name
-                continue;
-            }
-            // #543: a provider without json_schema structured outputs (deepseek:
-            // "This response_format type is unavailable now") must not lose the
-            // --output-schema contract — retry in json_object mode with the
-            // schema moved into the prompt, on the same ladder as cap_new.
-            if (self.output_schema != null and !self.sox_json_object and
-                (std.mem.indexOf(u8, msg, "response_format") != null or
-                    std.mem.indexOf(u8, msg, "output_config") != null))
-            {
-                self.sox_json_object = true;
-                continue;
-            }
-            if (!self.effort_rejected and mentionsReasoningEffort(msg)) {
-                self.effort_rejected = true; // model rejects the effort hint here; drop + retry
-                continue;
-            }
+            if (policy.retryWithout(self, msg, &force, &stream_usage)) continue;
             // #148: a stale login token 401s here with the provider's "API Key
             // invalid/expired"; adopt a newer on-disk token or force a refresh
             // and retry once (kimi-code's buildAuth(true)). Give up only if the

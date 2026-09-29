@@ -64,12 +64,10 @@ pub const TierLadder = struct {
 pub const ladders = [_]TierLadder{
     .{ .provider = "codex", .frontier = "gpt-6-astra", .mid = "gpt-5.6-terra", .small = "gpt-5.6-luna" },
     .{ .provider = "openai", .frontier = "gpt-5.6", .mid = "gpt-5.6-terra", .small = "gpt-5.6-luna" },
-    // #471: opus-5 and sonnet-5 are the current lineup, and the rungs below
-    // frontier must be cheaper SEATS. Every opus generation bills the same
-    // $5/$25 per MTok, so "descend from opus-5 to opus-4-8" saves nothing —
-    // it is the same seat, one generation older. sonnet-5 at $2/$10 is the
-    // real cheap rung, 2.5x under opus on both halves of the bill.
-    .{ .provider = "anthropic", .frontier = "claude-opus-5", .small = "claude-sonnet-5" },
+    // #471: the rungs below frontier must be cheaper SEATS. opus-5-5 ($4/$20)
+    // and sonnet-5-5 ($2/$10) are the current lineup (ADR 0219); descending to
+    // an older opus saves nothing, and sonnet-5-5 halves both halves of the bill.
+    .{ .provider = "anthropic", .frontier = "claude-opus-5-5", .small = "claude-sonnet-5-5" },
     // Flash is the cheaper DeepSeek seat ($0.14/$0.28 vs pro $1.1/$2.2) and
     // still outclasses luna. Pro stays the frontier name a codegraff/direct
     // session actually starts on; small descends to flash instead of hopping
@@ -235,9 +233,9 @@ test "#471 a derived ladder offering no real descent yields to the compiled row"
     };
     bench.g_ladders = &derived;
     const l = forProvider("anthropic").?;
-    try std.testing.expectEqualStrings("claude-opus-5", l.frontier);
+    try std.testing.expectEqualStrings("claude-opus-5-5", l.frontier); // the compiled row, whole
     try std.testing.expect(l.mid == null);
-    try std.testing.expectEqualStrings("claude-sonnet-5", l.small.?); // from the compiled row
+    try std.testing.expectEqualStrings("claude-sonnet-5-5", l.small.?); // from the compiled row
 
     // A derived ladder that DOES name a genuinely cheaper seat still wins:
     // measured data outranks the hand-picked default, which is the whole

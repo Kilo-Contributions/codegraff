@@ -169,6 +169,15 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
         return error.ApiError;
     }
     const stop_reason = if (root.get("stop_reason")) |s| (if (s == .string) s.string else "") else "";
+    // ADR 0219: a safety refusal ends the turn, outside history, never retried.
+    if (std.mem.eql(u8, stop_reason, "refusal")) {
+        const refusal = @import("claude_refusal.zig");
+        const cat = refusal.category(root);
+        const line = try refusal.text(self.arena, cat);
+        try self.say("{s}\n", .{line});
+        if (self.tracer) |tr| tr.note("refusal", cat orelse "unspecified");
+        return line;
+    }
 
     var assistant: std.json.ObjectMap = .empty;
     try assistant.put(self.arena, "role", .{ .string = "assistant" });

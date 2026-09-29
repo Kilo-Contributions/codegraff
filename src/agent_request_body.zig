@@ -34,16 +34,21 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
     switch (self.provider.kind) {
         .anthropic => {
             const is_kimi = std.mem.eql(u8, self.provider.id, "kimi");
+            const is_claude = std.mem.eql(u8, self.provider.id, "anthropic");
+            const claude = @import("claude_wire.zig"); // ADR 0219
             try s.objectField("max_tokens");
-            try s.write(max_tokens);
+            try s.write(if (is_claude) claude.maxTokens(self.provider.model, self.reasoning, max_tokens) else max_tokens);
             if (stream) {
                 try s.objectField("stream");
                 try s.write(true);
             }
+            // A 5.5-era Claude model 400s on forced tool use: it runs auto
+            // (soft-strict) and keeps its thinking.
+            const force = force_tool and !(is_claude and claude.rejectsForcedTools(self.provider.model));
             // Kimi's catalog-declared Anthropic transport uses enabled
             // thinking plus output_config.effort; Claude uses adaptive.
             // Forced tool_choice conflicts with thinking, so skip it then.
-            if (!force_tool) {
+            if (!force) {
                 if (is_kimi) {
                     if (pricing.kimiSupportsThinking(self.provider.model)) {
                         try s.objectField("thinking");
@@ -63,8 +68,8 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
                     // panel then shows nothing. Ask for the summary. Only the real
                     // Anthropic API knows the field; the other anthropic-format providers
                     // (minimax) must never see it.
-                    const thinking_obj: []const u8 = if (std.mem.eql(u8, self.provider.id, "anthropic"))
-                        "{\"type\":\"adaptive\",\"display\":\"summarized\"}"
+                    const thinking_obj: []const u8 = if (is_claude)
+                        claude.thinkingObject(self.provider.model)
                     else
                         "{\"type\":\"adaptive\"}";
                     try s.objectField("thinking");
@@ -91,16 +96,24 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             } else {
                 try s.write(sys);
             }
+            // Effort rides output_config, in one object with a structured-output
+            // format when there is one.
+            const effort: ?[]const u8 = if (is_claude and !self.effort_rejected and claude.takesEffort(self.provider.model)) claude.effortWire(self.reasoning) else null;
+            var effort_written = false;
             if (tools) |t| {
                 try s.objectField("tools");
                 try writeAnthropicTools(&s, self.scratchAlloc(), t, is_kimi);
-                if (force_tool) {
+                if (force) {
                     try s.objectField("tool_choice");
                     try s.print("{s}", .{"{\"type\":\"any\"}"});
                 }
             } else if (self.output_schema) |schema_json| {
-                try @import("agent_request_body_responses.zig").writeAnthropicSchema(&s, self, schema_json);
+                effort_written = try @import("agent_request_body_responses.zig").writeAnthropicSchema(&s, self, schema_json, effort);
             }
+            if (effort) |e| if (!effort_written) {
+                try s.objectField("output_config");
+                try s.print("{{\"effort\":\"{s}\"}}", .{e});
+            };
             try s.objectField("messages");
             // Cache the conversation prefix too (not just system) on the real
             // Anthropic API and Kimi's declared Anthropic transport. Kimi also
@@ -338,74 +351,6 @@ test "retained reasoning: openai-chat history replays reasoning_content on the n
     try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_calls\"") != null);
 }
 
-test "retained reasoning: anthropic replays thinking+signature inside a multi-step tool turn" {
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    var messages = std.json.Array.init(arena);
-    try messages.append(try testUserMessage(arena, "fix the build"));
-
-    // Assistant turn: thinking block (with its signature) followed by tool_use.
-    // Anthropic requires the thinking block to be replayed unchanged, in place,
-    // when the turn that produced it contained a tool call — editing or dropping
-    // it is a signature/ordering 400.
-    var thinking_block: std.json.ObjectMap = .empty;
-    try thinking_block.put(arena, "type", .{ .string = "thinking" });
-    try thinking_block.put(arena, "thinking", .{ .string = "the linker flag is wrong" });
-    try thinking_block.put(arena, "signature", .{ .string = "sigabc" });
-    var use_block: std.json.ObjectMap = .empty;
-    try use_block.put(arena, "type", .{ .string = "tool_use" });
-    try use_block.put(arena, "id", .{ .string = "tu_1" });
-    try use_block.put(arena, "name", .{ .string = "bash" });
-    try use_block.put(arena, "input", .{ .object = .empty });
-    var assistant_blocks = std.json.Array.init(arena);
-    try assistant_blocks.append(.{ .object = thinking_block });
-    try assistant_blocks.append(.{ .object = use_block });
-    var assistant: std.json.ObjectMap = .empty;
-    try assistant.put(arena, "role", .{ .string = "assistant" });
-    try assistant.put(arena, "content", .{ .array = assistant_blocks });
-    try messages.append(.{ .object = assistant });
-
-    var result_block: std.json.ObjectMap = .empty;
-    try result_block.put(arena, "type", .{ .string = "tool_result" });
-    try result_block.put(arena, "tool_use_id", .{ .string = "tu_1" });
-    try result_block.put(arena, "content", .{ .string = "ok" });
-    var result_blocks = std.json.Array.init(arena);
-    try result_blocks.append(.{ .object = result_block });
-    var result_msg: std.json.ObjectMap = .empty;
-    try result_msg.put(arena, "role", .{ .string = "user" });
-    try result_msg.put(arena, "content", .{ .array = result_blocks });
-    try messages.append(.{ .object = result_msg });
-
-    var agent: Agent = .{
-        .gpa = std.testing.allocator,
-        .arena = arena,
-        .io = std.testing.io,
-        .client = undefined,
-        .provider = .{ .id = "anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "k", .model = "claude", .context = 1_000_000 },
-        .messages = messages,
-        .sub = false,
-        .label = "",
-        .out = null,
-        .sys_normal = "system",
-    };
-    const tools = "[{\"name\":\"bash\",\"description\":\"\",\"input_schema\":{\"type\":\"object\"}}]";
-    const body = try agent.buildBody(tools, false, true, true);
-    defer std.testing.allocator.free(body);
-
-    // Adaptive thinking is what enables interleaved reasoning between tool
-    // calls; it needs no beta header on current models. It also opts into a
-    // summarized display, since current Claude models default to an empty one.
-    try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"}") != null);
-    // The whole block, signature included, survives the cache-breakpoint rewrite.
-    try std.testing.expect(std.mem.indexOf(u8, body, "{\"type\":\"thinking\",\"thinking\":\"the linker flag is wrong\",\"signature\":\"sigabc\"}") != null);
-    // A cache breakpoint belongs on the trailing tool_result, never on a
-    // thinking block (cache_control is not a valid field there).
-    try std.testing.expect(std.mem.indexOf(u8, body, "\"signature\":\"sigabc\",\"cache_control\"") == null);
-    try std.testing.expect(std.mem.indexOf(u8, body, "\"content\":\"ok\",\"cache_control\":{\"type\":\"ephemeral\"}") != null);
-}
-
 test "retained reasoning: codex full resend keeps encrypted reasoning items and requests them" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
@@ -461,52 +406,6 @@ test "retained reasoning: codex full resend keeps encrypted reasoning items and 
     var ckbuf: [96]u8 = undefined;
     const key = try std.fmt.allocPrint(arena, "\"prompt_cache_key\":\"{s}\"", .{http_headers.promptCacheKey(agent.io, agent.label, &agent, &ckbuf)});
     try std.testing.expect(std.mem.indexOf(u8, body, key) != null);
-}
-
-test "anthropic asks for summarized thinking; other anthropic-format providers do not" {
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-
-    var messages = std.json.Array.init(arena);
-    try messages.append(try testUserMessage(arena, "hello"));
-
-    var agent: Agent = .{
-        .gpa = std.testing.allocator,
-        .arena = arena,
-        .io = std.testing.io,
-        .client = undefined,
-        .provider = .{ .id = "anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "k", .model = "claude", .context = 1_000_000 },
-        .messages = messages,
-        .sub = false,
-        .label = "",
-        .out = null,
-        .sys_normal = "system",
-    };
-    const tools = "[{\"name\":\"bash\",\"description\":\"\",\"input_schema\":{\"type\":\"object\"}}]";
-
-    // a. Real Anthropic, thinking allowed: adaptive thinking opts into a
-    // summarized display, since current Claude models default to empty.
-    const body_a = try agent.buildBody(tools, false, true, true);
-    defer std.testing.allocator.free(body_a);
-    try std.testing.expect(std.mem.indexOf(u8, body_a, "\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"}") != null);
-
-    // b. Forced tool_choice still suppresses the whole thinking object, exactly
-    // as before this change.
-    const body_b = try agent.buildBody(tools, true, true, true);
-    defer std.testing.allocator.free(body_b);
-    try std.testing.expect(std.mem.indexOf(u8, body_b, "\"thinking\"") == null);
-    try std.testing.expect(std.mem.indexOf(u8, body_b, "\"tool_choice\":{\"type\":\"any\"}") != null);
-
-    // c. Other anthropic-format providers (minimax) reject unknown fields, so
-    // they must never see "display" — only the bare adaptive object.
-    agent.provider.id = "minimax";
-    agent.provider.model = "MiniMax-M3";
-    const body_c = try agent.buildBody(tools, false, true, true);
-    defer std.testing.allocator.free(body_c);
-    try std.testing.expect(std.mem.indexOf(u8, body_c, "\"thinking\":{\"type\":\"adaptive\"}") != null);
-    try std.testing.expect(std.mem.indexOf(u8, body_c, "\"display\"") == null);
-    try std.testing.expect(std.mem.indexOf(u8, body_c, "\"keep\"") == null); // #323: thinking.keep is Kimi-only
 }
 
 test "kimi k2.6 opts into thinking.keep so replayed reasoning is used, not just billed" {
@@ -596,4 +495,8 @@ test "openai-wire bodies send a sticky prompt_cache_key; children isolate" {
     const ob = try oai.buildBody(null, false, true, true);
     defer std.testing.allocator.free(ob);
     try std.testing.expect(std.mem.indexOf(u8, ob, needle) != null);
+}
+
+test { // Claude request-shape tests (ADR 0219) live beside this file
+    _ = @import("agent_request_body_claude_tests.zig");
 }

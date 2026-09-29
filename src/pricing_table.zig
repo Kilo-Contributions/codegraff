@@ -23,6 +23,11 @@ pub const rows = [_]ModelPrice{
     .{ .name = "gpt-5.3-codex", .in = 1.75, .out = 14, .cache = 0.175 },
     .{ .name = "gpt-5.2", .in = 1.75, .out = 14, .cache = 0.175 },
     .{ .name = "gpt-5-codex", .in = 1.25, .out = 10, .cache = 0.125 },
+    // Claude 5.5-era lineup (platform.claude.com model pages, read 2026-09-30).
+    // Cache reads are 5% of input on Opus 5.5 and 2.5% on Fable 5.1.
+    .{ .name = "claude-opus-5-5", .in = 4, .out = 20, .cache = 0.2 },
+    .{ .name = "claude-sonnet-5-5", .in = 2, .out = 10, .cache = 0.2 },
+    .{ .name = "claude-fable-5-1", .in = 10, .out = 50, .cache = 0.25 },
     .{ .name = "claude-fable-5", .in = 10, .out = 50, .cache = 1 }, // pricier than opus-5; unpriced it read as a cheap rung
     .{ .name = "claude-opus-5", .in = 5, .out = 25, .cache = 0.5 },
     .{ .name = "claude-sonnet-5", .in = 2, .out = 10, .cache = 0.2 }, // introductory, $3/$15 from 2026-09-01

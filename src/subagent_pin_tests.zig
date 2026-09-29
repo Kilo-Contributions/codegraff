@@ -200,17 +200,17 @@ test "graceful fallback: every unhonorable pin keeps the session default, never 
     try std.testing.expectEqual(pin_mod.Outcome.no_rung, pin_mod.forSpawn(deepseek, obj(a, "{\"tier\":\"mid\"}"), true).outcome);
     const opus: Provider = .{ .id = "anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "k", .model = "claude-opus-5", .context = 1_000_000 };
     try std.testing.expectEqual(pin_mod.Outcome.no_rung, pin_mod.forSpawn(opus, obj(a, "{\"tier\":\"mid\"}"), true).outcome);
-    try std.testing.expectEqualStrings("claude-sonnet-5", pin_mod.forSpawn(opus, obj(a, "{\"tier\":\"small\"}"), true).provider.?.model);
+    try std.testing.expectEqualStrings("claude-sonnet-5-5", pin_mod.forSpawn(opus, obj(a, "{\"tier\":\"small\"}"), true).provider.?.model);
 }
 
 test "cost ceiling: a tier rung may descend price but never raise it" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
-    // anthropic's compiled ladder: frontier claude-opus-5 ($5/25), small
-    // claude-sonnet-5 ($2/10). Descending is fine…
+    // anthropic's compiled ladder: frontier claude-opus-5-5 ($4/20), small
+    // claude-sonnet-5-5 ($2/10). Descending from an opus root is fine…
     const opus: Provider = .{ .id = "anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "k", .model = "claude-opus-5", .context = 1_000_000 };
-    try std.testing.expectEqualStrings("claude-sonnet-5", pin_mod.forSpawn(opus, obj(a, "{\"tier\":\"small\"}"), true).provider.?.model);
+    try std.testing.expectEqualStrings("claude-sonnet-5-5", pin_mod.forSpawn(opus, obj(a, "{\"tier\":\"small\"}"), true).provider.?.model);
     // …but a sonnet-5 root asking for the frontier rung would RAISE cost —
     // blocked with a reason, spawn keeps the session default. Naming the
     // model explicitly still escalates: that is the visible, consented path.
