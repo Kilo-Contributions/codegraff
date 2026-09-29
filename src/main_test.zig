@@ -363,6 +363,7 @@ test "/save and /resume report a failed name copy instead of ending the REPL" {
 // unreferenced module's test {} blocks silently compile to nothing.
 test {
     _ = @import("startup_tests.zig");
+    _ = @import("readline_data_uri.zig"); // bracketed image drop stages through the composer into native blocks
     _ = @import("recap.zig"); // #419: session-recap bounds/heuristic/parsing tests
 }
 

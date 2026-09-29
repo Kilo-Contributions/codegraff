@@ -34,6 +34,7 @@ const pricing = @import("pricing.zig");
 const trace = @import("trace.zig");
 const serde = @import("serde.zig");
 const fallback_config = @import("fallback_config.zig");
+const steer_input_state = @import("steer_input_state.zig");
 
 pub const ReplCtx = struct {
     io: Io,
@@ -427,9 +428,12 @@ pub fn popSteer() ?SteerEntry {
 /// of each REPL iteration so a partial mid-turn draft never leaks into the
 /// next prompt.
 pub fn resetSteerPartial() void {
+    steer_input_state.lock();
+    defer steer_input_state.unlock();
     steerLock();
     defer steerUnlock();
     main_mod.g_steer_buf.clearRetainingCapacity();
+    steer_input_state.scan = .{};
     main_mod.g_steer_echoed = false;
     main_mod.g_steer_visible.store(false, .release);
 }

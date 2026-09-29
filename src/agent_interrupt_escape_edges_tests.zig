@@ -3,6 +3,7 @@
 const std = @import("std");
 const interrupt = @import("agent_interrupt.zig");
 const main_mod = @import("main.zig");
+const repl_glue = @import("repl_glue.zig");
 
 const page = std.heap.page_allocator;
 
@@ -29,7 +30,7 @@ const FakeInput = struct {
 fn resetGlobals() void {
     for (main_mod.g_steer_queue.items) |entry| page.free(entry.text);
     main_mod.g_steer_queue.clearRetainingCapacity();
-    main_mod.g_steer_buf.clearRetainingCapacity();
+    repl_glue.resetSteerPartial();
     main_mod.g_steer_echoed = false;
     main_mod.g_steer_visible.store(false, .release);
     main_mod.g_force_interrupt = false;

@@ -239,6 +239,7 @@ record only when you need the evidence or the edge cases.
 | [0210](0210-macos-cli-is-signed-in-ci-before-upload.md) | Tag releases sign and notarize the macOS CLI tarballs on a macOS runner before anything is uploaded, gated on all five signing secrets; without them the job no-ops and docs/notarization.md is the fallback. `SHA256SUMS` is computed once from the uploaded bytes. The desktop DMG stays a local `distribute.sh` step. |
 | [0211](0211-mcp-servers-by-name-user-level-sync-via-harness.md) | `graff mcp add <name>` resolves from the codegraff.com/mcp.json catalog, then the MCP registry only for a namespace owner matching the name. `--everywhere` writes the user-level file. Harness syncs that file through its registry as non-secret rows. Env values, headers and OAuth tokens stay on each device. Harness drives graff only over ACP (slash command, form elicitation, `_meta["graff/mcp"]` status). Supersedes the vault-item sync in #1371. |
 | [0212](0212-build-time-is-analysis-bound.md) | A cold build is ~16 s of single-core semantic analysis; codegen and link are nearly free. No redundant files to cut. Keep the default backend: `-fllvm` is 2x slower, `-fincremental`/`--watch` do not help on Zig 0.17-dev, and `-fno-llvm -fno-lld` exhausts memory. Iterate with `-Dtest-filter` (44 s → 13 s). |
+| [0213](0213-line-repl-paste-is-framed-and-typed.md) | Keep line-REPL paste framed through active turns; submit one draft on Enter, and stage or reject bounded image data URIs before text expansion. |
 
 ## When to write one
 

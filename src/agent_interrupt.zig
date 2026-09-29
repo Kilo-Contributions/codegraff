@@ -18,42 +18,21 @@ const Io = std.Io;
 
 const main_mod = @import("main.zig");
 const agent_mod = @import("agent.zig");
-const repl_glue = @import("repl_glue.zig");
+const steer_input = @import("steer_input.zig");
 const Agent = agent_mod.Agent;
 const cancel_source = @import("cancel_source.zig"); // #728
-const ansi = @import("ansi.zig");
-const style = &ansi.style;
-
 const terminal = @import("term.zig");
 const tty = terminal.tty;
 
 const Stdin = struct {
-    fn read(_: *Stdin, buf: []u8) usize {
+    pub fn read(_: *Stdin, buf: []u8) usize {
         return tty.readStdin(buf);
     }
 
-    fn poll(_: *Stdin, timeout_ms: i32) bool {
+    pub fn poll(_: *Stdin, timeout_ms: i32) bool {
         return tty.poll(timeout_ms);
     }
 };
-
-var stdin_scan_lock: std.atomic.Value(bool) = .init(false);
-
-fn lockStdinScan() void {
-    while (stdin_scan_lock.cmpxchgWeak(false, true, .acquire, .monotonic) != null) std.atomic.spinLoopHint();
-}
-
-fn unlockStdinScan() void {
-    stdin_scan_lock.store(false, .release);
-}
-
-fn popSteerCodepoint() void {
-    const items = main_mod.g_steer_buf.items;
-    if (items.len == 0) return;
-    var start = items.len - 1;
-    while (start > 0 and items[start] & 0xc0 == 0x80) start -= 1;
-    main_mod.g_steer_buf.shrinkRetainingCapacity(start);
-}
 
 pub fn escWatchTask() void {
     while (!Agent.esc_watch_done.load(.acquire)) {
@@ -74,184 +53,14 @@ pub fn escWatchTask() void {
 /// Enter on an empty line (double-enter) with a non-empty queue
 /// force-interrupts the current turn so the queue drains immediately.
 pub fn escPressed(echo: bool) bool {
-    lockStdinScan();
-    defer unlockStdinScan();
     var input: Stdin = .{};
     return escPressedFrom(&input, echo);
 }
 
-/// Testable scanner core. `input.read` must return at most `buf.len` bytes;
-/// `input.poll` reports whether another read can supply a continuation.
+/// Testable scanner core. The stateful parser owns bracketed-paste framing;
+/// the fake-input regressions exercise this same path as the live TTY.
 pub fn escPressedFrom(input: anytype, echo: bool) bool {
-    var buf: [256]u8 = undefined;
-    var n = input.read(&buf);
-    var esc_found = false;
-    var i: usize = 0;
-    while (i < n) : (i += 1) {
-        const c = buf[i];
-        if (c == 0x1b) {
-            // A modifier-prefixed key or terminal reply may put ESC at the end
-            // of one VMIN=0 read. Pull the continuation into this same buffer
-            // so the branches below decode it instead of discarding it.
-            if (i + 1 >= n and n < buf.len and input.poll(50)) {
-                n += input.read(buf[n..]);
-            }
-            if (i + 1 < n and buf[i + 1] == '[') {
-                // CSI escape sequence (arrows, Home/End, Delete, DSR reply,
-                // mouse, etc.). Consume through the final byte (0x40..0x7e) so
-                // bytes like "[A" never get captured as steering prompt text. A
-                // CSI run can straddle a VMIN=0 read boundary — e.g. the
-                // \x1b[<row>;<col>R cursor-position reply to our \x1b[6n, or a
-                // burst of SGR mouse-wheel reports if click-to-fold reporting is
-                // re-enabled. If the final byte hasn't landed yet, poll briefly and
-                // pull the tail into the same buffer so its trailing digits/';'/
-                // final byte don't leak in as steer text.
-                var j = i + 2;
-                while (true) {
-                    while (j < n) : (j += 1) {
-                        if (buf[j] >= 0x40 and buf[j] <= 0x7e) break;
-                    }
-                    if (j < n or n >= buf.len or !input.poll(50)) break;
-                    const more = input.read(buf[n..]);
-                    if (more == 0) break;
-                    n += more;
-                }
-                // SGR mouse report (ESC [ < btn ; col ; row, M=press/m=release):
-                // a plain left-button press (btn 0) on the live Thinking block
-                // toggles its fold — the clickable control for #92. Other mouse
-                // events fall through and are swallowed like any CSI sequence.
-                if (j < n and buf[j] == 'M' and i + 2 < n and buf[i + 2] == '<') {
-                    var mk = i + 3;
-                    var btn: usize = 0;
-                    var got = false;
-                    while (mk < j and buf[mk] >= '0' and buf[mk] <= '9') : (mk += 1) {
-                        btn = btn * 10 + (buf[mk] - '0');
-                        got = true;
-                    }
-                    if (got and btn == 0 and main_mod.g_thinking_open) main_mod.g_thinking_fold_request = true;
-                }
-                i = if (j < n) j else n - 1;
-                continue;
-            } else if (i + 1 < n and buf[i + 1] == 'O') {
-                // SS3 escape sequence (common for function/cursor keys):
-                // ESC O <final>. Its final byte may arrive in a later read.
-                while (i + 2 >= n and n < buf.len and input.poll(50)) {
-                    const more = input.read(buf[n..]);
-                    if (more == 0) break;
-                    n += more;
-                }
-                i = if (i + 2 < n) i + 2 else n - 1;
-                continue;
-            } else if (i + 1 < n and buf[i + 1] == ']') {
-                // OSC — a terminal's colour/title REPLY (ESC ] … BEL, or ESC \\):
-                // never a keypress, so it must not read as Esc (#728). Swallow
-                // through the terminator, pulling a split tail in like CSI.
-                var j = i + 2;
-                var terminator: ?usize = null;
-                var trailing_esc = false;
-                while (true) {
-                    while (j < n) : (j += 1) {
-                        const x = buf[j];
-                        if (x == 0x07 or (trailing_esc and x == '\\')) {
-                            terminator = j;
-                            break;
-                        }
-                        trailing_esc = x == 0x1b;
-                    }
-                    if (terminator != null or n >= buf.len or !input.poll(50)) break;
-                    const more = input.read(buf[n..]);
-                    if (more == 0) break;
-                    n += more;
-                }
-                i = terminator orelse n - 1;
-                continue;
-            } else if (i + 1 < n and (buf[i + 1] == 0x7f or buf[i + 1] == 0x08)) {
-                // Cmd/Option+Delete may be encoded as ESC DEL/BS. The prefix is
-                // a modifier, not an interruption; leave the deletion byte for
-                // the next loop iteration so it edits the steering buffer.
-                continue;
-            } else if (i + 1 >= n) {
-                // Nothing followed within the grace window: a genuine lone Esc.
-                esc_found = true;
-                main_mod.g_force_interrupt = false;
-            } else {
-                // ESC + a non-CSI/SS3 byte in the same chunk: a real Esc.
-                esc_found = true;
-                main_mod.g_force_interrupt = false;
-            }
-            continue;
-        } else if (c == '\n' or c == '\r') {
-            if (main_mod.g_steer_buf.items.len > 0) {
-                // Flush the typed line to the queue as a regular
-                // follow-up (runs after the current turn finishes).
-                // Under steerLock so concurrent drainers serialize; skip an empty
-                // flush (another arm drained it first) or one byte-identical to the
-                // tail, so one submit can't enqueue as N copies each re-steered with
-                // its own harness note (#129).
-                repl_glue.steerLock();
-                if (main_mod.g_steer_buf.toOwnedSlice(std.heap.page_allocator)) |dup| {
-                    if (repl_glue.steerFlushRedundant(main_mod.g_steer_queue.items, dup)) {
-                        std.heap.page_allocator.free(dup);
-                    } else {
-                        main_mod.g_steer_queue.append(std.heap.page_allocator, .{ .text = dup, .force = false }) catch std.heap.page_allocator.free(dup);
-                        @import("job_wait.zig").noteFollowup();
-                    }
-                } else |_| main_mod.g_steer_buf.clearRetainingCapacity();
-                repl_glue.steerUnlock();
-                if (echo and main_mod.g_steer_echoed) {
-                    var qbuf: [64]u8 = undefined;
-                    const qmsg = std.fmt.bufPrint(&qbuf, "  \x1b[2m[queued · {d} waiting]\x1b[0m\n", .{main_mod.g_steer_queue.items.len}) catch "\n";
-                    repl_glue.steerEcho(qmsg);
-                }
-            } else if (main_mod.g_steer_queue.items.len > 0) {
-                // Double-enter (empty line + queue non-empty): force —
-                // promote the first queued item and interrupt the
-                // current turn so the queue drains starting now.
-                main_mod.g_steer_queue.items[0].force = true;
-                esc_found = true;
-                main_mod.g_force_interrupt = true;
-                if (echo) {
-                    if (main_mod.g_steer_echoed) repl_glue.steerEcho("\n");
-                    repl_glue.steerEcho(style.yellow);
-                    repl_glue.steerEcho("↳ force › interrupting…");
-                    repl_glue.steerEcho(style.reset);
-                    repl_glue.steerEcho("\n");
-                }
-            }
-            main_mod.g_steer_echoed = false;
-            main_mod.g_steer_visible.store(false, .release);
-            continue;
-        } else if (c == 0x7f or c == 0x08) { // backspace / Ctrl-H
-            if (main_mod.g_steer_buf.items.len > 0) {
-                popSteerCodepoint();
-                if (echo) repl_glue.steerEcho("\x08 \x08");
-            }
-            continue;
-        } else if (c == 0x14) { // Ctrl-T: fold/unfold the live Thinking block (#92)
-            main_mod.g_thinking_fold_request = true;
-            continue;
-        } else if (c < 0x20) {
-            continue; // other control bytes: ignore
-        }
-        main_mod.g_steer_buf.append(std.heap.page_allocator, c) catch continue;
-        if (echo) {
-            if (!main_mod.g_steer_echoed) {
-                main_mod.g_steer_visible.store(true, .release);
-                repl_glue.steerLock();
-                repl_glue.steerEchoUnlocked("\n");
-                repl_glue.steerEchoUnlocked(style.accent);
-                repl_glue.steerEchoUnlocked("↳ steer ›");
-                repl_glue.steerEchoUnlocked(style.reset);
-                repl_glue.steerEchoUnlocked(" ");
-                main_mod.g_steer_echoed = true;
-                repl_glue.steerEchoUnlocked(buf[i .. i + 1]);
-                repl_glue.steerUnlock();
-            } else {
-                repl_glue.steerEcho(buf[i .. i + 1]);
-            }
-        }
-    }
-    return esc_found;
+    return steer_input.scan(input, echo);
 }
 
 /// Process any bytes queued on stdin (terminal must be in VMIN=0 raw
