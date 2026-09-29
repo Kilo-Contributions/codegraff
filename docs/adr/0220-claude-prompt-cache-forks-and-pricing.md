@@ -49,7 +49,8 @@ these gaps:
   system prompt, thinking, effort and speed. Every message goes verbatim, with
   the instruction appended as the last user message. The note's persona leads
   its instruction. The summary sees the whole history, and nothing is trimmed.
-  The note's system-prompt refresh runs after the summary.
+  The note's system-prompt refresh runs after the summary, which keeps the
+  cached prompt. Without a fork it runs before, as it did.
 - **Otherwise the old shape runs without breakpoints.** A compaction request
   that shares no prefix gets no `cache_control`. This covers Anthropic and
   Anthropic models through OpenRouter. It is sent uncached (1x) instead of

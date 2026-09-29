@@ -92,16 +92,18 @@ pub fn maybeWrite(self: *Agent) Decision {
     const reply = askModel(self) orelse return .skip_failed;
     if (!compact_note.record(self.io, self.arena, self.session_name, self.history_rewrites, reply))
         return .skip_failed;
+    // The very next request is compaction's summary, which carries the note.
+    // A fork keeps the prompt the conversation was cached under instead, and
+    // compact() publishes once its summary is done (ADR 0220).
+    if (!cache_fork.shares()) publish(self);
     if (!main_mod.json_mode) self.say("  📝 wrote a pre-compaction note to self ({d} chars)\n", .{reply.len}) catch {};
     if (self.tracer) |tr| tr.note("compact", "wrote a pre-compaction note to self (#391)");
     return .fire;
 }
 
-/// After a `.fire`: the note is in the SYSTEM prompt, beside HARD
-/// CONSTRAINTS, so it has to be re-composed to reach the next request — the
-/// same refresh a mid-session `/never` performs, and for the same reason.
-/// compact() calls this once its summary request is done: that request forks
-/// the prompt the conversation was cached under (ADR 0220).
+/// The note is in the SYSTEM prompt, beside HARD CONSTRAINTS, so it has to
+/// be re-composed to reach the next request — the same refresh a mid-session
+/// `/never` performs, and for the same reason.
 pub fn publish(self: *Agent) void {
     prompts.armCompactNotes(self.session_name);
     @import("prompt_cache_hud.zig").noteBust(.compact);

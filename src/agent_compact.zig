@@ -130,7 +130,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     // history it describes. Gated, budgeted, best-effort: every refusal is a
     // named skip, so everything below runs unconditionally.
     const note = compact_note_glue.maybeWrite(self);
-    defer if (note == .fire) compact_note_glue.publish(self); // after the summary, which forks the old system prompt
+    defer if (note == .fire and fork) compact_note_glue.publish(self); // a fork's summary keeps the cached prompt
     // #163: reclaim room BEFORE the summarization request so it fits under the
     // model's input cap. On codex/gpt-5.x an over-cap request fails to WRITE
     // (WriteFailed) rather than returning a clean overflow, so compaction could
