@@ -10,7 +10,7 @@ pub fn configure(value: ?[]const u8) void {
 pub fn enabled(provider: Provider) bool {
     return configured and provider.kind == .responses and
         (std.mem.eql(u8, provider.id, "openai") or std.mem.eql(u8, provider.id, "codex")) and
-        (std.mem.eql(u8, provider.model, "gpt-6-astra") or std.mem.eql(u8, provider.model, "gpt-6-sol"));
+        (std.mem.eql(u8, provider.model, "gpt-6-astra") or std.mem.eql(u8, provider.model, "gpt-6-sol") or std.mem.eql(u8, provider.model, "gpt-6.1-sol"));
 }
 
 pub fn eligible(name: []const u8) bool {
@@ -53,12 +53,12 @@ test "async tool policy exact route model and off switch" {
     var p = fixture();
     for ([_][]const u8{ "codex", "openai" }) |id| {
         p.id = id;
-        for ([_][]const u8{ "gpt-6-astra", "gpt-6-sol" }) |model| {
+        for ([_][]const u8{ "gpt-6-astra", "gpt-6-sol", "gpt-6.1-sol" }) |model| {
             p.model = model;
             try std.testing.expect(enabled(p));
         }
     }
-    for ([_][]const u8{ "gpt-5.6-terra", "gpt-6-unknown", "gpt-6-sol-future", "grok-4.7" }) |model| {
+    for ([_][]const u8{ "gpt-5.6-terra", "gpt-6-unknown", "gpt-6-sol-future", "gpt-6.1-sol-future", "grok-4.7" }) |model| {
         p.model = model;
         try std.testing.expect(!enabled(p));
     }
