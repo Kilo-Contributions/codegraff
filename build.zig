@@ -150,6 +150,9 @@ pub fn build(b: *std.Build) void {
     const acp_harness_room_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-harness-room.py" });
     acp_harness_room_test.addArtifactArg(exe);
     test_step.dependOn(&acp_harness_room_test.step);
+    const usage_trace_test = b.addSystemCommand(&.{ "python3", "scripts/test-usage-trace.py" });
+    usage_trace_test.addArtifactArg(exe);
+    test_step.dependOn(&usage_trace_test.step);
     const acp_view_meta_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-view-meta.py" });
     acp_view_meta_test.addArtifactArg(exe);
     test_step.dependOn(&acp_view_meta_test.step);

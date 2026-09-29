@@ -187,13 +187,13 @@ pub fn usageInt(obj: std.json.ObjectMap, name: []const u8) i64 {
     return 0;
 }
 
-/// Record one request's usage into the session-wide tally (g_cost):
-/// token counts always; USD only for metered seats with a price_table row.
+/// Record one request's usage into the session-wide tally (g_cost) and trace: token counts always; USD only for metered seats with a price_table row.
 /// #471: the seat is classified from the provider AND how its credential was
 /// obtained — a flat-rate login (codex/kimi/xai) tallies as sub_calls and adds
 /// $0, while an env key on that same provider is metered like any other.
 pub fn recordCost(self: *Agent, ordinary_in: i64, cache_in: i64, cache_write_in: i64, out: i64) void {
     g_cost.addForProvider(self.io, billing.forProvider(self.provider), self.provider.id, self.provider.model, ordinary_in, cache_in, cache_write_in, out);
+    @import("usage_trace.zig").note(self, ordinary_in, cache_in, cache_write_in, out);
     if (!self.sub) @import("prompt_cache_hud.zig").noteUsage(@intCast(@max(cache_in, 0)), @intCast(@max(cache_write_in, 0)));
 }
 
