@@ -226,13 +226,16 @@ def verifier_snapshot(sandbox, task, task_root):
 def verifiers_unchanged(snapshot):
     for path, want in snapshot.items():
         try:
+            if isinstance(want, dict):
+                # Read as the snapshot did: text with universal newlines, so a
+                # CRLF checkout (Windows) matches its own protected block.
+                if want['contains'] not in Path(path).read_text(errors='replace'):
+                    return False
+                continue
             data = Path(path).read_bytes()
         except OSError:
             return False
-        if isinstance(want, dict):
-            if want['contains'].encode() not in data:
-                return False
-        elif hashlib.sha256(data).hexdigest() != want:
+        if hashlib.sha256(data).hexdigest() != want:
             return False
     return True
 

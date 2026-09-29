@@ -283,6 +283,9 @@ class MeasurementTests(unittest.TestCase):
             self.assertTrue(measurement.verifiers_unchanged(snap))
             source.write_text(body.replace('f() == 2', 'f() == 1'))  # the test itself
             self.assertFalse(measurement.verifiers_unchanged(snap))
+            # Line endings are not an edit: a CRLF file still holds the block.
+            source.write_bytes(body.replace('return 1;', 'return 2;').replace('\n', '\r\n').encode())
+            self.assertTrue(measurement.verifiers_unchanged(snap))
 
     def test_a_sandbox_gets_its_own_repository_holding_the_task(self):
         import subprocess
