@@ -23,6 +23,13 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.9
+    \\  • macOS CLI signed and notarized by the release workflow
+    \\  • local MCP servers start on first use; "shared": true runs one per machine
+    \\  • the desktop app is Harness; the in-repo desktop apps are removed
+    \\  • graff mcp add --everywhere saves to the user-level MCP config
+    \\  • Harness room messages from other agents arrive framed as advisory
+    \\
     \\0.0.302.8
     \\  • instruction-file edits reach the model without busting the prompt cache
     \\  • no more /pr-acceptance: a draft PR completes as an unverified handoff
