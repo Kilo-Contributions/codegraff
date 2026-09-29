@@ -486,7 +486,7 @@ pub fn printDelta(self: *Agent, raw_line: []const u8) void {
         },
     };
     if (no_ui) {
-        if (!self.stream_quiet and oneshotShouldPaint(main_mod.unattended, main_mod.json_mode, text.len)) {
+        if (!self.stream_quiet and oneshotShouldPaint(self.sub, main_mod.unattended, main_mod.json_mode, text.len)) {
             if (main_mod.g_out) |w| {
                 @import("terminal_citations.zig").plain(&self.cite_stream.answer, w, text);
             }
@@ -568,18 +568,20 @@ test "first-token signal ignores envelopes and sees prose, reasoning, and tool b
 }
 
 /// `-p` streams the answer onto stdout as tokens arrive so eval first_out is
-/// TTFT, not the end-of-turn print. Reasoning stays off stdout.
-pub fn oneshotShouldPaint(unattended: bool, json_mode: bool, text_len: usize) bool {
-    return unattended and !json_mode and text_len != 0;
+/// TTFT, not the end-of-turn print. Reasoning stays off stdout, and so does a
+/// subagent's reply: that is its report to the parent, not the answer.
+pub fn oneshotShouldPaint(sub: bool, unattended: bool, json_mode: bool, text_len: usize) bool {
+    return !sub and unattended and !json_mode and text_len != 0;
 }
 
 test "Responses summary boundaries stream through the REPL and headless TUI" {
     try stream_tests.reasoningBoundaries();
 }
 
-test "oneshot paints answer tokens, never --json or empty deltas" {
-    try std.testing.expect(oneshotShouldPaint(true, false, 4));
-    try std.testing.expect(!oneshotShouldPaint(false, false, 4)); // line REPL uses out
-    try std.testing.expect(!oneshotShouldPaint(true, true, 4));
-    try std.testing.expect(!oneshotShouldPaint(true, false, 0));
+test "oneshot paints answer tokens, never --json, empty deltas or a subagent's reply" {
+    try std.testing.expect(oneshotShouldPaint(false, true, false, 4));
+    try std.testing.expect(!oneshotShouldPaint(false, false, false, 4)); // line REPL uses out
+    try std.testing.expect(!oneshotShouldPaint(false, true, true, 4));
+    try std.testing.expect(!oneshotShouldPaint(false, true, false, 0));
+    try std.testing.expect(!oneshotShouldPaint(true, true, false, 4)); // a child's report is not stdout
 }
