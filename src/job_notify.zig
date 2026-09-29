@@ -255,6 +255,15 @@ pub fn takeIdleWake(io: Io, buf: []u8) ?[]const u8 {
 }
 
 fn drain(io: Io, buf: []u8, idle_too: bool) ?[]const u8 {
+    var ids: [cap]u64 = undefined;
+    var n_ids: usize = 0;
+    const text = drainLocked(io, buf, idle_too, &ids, &n_ids);
+    // ADR 0218: these exits reached the model; a restart must not repeat them.
+    for (ids[0..n_ids]) |id| @import("jobs.zig").markReported(io, id);
+    return text;
+}
+
+fn drainLocked(io: Io, buf: []u8, idle_too: bool, ids: *[cap]u64, n_ids: *usize) ?[]const u8 {
     mu.lockUncancelable(io);
     defer mu.unlock(io);
     if (count == 0) return null;
@@ -277,6 +286,8 @@ fn drain(io: Io, buf: []u8, idle_too: bool) ?[]const u8 {
         const n = @min(w.len, buf.len - used);
         @memcpy(buf[used .. used + n], w[0..n]);
         used += n;
+        ids[n_ids.*] = ring[i].id;
+        n_ids.* += 1;
     }
     while (i < count) : (i += 1) { // what did not fit stays for next time
         ring[keep] = ring[i];

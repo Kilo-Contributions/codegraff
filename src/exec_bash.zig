@@ -389,6 +389,8 @@ fn execUnchecked(ctx: ToolCtx, call: tools.ToolCall) !ToolOutput {
             // #1349: only a server-like command is persistent; a finite one
             // backgrounded on purpose keeps the wait-until-exit `action=output`.
             .persistent = bg and server_like,
+            // ADR 0218: a finite root job started in the background outlives a crash.
+            .session = if (bg and !server_like and !ctx.from_sub) ctx.session_name else "",
         }) catch |err| return .{ .text = try spawnFailText(gpa, err), .is_error = true };
         if (bg) {
             @import("subagent_interactive.zig").request(ctx);

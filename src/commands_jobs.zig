@@ -90,7 +90,7 @@ fn list(root: *Agent, out: *Io.Writer) !void {
             "abnormal";
         rows.append(arena, .{
             .id = job.id,
-            .pid = if (comptime posix) (job.child.id orelse 0) else 0,
+            .pid = job.group_pid, // also set for a job re-attached after a restart (ADR 0218)
             .running = !job.done,
             .status = status,
             .age_ms = @intCast(@max(now - job.started_ms, 0)),

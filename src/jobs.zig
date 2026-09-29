@@ -55,7 +55,7 @@ pub const agentWorktreeFinish = agent_worktree.agentWorktreeFinish;
 pub const KeepReason = agent_worktree.KeepReason;
 pub const keepReasonText = agent_worktree.keepReasonText;
 
-const Job = struct { // session-global; pump drains pipes; survives Esc
+pub const Job = struct { // session-global; pump drains pipes or capture files; survives Esc
     id: u64,
     cmd: []u8,
     child: std.process.Child,
@@ -83,6 +83,7 @@ const Job = struct { // session-global; pump drains pipes; survives Esc
     future: Io.Future(void) = undefined,
     stream: ?process_runner.StreamFn = null,
     stream_ctx: ?*anyopaque = null,
+    capture: ?*job_capture.Capture = null, // ADR 0218: output in files, not pipes
 };
 
 pub const job_unread_cap = 256 * 1024;
@@ -91,6 +92,7 @@ const job_notify = @import("job_notify.zig");
 const browser_guard = @import("job_browser_guard.zig");
 const job_idle = @import("job_idle.zig"); // #199
 const job_registry = @import("job_registry.zig"); // #199
+const job_capture = @import("job_capture.zig"); // ADR 0218
 const proc_identity = @import("proc_identity.zig");
 const util = @import("util.zig");
 const tool_pulse = @import("tool_pulse.zig"); // silence heartbeat during waitForeground
@@ -104,7 +106,7 @@ const Jobs = struct {
     list: std.ArrayList(*Job) = .empty,
 
     /// Caller holds the mutex.
-    fn find(self: *Jobs, id: u64) ?*Job {
+    pub fn find(self: *Jobs, id: u64) ?*Job {
         for (self.list.items) |j| if (j.id == id) return j;
         return null;
     }
@@ -121,27 +123,54 @@ pub fn markPersistent(io: Io, id: u64) void {
 /// Deterministic test pause after done becomes observable, before UI publish.
 pub var completion_test_hook: ?*const fn (Io, u64) void = null;
 
+/// New output into the job buffer (both pumps). Caller holds the mutex.
+pub fn appendOutput(job: *Job, gpa: Allocator, which: u8, bytes: []const u8, now_ms: i64) void {
+    if (bytes.len == 0) return;
+    if (!job.persistent) browser_guard.touch(job, now_ms);
+    if (job.stream) |emit| emit(job.stream_ctx, which, bytes);
+    job.buf.appendSlice(gpa, bytes) catch {};
+}
+
+/// Drop the oldest unread output past the cap. Caller holds the mutex.
+pub fn capUnread(job: *Job, gpa: Allocator) void {
+    if (job.buf.items.len - job.cursor <= job_unread_cap) return;
+    const drop = job.buf.items.len - job.cursor - job_unread_cap;
+    job.buf.replaceRange(gpa, job.cursor, drop, &.{}) catch return;
+    job.dropped = true;
+}
+
 /// Drain MultiReader bytes into the job buffer; drop oldest unread past the cap.
 fn jobDrain(job: *Job, gpa: Allocator, readers: []const *Io.Reader, now_ms: i64) void {
     for (readers, 0..) |r, i| {
         const b = r.buffered();
-        if (b.len == 0) continue;
-        if (!job.persistent) browser_guard.touch(job, now_ms);
-        if (job.stream) |emit| emit(job.stream_ctx, @intCast(i), b);
-        job.buf.appendSlice(gpa, b) catch {};
+        appendOutput(job, gpa, @intCast(i), b, now_ms);
         r.toss(b.len);
     }
-    if (job.buf.items.len - job.cursor > job_unread_cap) {
-        const drop = job.buf.items.len - job.cursor - job_unread_cap;
-        job.buf.replaceRange(gpa, job.cursor, drop, &.{}) catch return;
-        job.dropped = true;
+    capUnread(job, gpa);
+}
+
+/// #199: silence is the idle clock — no bytes, no read, no pin. Caller holds
+/// the mutex. Returns the idle time when the warning is due; print it after
+/// unlocking.
+pub fn idleTick(job: *Job, gpa: Allocator, io: Io, pid: i32, now: i64) ?u64 {
+    if (job.kill_requested or job.detach or job.exit_cleanup) return null;
+    const idle_ms: u64 = @intCast(@max(now - job.last_active_ms, 0));
+    switch (job_idle.verdict(idle_ms, job.idle_warned, job.pinned)) {
+        .none => {},
+        .warn => {
+            job.idle_warned = true;
+            return idle_ms;
+        },
+        .stop => browser_guard.checkIdle(&g_jobs, job, gpa, io, pid, now),
     }
+    return null;
 }
 
 /// Pump task (one per job, on its own unit of concurrency): same MultiReader
 /// loop as runCapped, but appending into the job buffer under the jobs mutex
 /// and ignoring Esc — background jobs outlive turn cancellation by design.
 fn jobPump(job: *Job, gpa: Allocator, io: Io) void {
+    if (comptime job_capture.enabled) if (job.capture != null) return @import("job_durable.zig").pump(job, gpa, io);
     var mrb: Io.File.MultiReader.Buffer(2) = undefined;
     var mr: Io.File.MultiReader = undefined;
     mr.init(gpa, io, mrb.toStreams(), &.{ job.child.stdout.?, job.child.stderr.? });
@@ -160,23 +189,11 @@ fn jobPump(job: *Job, gpa: Allocator, io: Io) void {
         const now = nowMs(io);
         g_jobs.mutex.lockUncancelable(io);
         jobDrain(job, gpa, &readers, now);
-        // #199: silence is the idle clock — no bytes, no read, no pin.
-        const idle_ms: u64 = @intCast(@max(now - job.last_active_ms, 0));
-        var warn = false;
-        if (!job.kill_requested and !job.detach and !job.exit_cleanup) {
-            switch (job_idle.verdict(idle_ms, job.idle_warned, job.pinned)) {
-                .none => {},
-                .warn => {
-                    job.idle_warned = true;
-                    warn = true;
-                },
-                .stop => browser_guard.checkIdle(&g_jobs, job, gpa, io, pid, now),
-            }
-        }
+        const warn = idleTick(job, gpa, io, pid, now);
         killed = job.kill_requested;
         detached = job.detach;
         g_jobs.mutex.unlock(io);
-        if (warn) job_idle.warn(io, job.id, idle_ms, job.cmd);
+        if (warn) |idle_ms| job_idle.warn(io, job.id, idle_ms, job.cmd);
         if (killed or detached) break :loop;
     }
     g_jobs.mutex.lockUncancelable(io);
@@ -200,6 +217,13 @@ fn jobPump(job: *Job, gpa: Allocator, io: Io) void {
             else => null,
         };
     } else |_| {}
+    finish(job, io, code, killed, detached, pid);
+}
+
+/// A job ended (both pumps). Done + queue publish atomically against
+/// jobOutput/jobKill consuming it: a bounded dismissed-id cache cannot close
+/// a queue-after-unlock race. A detached job publishes nothing.
+pub fn finish(job: *Job, io: Io, code: ?u8, killed: bool, detached: bool, pid: i32) void {
     g_jobs.mutex.lockUncancelable(io);
     job.exit_code = code;
     job.killed = killed and !detached;
@@ -207,8 +231,6 @@ fn jobPump(job: *Job, gpa: Allocator, io: Io) void {
     const id = job.id;
     const quiet = job.quiet;
     const idle = job.stopped_idle;
-    // Publish done + queue atomically against jobOutput/jobKill consuming it.
-    // A bounded dismissed-id cache cannot close a queue-after-unlock race.
     if (!quiet and !detached) job_notify.queue(io, id, code, killed, job.cmd, idle, job.buf.items[job.cursor..]);
     g_jobs.mutex.unlock(io);
     if (detached) return;
@@ -217,71 +239,28 @@ fn jobPump(job: *Job, gpa: Allocator, io: Io) void {
     if (!quiet) job_notify.publish(io, id, code, killed);
 }
 
-fn nowMs(io: Io) i64 {
+/// The model just learned how the job ended: no wake for it (ADR 0061), and
+/// no second report after a restart (ADR 0218). Caller holds the mutex.
+fn consumed(io: Io, job: *Job) void {
+    job_notify.dismiss(io, job.id);
+    if (job.capture) |c| job_capture.markReported(io, c);
+}
+
+/// A completion notice reached the model (job_notify drain, ADR 0218).
+pub fn markReported(io: Io, id: u64) void {
+    g_jobs.mutex.lockUncancelable(io);
+    defer g_jobs.mutex.unlock(io);
+    const job = g_jobs.find(id) orelse return;
+    if (job.capture) |c| job_capture.markReported(io, c);
+}
+
+pub fn nowMs(io: Io) i64 {
     return @intCast(@divTrunc(Io.Timestamp.now(io, .awake).nanoseconds, std.time.ns_per_ms));
 }
 
-/// The leader's start identity (#413), so a recycled pid is never mistaken
-/// for the job. 0 where the platform has no source.
-fn startIdOf(io: Io, pid: i32) u64 {
-    return switch (proc_identity.probe(io, pid)) {
-        .id => |v| v,
-        else => 0,
-    };
-}
-
-/// Caller holds the mutex (or owns the job outright).
-fn recordOf(io: Io, job: *Job) job_registry.Record {
-    const pid: i32 = if (comptime posix_groups) (job.child.id orelse 0) else 0;
-    return .{
-        .pid = pid,
-        .start_id = startIdOf(io, pid),
-        .owner_pid = proc_identity.selfPid(),
-        .owner_start_id = proc_identity.selfStartId(io),
-        .cmd = job.cmd,
-        .cwd = job.cwd orelse "",
-        .started_ms = job.started_ms,
-        .pinned = job.pinned,
-    };
-}
-
-/// /jobs keep|unkeep (#199): exempt from the idle stop, retained at session
-/// end. Null for an unknown id, false for one that already finished.
-pub fn setPinned(io: Io, id: u64, pinned: bool) ?bool {
-    g_jobs.mutex.lockUncancelable(io);
-    defer g_jobs.mutex.unlock(io);
-    const job = g_jobs.find(id) orelse return null;
-    if (job.done) return false;
-    job.pinned = pinned;
-    browser_guard.touch(job, nowMs(io));
-    if (comptime posix_groups) job_registry.write(io, job_registry.home, recordOf(io, job));
-    return true;
-}
-
-/// /jobs restart (#199): rerun a finished job's command in its cwd, as a new
-/// job. The finished record stays listed until reaped.
-pub fn restartJob(gpa: Allocator, io: Io, id: u64) !*Job {
-    var cmd: []const u8 = "";
-    var cwd: ?[]const u8 = null;
-    {
-        g_jobs.mutex.lockUncancelable(io);
-        defer g_jobs.mutex.unlock(io);
-        const job = g_jobs.find(id) orelse return error.NoSuchJob;
-        if (!job.done) return error.StillRunning;
-        cmd = job.cmd;
-        cwd = job.cwd;
-    }
-    return spawnJobOpts(gpa, io, cmd, .{ .cwd = cwd });
-}
-
-/// Hand retained pipes to a detached drainer; failure never authorizes a kill.
-fn retainAtExit(io: Io, job: *Job) bool {
-    if (comptime !posix_groups) return false;
-    const rec = recordOf(io, job);
-    if (!job_registry.retain(io, job_registry.home, rec, job.child.stdout, job.child.stderr)) return false;
-    std.debug.print("kept alive: job {d} (pid {d}) {s} — `graff servers` lists it; `graff servers stop {d}` ends it\n", .{ job.id, rec.pid, job.cmd, rec.pid });
-    return true;
-}
+const admin = @import("jobs_admin.zig");
+pub const setPinned = admin.setPinned;
+pub const restartJob = admin.restartJob;
 
 pub fn shellArgv(cmd: []const u8) [3][]const u8 { // /bin/sh -c, or cmd.exe /c on Windows
     return if (builtin.os.tag == .windows)
@@ -296,6 +275,9 @@ pub const SpawnOpts = struct {
     stream_ctx: ?*anyopaque = null,
     quiet: bool = false,
     persistent: bool = false,
+    /// ADR 0218: the session a finite job reports back to after a restart.
+    /// Non-empty puts its output in files that outlive graff.
+    session: []const u8 = "",
 };
 
 pub fn spawnJob(gpa: Allocator, io: Io, cmd: []const u8) !*Job {
@@ -304,23 +286,35 @@ pub fn spawnJob(gpa: Allocator, io: Io, cmd: []const u8) !*Job {
 
 pub fn spawnJobOpts(gpa: Allocator, io: Io, cmd: []const u8, opts: SpawnOpts) !*Job {
     const id = try @import("shell_identity.zig").forJob(io);
-    const argv = shellArgv(cmd);
-    var child = try std.process.spawn(io, .{
-        .argv = &argv,
+    var setup: ?job_capture.Setup = null; // best-effort: pipes without it
+    if (comptime job_capture.enabled) {
+        if (opts.session.len > 0 and !opts.persistent) setup = job_capture.prepare(io, gpa, id, cmd);
+    }
+    const sh = shellArgv(cmd);
+    const argv: []const []const u8 = if (setup) |*s| &s.argv else &sh;
+    var child = std.process.spawn(io, .{
+        .argv = argv,
         .cwd = if (opts.cwd) |path| .{ .path = path } else .inherit,
         .environ_map = @import("tool_env.zig").get(), // #1267: no provider keys
         .stdin = .ignore,
-        .stdout = .pipe,
-        .stderr = .pipe,
+        .stdout = if (setup) |s| .{ .file = s.out } else .pipe,
+        .stderr = if (setup) |s| .{ .file = s.err } else .pipe,
         .pgid = if (posix_groups) 0 else null, // #198: bash_kill reaches grandchildren
-    });
+    }) catch |e| {
+        if (setup) |*s| s.abandon(gpa, io);
+        return e;
+    };
+    const capture: ?*job_capture.Capture = if (setup) |*s| blk: {
+        s.spawned(gpa, io);
+        break :blk s.capture;
+    } else null;
     const cmd_copy = gpa.dupe(u8, cmd) catch |e| {
-        child.kill(io);
+        abortSpawn(gpa, io, &child, capture);
         return e;
     };
     const job = gpa.create(Job) catch |e| {
         gpa.free(cmd_copy);
-        child.kill(io);
+        abortSpawn(gpa, io, &child, capture);
         return e;
     };
     const cwd_copy: ?[]u8 = if (opts.cwd) |c| (gpa.dupe(u8, c) catch null) else null;
@@ -336,6 +330,7 @@ pub fn spawnJobOpts(gpa: Allocator, io: Io, cmd: []const u8, opts: SpawnOpts) !*
         .cwd = cwd_copy,
         .started_ms = util.unixMs(io),
         .last_active_ms = nowMs(io),
+        .capture = capture,
     };
     g_jobs.mutex.lockUncancelable(io);
     job.id = id;
@@ -345,7 +340,7 @@ pub fn spawnJobOpts(gpa: Allocator, io: Io, cmd: []const u8, opts: SpawnOpts) !*
     };
     g_jobs.mutex.unlock(io);
     if (!appended) {
-        job.child.kill(io);
+        abortSpawn(gpa, io, &job.child, capture);
         if (job.cwd) |c| gpa.free(c);
         gpa.free(job.cmd);
         gpa.destroy(job);
@@ -360,15 +355,24 @@ pub fn spawnJobOpts(gpa: Allocator, io: Io, cmd: []const u8, opts: SpawnOpts) !*
             }
         }
         g_jobs.mutex.unlock(io);
-        job.child.kill(io);
+        abortSpawn(gpa, io, &job.child, capture);
         if (job.cwd) |c| gpa.free(c);
         gpa.free(job.cmd);
         gpa.destroy(job);
         return e;
     };
     // #199: the ownership record outlives a graff that dies without its defers.
-    if (comptime posix_groups) job_registry.write(io, job_registry.home, recordOf(io, job));
+    if (comptime posix_groups) job_registry.write(io, job_registry.home, admin.recordOf(io, job));
+    if (capture) |c| @import("job_durable.zig").record(io, job, c, opts.session);
     return job;
+}
+
+/// A spawned job that never joined the pool: stop its group (#198), drop
+/// its capture.
+fn abortSpawn(gpa: Allocator, io: Io, child: *std.process.Child, capture: ?*job_capture.Capture) void {
+    if (comptime posix_groups) if (child.id) |pid| std.posix.kill(-pid, .KILL) catch {};
+    child.kill(io); // reaps the leader (a zombie by now accepts the TERM)
+    if (capture) |c| job_capture.release(gpa, io, c, true);
 }
 
 /// bash_output: unread output + status. wait_ms=0 is a snapshot. wait_ms>0
@@ -417,7 +421,7 @@ pub fn jobOutput(gpa: Allocator, io: Io, id: u64, wait_ms: u64) !ToolOutput {
             }
             const text = try aw.toOwnedSlice();
             job.cursor = job.buf.items.len;
-            if (job.done) job_notify.dismiss(io, id); // the exit was just read here; no wake for it (ADR 0061)
+            if (job.done) consumed(io, job); // the exit was just read here
             const result: ToolOutput = .{ .text = text, .pending = !job.done, .is_error = job.done and (job.stopped_idle or job.killed or (job.exit_code orelse 1) != 0), .cancelled = job.killed };
             g_jobs.mutex.unlock(io);
             return result;
@@ -445,7 +449,7 @@ pub fn jobKill(gpa: Allocator, io: Io, id: u64) !ToolOutput {
         defer g_jobs.mutex.unlock(io);
         const job = g_jobs.find(id) orelse return .{ .text = try std.fmt.allocPrint(gpa, "background job {d} has no live owner in this process — interrupted or unknown outcome; no process was stopped; /jobs lists current jobs", .{id}), .is_error = true };
         if (job.done) {
-            job_notify.dismiss(io, id); // already-finished also reports the exit
+            consumed(io, job); // already-finished also reports the exit
             const unread = job.buf.items.len - job.cursor;
             return .{ .text = try std.fmt.allocPrint(gpa, "job {d} already finished ({d} unread byte(s) — bash_output reads them)", .{ id, unread }) };
         }
@@ -460,8 +464,9 @@ pub fn jobKill(gpa: Allocator, io: Io, id: u64) !ToolOutput {
         if (done) {
             g_jobs.mutex.lockUncancelable(io);
             defer g_jobs.mutex.unlock(io);
-            const unread = if (g_jobs.find(id)) |job| job.buf.items.len - job.cursor else 0;
-            job_notify.dismiss(io, id); // the model just learned the job is dead (ADR 0061)
+            const found = g_jobs.find(id);
+            const unread = if (found) |job| job.buf.items.len - job.cursor else 0;
+            if (found) |job| consumed(io, job) else job_notify.dismiss(io, id); // the model just learned the job is dead
             return .{ .text = try std.fmt.allocPrint(gpa, "job {d} killed ({d} unread byte(s) — bash_output reads them)", .{ id, unread }) };
         }
         io.sleep(.fromMilliseconds(100), .awake) catch break;
@@ -470,23 +475,16 @@ pub fn jobKill(gpa: Allocator, io: Io, id: u64) !ToolOutput {
     return .{ .text = try std.fmt.allocPrint(gpa, "job {d}: kill requested (still shutting down — check bash_output)", .{id}) };
 }
 
-/// Outcome of a root foreground wait (#620 / grok-build auto-background).
-pub const FgDone = struct { exit_code: ?u8, killed: bool, output: []u8, dropped: bool };
-pub const FgPartial = struct { id: u64, output: []u8, dropped: bool };
-pub const FgWait = union(enum) { done: FgDone, running: FgPartial, cancelled: FgPartial };
-
-fn takeUnread(gpa: Allocator, job: *Job) error{OutOfMemory}!struct { []u8, bool } {
-    job.stream = null;
-    job.stream_ctx = null;
-    const out = try gpa.dupe(u8, job.buf.items[job.cursor..]);
-    job.cursor = job.buf.items.len;
-    const dropped = job.dropped;
-    job.dropped = false;
-    return .{ out, dropped };
-}
+const job_foreground = @import("job_foreground.zig");
+pub const FgDone = job_foreground.FgDone;
+pub const FgPartial = job_foreground.FgPartial;
+pub const FgWait = job_foreground.FgWait;
+pub const waitForeground = job_foreground.waitForeground;
 
 fn freeJob(gpa: Allocator, io: Io, job: *Job) void {
     job.future.await(io);
+    // A kept job still writes to its capture: a later resume re-attaches it.
+    if (job.capture) |c| job_capture.release(gpa, io, c, !job.detach);
     job.buf.deinit(gpa);
     if (job.cwd) |c| gpa.free(c);
     gpa.free(job.cmd);
@@ -510,64 +508,6 @@ pub fn reapFinished(gpa: Allocator, io: Io, id: u64) void {
     if (found) |job| freeJob(gpa, io, job);
 }
 
-pub fn waitForeground(gpa: Allocator, io: Io, id: u64, wait_ms: u64) !FgWait {
-    const deadline = if (wait_ms == 0) job_wait.wait_cap_ms else @min(wait_ms, job_wait.wait_cap_ms);
-    var waited: u64 = 0;
-    var still = tool_pulse.Pulse{};
-    while (true) {
-        g_jobs.mutex.lockUncancelable(io);
-        const job = g_jobs.find(id) orelse {
-            g_jobs.mutex.unlock(io);
-            return error.NoSuchJob;
-        };
-        browser_guard.touch(job, nowMs(io)); // the foreground wait is activity (#199)
-        if (job.done) {
-            const pair = takeUnread(gpa, job) catch {
-                g_jobs.mutex.unlock(io);
-                return error.OutOfMemory;
-            };
-            job_notify.dismiss(io, id);
-            const result: FgWait = .{ .done = .{ .exit_code = job.exit_code, .killed = job.killed, .output = pair[0], .dropped = pair[1] } };
-            g_jobs.mutex.unlock(io);
-            return result;
-        }
-        if (job_wait.shouldPromote(waited >= deadline, job_wait.followup_pending.load(.acquire))) {
-            const pair = takeUnread(gpa, job) catch {
-                g_jobs.mutex.unlock(io);
-                return error.OutOfMemory;
-            };
-            job.quiet = false; // completion should now notify (#620)
-            const result: FgWait = .{ .running = .{ .id = id, .output = pair[0], .dropped = pair[1] } };
-            g_jobs.mutex.unlock(io);
-            return result;
-        }
-        g_jobs.mutex.unlock(io);
-        if (Agent.esc_cancel.load(.acquire)) {
-            if (jobKill(gpa, io, id)) |out| gpa.free(out.text) else |_| {}
-            g_jobs.mutex.lockUncancelable(io);
-            if (g_jobs.find(id)) |j| {
-                const pair = takeUnread(gpa, j) catch {
-                    g_jobs.mutex.unlock(io);
-                    return error.OutOfMemory;
-                };
-                g_jobs.mutex.unlock(io);
-                return .{ .cancelled = .{ .id = id, .output = pair[0], .dropped = pair[1] } };
-            }
-            g_jobs.mutex.unlock(io);
-            return .{ .cancelled = .{ .id = id, .output = try gpa.dupe(u8, ""), .dropped = false } };
-        }
-        io.sleep(.fromMilliseconds(100), .awake) catch {
-            waited = deadline;
-            continue;
-        };
-        waited += 100;
-        if (still.due(waited)) {
-            var ebuf: [16]u8 = undefined;
-            tool_pulse.emitNotice(io, "· bash still running · {s}", .{tool_pulse.formatElapsed(&ebuf, waited)});
-        }
-    }
-}
-
 pub fn jobsReap(gpa: Allocator, io: Io) void {
     g_jobs.mutex.lockUncancelable(io);
     const jobs = g_jobs.list.toOwnedSlice(gpa) catch {
@@ -581,7 +521,7 @@ pub fn jobsReap(gpa: Allocator, io: Io) void {
         g_jobs.mutex.lockUncancelable(io);
         if (!job.done and !job.kill_requested) {
             if (browser_guard.exitAction(result, job.pinned, false) != .stop) {
-                job.detach = browser_guard.exitAction(result, job.pinned, retainAtExit(io, job)) == .detach;
+                job.detach = browser_guard.exitAction(result, job.pinned, admin.retainAtExit(io, job)) == .detach;
                 if (!job.detach) std.debug.print("retained job pipe handoff failed; cleanup waits while the pump keeps draining (no kill)\n", .{});
             } else job.kill_requested = true;
         }
@@ -595,6 +535,8 @@ pub fn jobsReap(gpa: Allocator, io: Io) void {
 test { // split-out modules: unreferenced, their tests silently never run
     _ = worktree_cmd;
     _ = @import("worktree_lease.zig");
-    _ = .{ job_wait, job_notify, job_idle, job_registry, browser_guard };
+    _ = .{ job_wait, job_notify, job_idle, job_registry, browser_guard, job_capture };
+    _ = @import("job_durable.zig");
+    _ = @import("job_recover.zig");
     _ = @import("jobs_tests.zig");
 }
