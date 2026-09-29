@@ -197,6 +197,7 @@ pub fn verify(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, entry:
     defer rpc.stdio_handshake_timeout_ms = saved_timeout;
     var reg = mcp.Registry.emptyWithOAuthHome(gpa, io, home);
     defer reg.deinit();
+    reg.lazy_stdio = false; // verifying means really connecting, not reading the cache
     const a = reg.arena();
     var servers: std.ArrayList(*rpc.Server) = .empty;
     var tools: std.ArrayList(mcp.Tool) = .empty;

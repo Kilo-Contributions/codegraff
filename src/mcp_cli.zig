@@ -343,6 +343,15 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         return;
     }
 
+    if (std.mem.eql(u8, args[0], "attach") or std.mem.eql(u8, args[0], "broker")) {
+        // Internal: the relay and the per-machine broker of a `"shared": true` server.
+        const share = @import("mcp_share.zig");
+        const idle_s = std.fmt.parseInt(u32, environ_map.get("GRAFF_MCP_SHARED_IDLE_S") orelse "60", 10) catch 60;
+        const run = if (args[0][0] == 'a') share.attach(io, gpa, arena, home, args[1..]) else share.broker(io, gpa, arena, home, idle_s, args[1..]);
+        run catch |err| std.process.fatal("mcp {s}: {t}", .{ args[0], err });
+        return;
+    }
+
     if (std.mem.eql(u8, args[0], "login")) {
         if (args.len != 2) {
             try out.interface.writeAll("usage: graff mcp login <name>\n");
