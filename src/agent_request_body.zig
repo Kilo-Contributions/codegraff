@@ -79,6 +79,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             // Prompt caching (Anthropic): a block-level cache_control breakpoint
             // on the system block caches the whole stable prefix (system+tools);
             // other anthropic-format providers (minimax) get a plain string.
+            // No breakpoint on a compaction request no later request shares.
             try s.objectField("system");
             const sys = try @import("agent_request_body_responses.zig").schemaAwarePrompt(self);
             const cc = @import("cache_ttl.zig").control(self); // #1320: 1h when calls outlive 5m
@@ -89,8 +90,10 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
                 try s.write("text");
                 try s.objectField("text");
                 try s.write(sys);
-                try s.objectField("cache_control");
-                try s.print("{s}", .{cc});
+                if (cc) |c| {
+                    try s.objectField("cache_control");
+                    try s.print("{s}", .{c});
+                }
                 try s.endObject();
                 try s.endArray();
             } else {
@@ -98,7 +101,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             }
             // Effort rides output_config, in one object with a structured-output
             // format when there is one.
-            const effort: ?[]const u8 = if (is_claude and !self.effort_rejected and claude.takesEffort(self.provider.model)) claude.effortWire(self.reasoning) else null;
+            const effort: ?[]const u8 = if (is_claude and !self.effort_rejected and claude.takesEffort(self.provider.model)) claude.effortFor(self.provider.model, self.reasoning, self.call_kind) else null;
             var effort_written = false;
             if (tools) |t| {
                 try s.objectField("tools");

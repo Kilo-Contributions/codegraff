@@ -6,6 +6,12 @@
 //! writes) so the entry outlives the next slow call. The gap is taken once
 //! per request, before any retry, and usage_trace.zig reports it with the
 //! reason a request read nothing.
+//!
+//! ADR 0220: the request that opens a user turn waited on the user, not on
+//! the model. Its gap says nothing about how long the next call takes, and
+//! after an idle past 5 minutes it rewrites the whole prefix: at 1 hour that
+//! rewrite cost 2x instead of 1.25x. It follows the last gap measured inside
+//! a turn instead.
 
 const std = @import("std");
 const Agent = @import("agent.zig").Agent;
@@ -19,14 +25,24 @@ pub const default_ttl_ms: i64 = 5 * 60 * 1000;
 
 /// Requests and their usage lines run on one thread (see usage_trace.zig).
 threadlocal var gap_ms: ?i64 = null;
+/// The gap the TTL follows: the last one measured inside a turn.
+threadlocal var loop_gap_ms: ?i64 = null;
 
 /// Before a request's retry loop: time since this agent's previous request began.
 pub fn begin(self: *const Agent) void {
     gap_ms = if (self.request_started) |t| t.untilNow(self.io, .awake).toMilliseconds() else null;
+    if (self.request_started == null) {
+        loop_gap_ms = null; // a fresh agent on this thread
+    } else if (!opensTurn(self.messages.items)) loop_gap_ms = gap_ms;
 }
 
 pub fn gap() ?i64 {
     return gap_ms;
+}
+
+/// The request answers a new user message (or a wake), not a tool result.
+fn opensTurn(items: []const std.json.Value) bool {
+    return items.len > 0 and @import("compact_cut.zig").cleanUserTurn(items[items.len - 1]);
 }
 
 /// The Anthropic API, and Anthropic models through OpenRouter (#1284), take a
@@ -41,9 +57,17 @@ pub fn longTtl(provider_id: []const u8, model: []const u8, since_previous: ?i64)
     return takesTtl(provider_id, model) and g >= slow_gap_ms;
 }
 
-/// The cache_control object for this request's breakpoints.
-pub fn control(self: *const Agent) []const u8 {
-    return if (longTtl(self.provider.id, self.provider.model, gap_ms)) ephemeral_1h else ephemeral;
+/// Whether this thread's current request asks for the 1-hour TTL.
+pub fn asksLong(provider_id: []const u8, model: []const u8) bool {
+    return longTtl(provider_id, model, loop_gap_ms);
+}
+
+/// The cache_control object for this request's breakpoints. Null on a
+/// compaction request that does not fork the conversation (ADR 0220): no
+/// later request starts with its bytes, so a write would never be read.
+pub fn control(self: *const Agent) ?[]const u8 {
+    if (self.compaction_request and !@import("cache_fork.zig").shares()) return null;
+    return if (asksLong(self.provider.id, self.provider.model)) ephemeral_1h else ephemeral;
 }
 
 /// Why a request with real input read nothing from the cache. Content-free.
@@ -86,22 +110,72 @@ test "#1320: an Anthropic body after a slow call marks every breakpoint 1h; Kimi
         .out = null,
         .sys_normal = "system",
     };
-    defer gap_ms = null;
+    defer loop_gap_ms = null;
     const long = "\"cache_control\":" ++ ephemeral_1h;
-    gap_ms = 307_000;
+    loop_gap_ms = 307_000;
     const slow = try agent.buildBody(null, false, true, true);
     defer std.testing.allocator.free(slow);
     try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, slow, long)); // system + last message
     try std.testing.expect(std.mem.indexOf(u8, slow, "\"cache_control\":" ++ ephemeral ++ "") == null);
-    gap_ms = 20_000;
+    loop_gap_ms = 20_000;
     const fast = try agent.buildBody(null, false, true, true);
     defer std.testing.allocator.free(fast);
     try std.testing.expect(std.mem.indexOf(u8, fast, "\"ttl\"") == null);
+    // ADR 0220: a compaction request outside a fork carries no breakpoint.
+    agent.compaction_request = true;
+    const summary = try agent.buildBody(null, false, true, true);
+    defer std.testing.allocator.free(summary);
+    try std.testing.expect(std.mem.indexOf(u8, summary, "cache_control") == null);
+    try std.testing.expect(std.mem.indexOf(u8, summary, "\"system\":[{\"type\":\"text\",\"text\":\"system\"}]") != null);
+    agent.compaction_request = false;
     agent.provider.id = "kimi";
-    gap_ms = 307_000;
+    loop_gap_ms = 307_000;
     const kimi = try agent.buildBody(null, false, true, true);
     defer std.testing.allocator.free(kimi);
     try std.testing.expect(std.mem.indexOf(u8, kimi, "\"ttl\"") == null);
+}
+
+test "ADR 0220: the request that opens a turn keeps the TTL of the last gap inside one" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var prompt: std.json.ObjectMap = .empty;
+    try prompt.put(arena, "role", .{ .string = "user" });
+    try prompt.put(arena, "content", .{ .string = "next task" });
+    var result: std.json.ObjectMap = .empty;
+    try result.put(arena, "type", .{ .string = "tool_result" });
+    var blocks = std.json.Array.init(arena);
+    try blocks.append(.{ .object = result });
+    var results: std.json.ObjectMap = .empty;
+    try results.put(arena, "role", .{ .string = "user" });
+    try results.put(arena, "content", .{ .array = blocks });
+    var in_turn = std.json.Array.init(arena);
+    try in_turn.append(.{ .object = results });
+    var opening = std.json.Array.init(arena);
+    try opening.append(.{ .object = prompt });
+    defer loop_gap_ms = null;
+
+    var agent: Agent = undefined;
+    agent.io = std.testing.io;
+    agent.request_started = null;
+    loop_gap_ms = 307_000;
+    begin(&agent); // a fresh agent on this thread starts clean
+    try std.testing.expect(loop_gap_ms == null);
+
+    // Inside a turn the TTL follows the measured gap.
+    agent.request_started = std.Io.Timestamp.now(std.testing.io, .awake);
+    agent.messages = in_turn;
+    begin(&agent);
+    try std.testing.expect(loop_gap_ms.? < 60_000);
+    try std.testing.expect(!asksLong("anthropic", "claude-opus-5-5"));
+
+    // A turn-opening request keeps the last in-turn gap, not its own: a slow
+    // model stays on the hour, and an idle user never buys one.
+    loop_gap_ms = 307_000;
+    agent.messages = opening;
+    begin(&agent);
+    try std.testing.expectEqual(@as(i64, 307_000), loop_gap_ms.?);
+    try std.testing.expect(asksLong("anthropic", "claude-opus-5-5"));
 }
 
 test "#1320: a zero-read request names its likely cause" {

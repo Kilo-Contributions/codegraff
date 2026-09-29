@@ -54,7 +54,7 @@ pub fn note(self: *const Agent, ordinary: i64, cache_read: i64, cache_write: i64
         // Sent as previous_response_id + the new items on a held socket.
         .chained = self.codex_prev_id != null,
         .gap_ms = gap,
-        .cache_ttl = if (cache_ttl.longTtl(self.provider.id, self.provider.model, gap)) "1h" else null,
+        .cache_ttl = if (cache_ttl.control(self)) |c| (if (std.mem.eql(u8, c, cache_ttl.ephemeral_1h)) "1h" else null) else null,
         .prefix_changed = !snap.same,
         .prefix_bust = if (snap.same) null else hud.bustLabel(snap.last_bust),
         .cache_miss = cache_ttl.missReason(cache_read, input, !snap.same, gap),
@@ -104,8 +104,10 @@ test "usage waits for its api line and is written once" {
             return 0;
         }
     };
-    var agent: Agent = undefined; // only provider, sub and codex_prev_id are read
+    var agent: Agent = undefined; // only provider, sub, codex_prev_id and compaction_request are read
     agent.provider.id = "codex";
+    agent.provider.model = "gpt-6-sol";
+    agent.compaction_request = false;
     agent.codex_prev_id = null;
     agent.sub = true;
     agent.request_started = null;

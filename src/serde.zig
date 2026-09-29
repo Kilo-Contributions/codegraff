@@ -105,12 +105,33 @@ fn writeObjectWithCache(s: *std.json.Stringify, obj: std.json.ObjectMap, cache_c
     try s.endObject();
 }
 
+/// The last user message before the final one: the previous request's last.
+fn previousUser(items: []const Value) ?usize {
+    if (items.len < 2) return null;
+    var i = items.len - 1;
+    while (i > 0) {
+        i -= 1;
+        const m = items[i];
+        if (m != .object) continue;
+        const role = m.object.get("role") orelse continue;
+        if (role == .string and std.mem.eql(u8, role.string, "user")) return i;
+    }
+    return null;
+}
+
 /// Serialize Anthropic messages. `normalize_blocks` matches the official Kimi
 /// adapter by turning every plain string into a `{type:text,text}` content
 /// array. `cache` (the cache_control object, #1320) marks the final cacheable
 /// block (including tool_result), not just the plain-string happy path.
+///
+/// ADR 0220: it also marks the user message before the last one, where the
+/// previous request wrote its entry. A breakpoint finds an earlier entry only
+/// by walking back at most 20 blocks, and one assistant turn that interleaves
+/// thinking with many tool calls can add more; the second breakpoint reads
+/// that entry exactly. Breakpoints are free: writes bill once, past the hit.
 pub fn writeAnthropicMessages(s: *std.json.Stringify, messages: std.json.Array, cache: ?[]const u8, normalize_blocks: bool) !void {
     const items = messages.items;
+    const previous = if (cache != null) previousUser(items) else null;
     try s.beginArray();
     for (items, 0..) |m, i| {
         if (m != .object or m.object.get("content") == null) {
@@ -118,7 +139,7 @@ pub fn writeAnthropicMessages(s: *std.json.Stringify, messages: std.json.Array, 
             continue;
         }
         const content = m.object.get("content").?;
-        const cache_this = cache != null and i + 1 == items.len;
+        const cache_this = cache != null and (i + 1 == items.len or (previous != null and i == previous.?));
         const string_content = content == .string;
         const array_cache = cache_this and content == .array and content.array.items.len > 0 and anthropicCacheableBlock(content.array.items[content.array.items.len - 1]);
         if (!normalize_blocks and !cache_this) {
@@ -414,6 +435,66 @@ fn renderAnthropicTools(arena: Allocator, raw: []const u8, cache: bool) ![]const
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     try writeAnthropicTools(&s, arena, raw, cache);
     return aw.writer.buffered();
+}
+
+test "ADR 0220: the previous request's last message keeps a breakpoint too" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    var prompt: std.json.ObjectMap = .empty;
+    try prompt.put(a, "role", .{ .string = "user" });
+    try prompt.put(a, "content", .{ .string = "fix the build" });
+    var thinking: std.json.ObjectMap = .empty;
+    try thinking.put(a, "type", .{ .string = "thinking" });
+    try thinking.put(a, "thinking", .{ .string = "look" });
+    try thinking.put(a, "signature", .{ .string = "sig" });
+    var call: std.json.ObjectMap = .empty;
+    try call.put(a, "type", .{ .string = "tool_use" });
+    try call.put(a, "id", .{ .string = "t1" });
+    var turn = std.json.Array.init(a);
+    try turn.append(.{ .object = thinking });
+    try turn.append(.{ .object = call });
+    var assistant: std.json.ObjectMap = .empty;
+    try assistant.put(a, "role", .{ .string = "assistant" });
+    try assistant.put(a, "content", .{ .array = turn });
+    var result: std.json.ObjectMap = .empty;
+    try result.put(a, "type", .{ .string = "tool_result" });
+    try result.put(a, "tool_use_id", .{ .string = "t1" });
+    try result.put(a, "content", .{ .string = "ok" });
+    var results = std.json.Array.init(a);
+    try results.append(.{ .object = result });
+    var reply: std.json.ObjectMap = .empty;
+    try reply.put(a, "role", .{ .string = "user" });
+    try reply.put(a, "content", .{ .array = results });
+    var messages = std.json.Array.init(a);
+    try messages.append(.{ .object = prompt });
+
+    const cc = "{\"type\":\"ephemeral\"}";
+    var one: Io.Writer.Allocating = .init(std.testing.allocator);
+    defer one.deinit();
+    var s1: std.json.Stringify = .{ .writer = &one.writer };
+    try writeAnthropicMessages(&s1, messages, cc, false);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, one.written(), "cache_control"));
+
+    try messages.append(.{ .object = assistant });
+    try messages.append(.{ .object = reply });
+    var three: Io.Writer.Allocating = .init(std.testing.allocator);
+    defer three.deinit();
+    var s3: std.json.Stringify = .{ .writer = &three.writer };
+    try writeAnthropicMessages(&s3, messages, cc, false);
+    const out = three.written();
+    // The prompt (where the previous request wrote) and the tool result; never the thinking block.
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, out, "cache_control"));
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"text\":\"fix the build\",\"cache_control\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"content\":\"ok\",\"cache_control\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"signature\":\"sig\",\"cache_control\"") == null);
+
+    // Without a cache object nothing is marked.
+    var none: Io.Writer.Allocating = .init(std.testing.allocator);
+    defer none.deinit();
+    var s0: std.json.Stringify = .{ .writer = &none.writer };
+    try writeAnthropicMessages(&s0, messages, null, false);
+    try std.testing.expect(std.mem.indexOf(u8, none.written(), "cache_control") == null);
 }
 
 test "kimi tools give a typeless MCP root schema type object (#261)" {

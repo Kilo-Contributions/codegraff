@@ -10,13 +10,15 @@
 const std = @import("std");
 const Agent = @import("agent.zig").Agent;
 
-pub fn write(s: anytype, provider_id: []const u8, model: []const u8, session_key: []const u8, cache_control: []const u8) !void {
+/// `cache_control` is null on a request no later one shares (ADR 0220).
+pub fn write(s: anytype, provider_id: []const u8, model: []const u8, session_key: []const u8, cache_control: ?[]const u8) !void {
     if (!std.mem.eql(u8, provider_id, "openrouter")) return;
     try s.objectField("session_id");
     try s.write(session_key);
     if (!std.mem.startsWith(u8, model, "anthropic/")) return;
+    const cc = cache_control orelse return;
     try s.objectField("cache_control");
-    try s.print("{s}", .{cache_control});
+    try s.print("{s}", .{cc});
 }
 
 fn body(arena: std.mem.Allocator, provider_id: []const u8, model: []const u8) ![]u8 {
