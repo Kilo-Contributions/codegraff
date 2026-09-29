@@ -510,7 +510,7 @@ test "Keys.defaultProvider: first keyed provider on its default model" {
     const all = Keys{ .values = @splat("k") };
     const p = try all.defaultProvider();
     try std.testing.expectEqualStrings("anthropic", p.id); // anthropic leads provider_specs
-    try std.testing.expectEqualStrings("claude-opus-4-8", p.model);
+    try std.testing.expectEqualStrings("claude-opus-5-5", p.model);
     const none = Keys{ .values = @splat(null) };
     try std.testing.expectError(error.MissingKey, none.defaultProvider());
 }
