@@ -75,11 +75,7 @@ pub fn run(ctx: *Ctx) !void {
     var prev_turn_id: u64 = 0;
     var prev_prompt_fp: [16]u8 = scoring.promptFingerprint(ctx.root.systemPrompt());
     // Armed only after a clean /loop turn and consumed by the next read (#226).
-    const loop_iter_cap: u32 = 25; // hard per-/loop iteration bound (never-completing-model guard)
-    var loop_iters_left: u32 = 0; // continuation turns still authorized this /loop run
-    var loop_continue_armed = false; // a continuation turn is queued for the next readline
-    var loop_list: goal_flow.LoopListGate = .{}; // diff-gate for the checklist copy in continuation prompts (#318)
-    var loop_clock: goal_pacing.LoopClock = .{}; // this run's wall clock: `/loop 30m <prompt>` arms a deadline, and every continuation is told where it stands
+    var loop_run: @import("loop_run.zig").LoopRun = .{};
 
     while (true) {
         @import("subagent_interactive.zig").line_notice = false;
@@ -91,10 +87,7 @@ pub fn run(ctx: *Ctx) !void {
         defer if (steer_entry) |e| std.heap.page_allocator.free(e.text);
         var is_loop_continuation = false; // #226: this iteration is an autonomous /loop continuation turn
         const raw_line: []const u8 = if (steer_entry) |e| blk: {
-            loop_iters_left = 0; // #226: a user steer/force cancels the autonomous /loop run
-            loop_continue_armed = false;
-            loop_list.reset();
-            loop_clock.clear(ctx.root); // and its deadline stops reaching subagents
+            loop_run.cancel(ctx.root); // #226: a user steer/force cancels the autonomous /loop run
             if (e.force) {
                 try ctx.out.print("{s}↳ force ›{s} {s}\n", .{ style.yellow, style.reset, e.text });
             } else {
@@ -102,21 +95,20 @@ pub fn run(ctx: *Ctx) !void {
             }
             try ctx.out.flush();
             break :blk e.text;
-        } else if (loop_continue_armed) blk: {
+        } else if (loop_run.armed) blk: {
             // #226: autonomous /loop continuation — synthesize the next turn from the
-            // continuation steering note instead of reading a new user line. Consumed
-            // here, so an interrupted/errored turn does not resume the loop.
-            loop_continue_armed = false;
+            // continuation steering note instead of reading a new user line.
             is_loop_continuation = true;
-            // Gated: these prompts persist in root.messages, autosave, and are
-            // compaction input, so the current epoch's list is pasted only when
-            // it changed or a history rewrite destroyed the pasted copies (#318).
-            const note = try loop_list.note(ctx.arena, ctx.root);
-            const pace = try goal_pacing.pacingNote(ctx.arena, util.unixMs(ctx.io), loop_clock, loop_iter_cap - loop_iters_left, loop_iter_cap);
-            break :blk try std.fmt.allocPrint(ctx.arena, "/loop {s}\n{s}", .{ note, pace });
+            break :blk try loop_run.continuation(ctx.arena, ctx.root, util.unixMs(ctx.io), "");
         } else if (ctx.interactive) blk: {
             try ctx.root.prompt();
-            break :blk (try readline.readLine(ctx.root, ctx.in, ctx.out, ctx.gpa, ctx.history, ctx.linebuf, null)) orelse break;
+            const read = (try readline.readLine(ctx.root, ctx.in, ctx.out, ctx.gpa, ctx.history, ctx.linebuf, null)) orelse break;
+            // #1278: the wake of the work a held run waits on continues that run.
+            if (try loop_run.afterRead(ctx.arena, ctx.root, util.unixMs(ctx.io), read, @import("subagent_interactive.zig").line_notice)) |resumed| {
+                is_loop_continuation = true;
+                break :blk resumed;
+            }
+            break :blk read;
         } else (try json_inbox.request(ctx.arena, ctx.in)) orelse break;
         title_jobs.poll(ctx);
         recap_jobs.poll(ctx);
@@ -130,7 +122,7 @@ pub fn run(ctx: *Ctx) !void {
         const loop_prompt: ?[]const u8 = if (auto) |a| a.prompt else null;
         // A fresh line starts (or ends) a run: wall clock begins here; stale todos_dirty is
         // dropped, and an armed budget is echoed — a silently-eaten "5m" reads like a truncated prompt.
-        if (!is_loop_continuation) try goal_pacing.armAndAnnounce(&loop_clock, ctx.root, ctx.out, ctx.arena, util.unixMs(ctx.io), if (auto) |a| a.budget() else null);
+        if (!is_loop_continuation) try goal_pacing.armAndAnnounce(&loop_run.clock, ctx.root, ctx.out, ctx.arena, util.unixMs(ctx.io), if (auto) |a| a.budget() else null);
         var review_prompt: ?[]const u8 = if (!main_mod.json_mode) review.promptFromLine(line) else null;
         const issue_report: ?[]const u8 = if (!main_mod.json_mode) @import("issue_cmd.zig").promptFromLine(line) else null;
         if (!main_mod.json_mode) {
@@ -557,44 +549,24 @@ pub fn run(ctx: *Ctx) !void {
         if (session_context_tokens >= ctx.root.provider.compactAt()) {
             // Trim on failure only when we're genuinely against the window — at
             // 80–95% a transient compaction failure can recover next turn.
-            ctx.root.autocompact(session_context_tokens); // loop_list re-carries via root.history_rewrites, incl. MID-turn rewrites this block never sees (#318)
+            ctx.root.autocompact(session_context_tokens); // loop_run.list re-carries via root.history_rewrites, incl. MID-turn rewrites this block never sees (#318)
         }
 
         // #226: /loop controller-authorized continuation. After a cleanly-
         // completed autonomous /loop turn the CONTROLLER decides whether to run
-        // another turn — not the model merely stopping; the rule itself is
-        // goal_flow.loopTurnDecision. `loop_continue_armed` is consumed at the
-        // next readline, so an interrupted/errored turn (which `continue`s past
-        // here) never resumes the loop.
-        if (loop_prompt != null and !main_mod.json_mode) {
-            if (!is_loop_continuation) {
-                loop_iters_left = loop_iter_cap; // fresh /loop run: arm the bound
-                loop_list.reset(); // and a clean gate: its first continuation carries the list in full
-            }
-            switch (goal_flow.loopTurnDecision(ctx.root, loop_iters_left, util.unixMs(ctx.io))) {
-                .continue_turn => {
-                    loop_iters_left -= 1; // consume one credit for the queued continuation
-                    loop_continue_armed = true;
-                },
-                .stop => |outcome| {
-                    loop_iters_left = 0;
-                    loop_continue_armed = false;
-                    loop_list.reset();
-                    loop_clock.clear(ctx.root);
-                    // Only work_done reaches `accepted`, so the loop drove the
-                    // goal to done; a --goal standing objective outlives it (#318).
-                    if (outcome == .accepted) _ = goal_flow.acceptLoopOutcome(ctx.root);
-                    const tone = if (outcome == .accepted) style.green else style.yellow; // success must not look like the four failures
-                    try ctx.out.print("{s}↩ run stopped — {s}{s}\n", .{ tone, if (@import("subagent_interactive.zig").yielded) "waiting for delegated work; prompt available" else repl_glue.outcomeText(outcome, loop_iter_cap), style.reset });
-                    try ctx.out.flush();
-                    if (ctx.root.tracer) |t| t.note("loop", @tagName(outcome)); // every /goal transition is traced; the run's end was not
-                },
-            }
-        }
+        // another turn — not the model merely stopping (loop_run.zig). The armed
+        // continuation is consumed at the next read, so an interrupted/errored
+        // turn (which `continue`s past here) never resumes the loop; a run with
+        // background work still running holds for its wake instead (#1278).
+        if (loop_prompt != null and !main_mod.json_mode) try loop_run.afterTurn(ctx.root, ctx.io, ctx.out, is_loop_continuation);
         session.saveSessionAsync(ctx.root, ctx.arena, ctx.root.session_name) catch {};
 
         // --worktree checkpoint: commit this turn's edits to the scratch branch so the work is durable
         // + rewindable across restarts. No-op when not in a worktree or when --no-autocommit is set.
         jobs.worktreeAutoCommit(ctx.gpa, ctx.io, std.fmt.allocPrint(ctx.arena, "wip: {s}", .{title_mod.titleFromPrompt(base_msg)}) catch "wip: graff checkpoint");
     }
+}
+
+test {
+    _ = @import("loop_run.zig");
 }
