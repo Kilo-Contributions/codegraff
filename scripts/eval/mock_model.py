@@ -125,7 +125,7 @@ class ScriptedModel:
                 self._send(json.dumps({
                     "id": "mock", "object": "chat.completion", "model": "mock",
                     "choices": [{"index": 0, "message": message, "finish_reason": finish}],
-                    "usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
+                    "usage": reply.get("usage", {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12}),
                 }).encode(), "application/json")
 
             def _stream(self, reply: dict[str, Any]) -> None:
@@ -168,7 +168,7 @@ class ScriptedModel:
                     return
                 self._chunk({
                     "choices": [{"index": 0, "delta": {}, "finish_reason": finish}],
-                    "usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
+                    "usage": reply.get("usage", {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12}),
                 })
                 self.wfile.write(b"data: [DONE]\n\n")
                 self.wfile.flush()

@@ -127,6 +127,7 @@ pub const Tracer = struct {
         if (is_error) {
             // Failed calls did not report usage. Omit it rather than claiming
             // an observed zero; request/response byte counts remain known.
+            @import("usage_trace.zig").drop();
             self.write(.{
                 .t = self.elapsedMs(),
                 .ev = "api",
@@ -153,6 +154,7 @@ pub const Tracer = struct {
             .cache_read_tokens = cache_read,
             .is_error = is_error,
         });
+        @import("usage_trace.zig").emit(self, label, from_subagent, model); // the server's own split, same request
     }
 
     pub fn tool(self: *Tracer, name: []const u8, call_id: u64, ms: i64, is_error: bool, result_bytes: usize, from_sub: bool) void {
