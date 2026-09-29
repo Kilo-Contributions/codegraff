@@ -337,6 +337,15 @@ cache-read count from whichever field the provider uses
 `prompt_tokens_details.cached_tokens`) into `Agent.last_cache_read`, which
 `request()` writes to the `cache_read_tokens` field of each `api` trace line.
 
+The `api` line's `context_tokens` is the context meter, not the server's
+input count: it is floored at graff's estimate of a full resend, which on a
+chained Codex request still counts every retained encrypted reasoning item
+the server has dropped. Each response therefore also writes a `usage` line
+with the server's own split: `input_tokens` (cached and written tokens
+included), `cache_read_tokens`, `cache_write_tokens`, `output_tokens`, and
+`chained` (sent as `previous_response_id` plus new items). A cache hit rate is
+`cache_read_tokens / input_tokens` from `usage`, never from `context_tokens`.
+
 ## Session persistence
 
 `/save` serializes `{provider, model, strict, messages}` with
