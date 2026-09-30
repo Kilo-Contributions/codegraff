@@ -310,5 +310,28 @@
     "answer": "stdout",
     "env": {"CODEX_HOME": "{sandbox}/.codex-home"},
     "default_model": "gpt-6.1-sol"
+  },
+  "graff-codex": {
+    "cmd": ["{repo}/zig-out/bin/graff", "-p", "{prompt}", "--model", "{model}", "--yolo", "--no-lean"],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol"
+  },
+  "graff-codex-repl": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "{prompt}\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90"},
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol",
+    "note": "scripted graff repl over the Codex WebSocket: the transport the Codex app server uses"
+  },
+  "codex-app-server": {
+    "cmd": ["python3", "{repo}/graff-evals/codex_app_server.py", "{model}", "{prompt}"],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "default_model": "gpt-6.1-sol"
   }
 }
