@@ -111,7 +111,7 @@ pub fn parseResponses(self: *Agent, body: []const u8) !ResponsesResult {
 /// Each field is single-lined and bounded before it reaches last_api_error or
 /// the default-on trace.
 pub fn failureDiagnostic(allocator: std.mem.Allocator, provider: []const u8, failure: ResponsesFailure) ![]u8 {
-    var buf: [672]u8 = undefined;
+    var buf: [768]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     try writeDiagnosticField(&w, provider, 40);
     try w.writeAll(" api error");
@@ -127,7 +127,19 @@ pub fn failureDiagnostic(allocator: std.mem.Allocator, provider: []const u8, fai
         try writeDiagnosticField(&w, rid, 96);
         try w.writeByte(']');
     }
+    // A spent ChatGPT plan allowance, often mid-stream (ADR 0221).
+    if (policy.isPlanUsageLimit(failure.code)) try w.writeAll(" \xe2\x80\x94 " ++ @import("oauth_chatgpt.zig").usage_hint);
+    // Reached only after the one refresh-and-retry could not help.
+    if (std.mem.eql(u8, provider, "chatgpt-new") and policy.isAuthError(failure.message)) try w.writeAll(" \xe2\x80\x94 sign in again with `graff login chatgpt-new`");
     return allocator.dupe(u8, w.buffered());
+}
+
+test "failureDiagnostic points a spent ChatGPT plan at its usage page" {
+    const a = std.testing.allocator;
+    const d = try failureDiagnostic(a, "chatgpt-new", .{ .message = "Usage limit reached.", .code = "subscription_sharing_usage_limit_exceeded" });
+    defer a.free(d);
+    try std.testing.expect(std.mem.startsWith(u8, d, "chatgpt-new api error [subscription_sharing_usage_limit_exceeded]: Usage limit reached."));
+    try std.testing.expect(std.mem.endsWith(u8, d, "https://chatgpt.com/settings/usage"));
 }
 
 fn writeDiagnosticField(w: *std.Io.Writer, raw: []const u8, max: usize) !void {
@@ -260,9 +272,34 @@ pub fn errorMessage(obj: std.json.ObjectMap) ?[]const u8 {
             if (e.object.get("message")) |m| if (m == .string) return m.string;
         };
     };
-    if (obj.get("detail")) |d| if (d == .string) return d.string;
+    if (obj.get("detail")) |d| switch (d) {
+        .string => |s| return s,
+        // The ChatGPT plan route's 401: {"detail":{"error_code":"invalid_token"}}.
+        .object => |o| {
+            if (o.get("message")) |m| if (m == .string) return m.string;
+            if (o.get("error_code")) |c| if (c == .string) return c.string;
+        },
+        else => {},
+    };
     if (obj.get("message")) |m| if (m == .string) return m.string;
     return null;
+}
+
+test "parseResponses reads the ChatGPT plan route's expired-token envelope" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var agent: Agent = undefined;
+    agent.arena = arena_state.allocator();
+    agent.scratch_arena = null;
+    agent.message_mutation_arena = null;
+    switch (try parseResponses(&agent, "{\"detail\":{\"error_code\":\"invalid_token\"}}\n")) {
+        .err => |failure| {
+            try std.testing.expectEqualStrings("invalid_token", failure.message);
+            try std.testing.expectEqualStrings("invalid_token", failure.code.?);
+            try std.testing.expect(policy.isAuthError(failure.message));
+        },
+        .ok => return error.TestUnexpectedResult,
+    }
 }
 
 /// Public error envelopes may carry a join id (`error.request_id`, top-level

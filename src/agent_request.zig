@@ -334,7 +334,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                         // with a working credential sitting unused. One-way
                         // and announced — see credential_failover.
                         if (policy.handOffExhaustedPlan(self)) continue;
-                        self.last_api_error = std.fmt.allocPrint(self.arena, "rate limited (429): {s}", .{policy.quota_cap_marker}) catch "rate limited (429): quota exceeded";
+                        const plan_hint = if (std.mem.eql(u8, self.provider.id, "chatgpt-new")) " \xe2\x80\x94 " ++ @import("oauth_chatgpt.zig").usage_hint else "";
+                        self.last_api_error = std.fmt.allocPrint(self.arena, "rate limited (429): {s}{s}", .{ policy.quota_cap_marker, plan_hint }) catch "rate limited (429): quota exceeded";
                         if (telemetry.g_telem) |t| t.errorEvent("quota", self.last_api_error orelse "quota exceeded");
                         if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, 0, body.len, 0, 0, 0, true);
                         return error.ApiError;
