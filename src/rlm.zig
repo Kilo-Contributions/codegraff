@@ -25,12 +25,12 @@ const mcp_shapes = @import("mcp_shapes.zig");
 const read_miss = @import("read_miss.zig");
 
 pub const tool_name = "rlm";
-pub const tool_desc = "Programmatic tool calling (RLM + sPTC). Functions ARE this session's tools. Leading read_file/codedb/sleep_ms/llm_query calls overlap as it streams; other calls run in order, stopping on error/cancel/pending. Binds persist. subagent(\"task\") is sidecar-only (keep the critical-path next step local). Loaded MCP names are host functions after load_tool_schemas; tools.server.tool(...) is that name; each(arr, tool, field) maps a JSON array; len(x)/project(x, field) slim it. print() is the answer. Prefer one rlm over N tool calls.";
+pub const tool_desc = "Tools as a call-only script, not Python: name = tool(args), args being literals or bound names (a bound name passes its text); no expressions, indexing or comprehensions. To compute over a result, write_file(\"r.json\", name), then shell. Leading read_file/codedb/sleep_ms/llm_query calls overlap; others run in order, stopping on error/cancel/pending. Binds persist. subagent(\"task\") is sidecar-only (critical-path steps stay local). Loaded MCP names are host functions after load_tool_schemas; each(arr, tool, field) maps a JSON array; len(x)/project(x, field) slim it. print() is the answer.";
 /// --lean catalog desc: same contract, no REPL essay. maybeAppend is after
 /// compactLeanSpecs, so this is the one-shot wire text.
 pub const lean_tool_desc = "Batch independent read_file/codedb here. print(read_file(\"p\")) returns the file — do not catalog-read it again. Then edit_file/write_file/shell as catalog tools. Leading reads overlap; other calls run in order, stopping on error/cancel/pending. Binds persist. Loaded MCP names are host functions after load_tool_schemas.";
 pub const tool_schema =
-    \\{"type": "object", "properties": {"code": {"type": "string", "description": "Python-like script: name = read_file(\"path\") / codedb(\"command\") / bash(\"cmd\") / sleep_ms(ms) / llm_query(\"prompt\") / subagent(\"task\") / loaded mcp__server__tool() or tools.server.tool(); each(arr, tool, field) maps a JSON array; len(x) and project(x, field) slim it; print(...) is the result. Assignments persist across rlm calls."}}, "required": ["code"]}
+    \\{"type": "object", "properties": {"code": {"type": "string", "description": "Call-only script, not Python. One statement per line: name = read_file(\"path\") / codedb(\"command\") / bash(\"cmd\") / sleep_ms(ms) / llm_query(\"prompt\") / subagent(\"task\") / loaded mcp__server__tool() or tools.server.tool(); write_file(\"path\", name) saves a bound result; each(arr, tool, field) maps a JSON array; len(x) and project(x, field) slim it; print(name, ...) is the result. Arguments are string, number or boolean literals or bound names. Assignments persist across rlm calls."}}, "required": ["code"]}
 ;
 
 /// Process-global: on by default. `--old` / `--no-rlm` turn it off; `--rlm`
@@ -304,7 +304,7 @@ fn evalStmt(
         .ok => return null,
         .fail => |e| return .{ .text = e, .is_error = true },
     }
-    const call = try spec_ptc.extractCall(arena, stmt);
+    const call = try spec_ptc.extractCallBound(arena, stmt, binds);
     if (call) |c| {
         const key = try c.key(arena);
         const cached = claimed.get(key);
@@ -362,7 +362,7 @@ fn renderPrintPart(ctx: ToolCtx, arena: Allocator, inner: []const u8, binds: []c
         if (std.mem.startsWith(u8, t, name) and t.len > name.len and
             (t[name.len] == '[' or t[name.len] == '.')) return unsupportedPrint(ctx, status);
     }
-    if (try spec_ptc.extractCall(arena, t)) |c| {
+    if (try spec_ptc.extractCallBound(arena, t, binds)) |c| {
         const key = try c.key(arena);
         const cached = claimed.get(key);
         const out = cached orelse runHost(ctx, c);

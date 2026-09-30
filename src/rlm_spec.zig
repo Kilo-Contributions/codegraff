@@ -23,12 +23,12 @@ pub var run_host: ?*const fn (ToolCtx, spec_ptc.Call) ToolOutput = null;
 /// `subagent("task")` is Prime-style recursion via graff's existing subagent
 /// tool. v1 is synchronous; speculate() still overlaps independent calls.
 /// Keyword `run_in_background=true` returns an agent id (a handle).
-pub const system_note = "\n\nrlm(code): tools as script. Leading reads overlap; other calls run in order, stopping on error/cancel/pending. Binds persist until /new or /clear. subagent() is sidecar-only; keep critical-path local. Loaded MCP names are functions (tools.server.tool too). each maps arrays; len/project slim them. print() returns the answer.";
+pub const system_note = "\n\nrlm(code): call-only script, not Python: literal or bound-name args, no expressions; write_file(\"f\", name) then shell to compute. Leading reads overlap; other calls run in order, stopping on error. Binds persist until /new or /clear. subagent() is sidecar-only; keep critical-path local. each maps arrays; len/project slim them. print() returns the answer.";
 
 /// One REPL assignment. `runScript` seeds these from the process-local store
 /// so a later `rlm` call can `print(prev)` without re-reading. Owned by the
 /// caller's arena when seeded; the store holds gpa copies.
-pub const Binding = struct { name: []const u8, text: []const u8 };
+pub const Binding = @import("spec_ptc.zig").Bound;
 
 const BindStore = struct {
     mu: Io.Mutex = .init,
