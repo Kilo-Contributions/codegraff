@@ -70,6 +70,22 @@ pub fn visibleSnapshots(parse_snapshot: anytype) !void {
     try std.testing.expectEqual(@as(u64, 372_000), snapshot.models[0].context);
     try std.testing.expectEqualStrings("future-luna", snapshot.models[1].name);
     try std.testing.expectEqual(@as(u64, 128_000), snapshot.models[1].context);
+
+    // ADR 0226: Codex's own defaults ride along (native keys and graff's
+    // compact cache keys); a level the wire does not accept is dropped.
+    const defaults = parse_snapshot(arena.allocator(),
+        \\{"models":[
+        \\ {"slug":"native","visibility":"list","default_reasoning_level":"low","default_verbosity":"low"},
+        \\ {"name":"compact","context":272000,"default_effort":"high","default_verbosity":"medium"},
+        \\ {"slug":"odd","visibility":"list","default_reasoning_level":"extreme","default_verbosity":"loud"},
+        \\ {"slug":"plain","visibility":"list"}]}
+    ).?;
+    try std.testing.expectEqualStrings("low", defaults.models[0].default_effort.?);
+    try std.testing.expectEqualStrings("low", defaults.models[0].default_verbosity.?);
+    try std.testing.expectEqualStrings("high", defaults.models[1].default_effort.?);
+    try std.testing.expectEqualStrings("medium", defaults.models[1].default_verbosity.?);
+    try std.testing.expect(defaults.models[2].default_effort == null and defaults.models[2].default_verbosity == null);
+    try std.testing.expect(defaults.models[3].default_effort == null and defaults.models[3].default_verbosity == null);
 }
 
 pub fn versionFloor(floor: []const u8, effective_version: anytype, snapshot_matches: anytype) !void {

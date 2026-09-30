@@ -159,6 +159,9 @@ pub const ModelInfo = struct {
     thinking_support: ThinkingSupport = .unknown,
     support_efforts: []const []const u8 = &.{},
     default_effort: ?[]const u8 = null,
+    /// Codex catalog `default_verbosity` (ADR 0226): the `text.verbosity` the
+    /// route's own client sends for this model.
+    default_verbosity: ?[]const u8 = null,
 };
 
 pub const ModelProtocol = enum { provider_default, kimi, anthropic };

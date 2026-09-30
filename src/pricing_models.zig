@@ -57,9 +57,9 @@ pub const rows = [_]ModelInfo{
     // Offline snapshot only: at startup models_cache.zig replaces the whole
     // Codex slice from the account-scoped /models response (5-minute cache).
     // These rows keep Codex usable when auth or discovery is unavailable.
-    .{ .provider = "codex", .name = "gpt-6-astra", .context = 272_000 },
-    .{ .provider = "codex", .name = "gpt-6-sol", .context = 272_000 },
-    .{ .provider = "codex", .name = "gpt-6.1-sol", .context = 272_000 },
+    .{ .provider = "codex", .name = "gpt-6-astra", .context = 272_000, .default_effort = "medium", .default_verbosity = "low" },
+    .{ .provider = "codex", .name = "gpt-6-sol", .context = 272_000, .default_effort = "medium", .default_verbosity = "low" },
+    .{ .provider = "codex", .name = "gpt-6.1-sol", .context = 272_000, .default_effort = "low", .default_verbosity = "low" },
     .{ .provider = "codex", .name = "gpt-5.6-sol", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-5.6-terra", .context = 272_000 },
     .{ .provider = "codegraff", .name = "muse-spark-1.2", .context = 262_144 },

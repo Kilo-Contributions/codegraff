@@ -108,6 +108,31 @@ pub fn normalize(provider_id: []const u8, model: []const u8, requested: []const 
     return requested;
 }
 
+/// ADR 0226: on the codex route graff's default effort (medium) and text
+/// verbosity follow the model's catalog defaults, as the route's own client
+/// does. Any other effort is sent as chosen.
+fn codexCatalog(provider_id: []const u8, model: []const u8) ?@import("pricing.zig").ModelInfo {
+    if (!std.mem.eql(u8, provider_id, "codex")) return null;
+    return @import("pricing.zig").modelInfoFor(provider_id, model);
+}
+
+pub fn catalogVerbosity(provider_id: []const u8, model: []const u8) ?[]const u8 {
+    const info = codexCatalog(provider_id, model) orelse return null;
+    return info.default_verbosity;
+}
+
+pub const effort_levels = [_][]const u8{ "minimal", "low", "medium", "high", "xhigh", "max" };
+pub const verbosity_levels = [_][]const u8{ "low", "medium", "high" };
+
+/// ADR 0226: a catalog default the wire accepts, under graff's compact key
+/// or Codex's own; anything else is dropped, not guessed.
+pub fn catalogLevel(arena: std.mem.Allocator, obj: std.json.ObjectMap, keys: []const []const u8, allowed: []const []const u8) ?[]const u8 {
+    for (keys) |key| if (@import("util.zig").strFieldObj(obj, key)) |v| {
+        for (allowed) |level| if (std.mem.eql(u8, v, level)) return arena.dupe(u8, level) catch null;
+    };
+    return null;
+}
+
 pub fn allows(provider_id: []const u8, model: []const u8, tag: []const u8) bool {
     for (levels(provider_id, model)) |level| if (std.mem.eql(u8, tag, level)) return true;
     return false;
@@ -118,6 +143,7 @@ pub fn allows(provider_id: []const u8, model: []const u8, tag: []const u8) bool 
 /// `max`). Other seats still send ultra as `max` (including OpenAI).
 pub fn wireEffort(provider_id: []const u8, model: []const u8, requested: []const u8) []const u8 {
     if (mimoRoute(provider_id, model)) return if (std.mem.eql(u8, requested, "none")) "none" else "high";
+    if (std.mem.eql(u8, requested, "medium")) if (codexCatalog(provider_id, model)) |info| if (info.default_effort) |d| return d;
     if (std.mem.eql(u8, requested, "medium") and omitsDefaultFlashEffort(model)) return "low";
     if (grokFamily(model)) {
         if (std.mem.eql(u8, requested, "max") or std.mem.eql(u8, requested, "ultra")) return "high";
@@ -215,4 +241,29 @@ test "MiMo exposes only Off and On while legacy positive settings remain On" {
     try std.testing.expectEqualStrings("", normalize("custom", "mimo-v2.6-flash", "none"));
     try std.testing.expectEqualStrings("low", wireEffort("custom", "mimo-v2.6-flash", "low"));
     try std.testing.expectEqualStrings("low", wireEffort("zai", "glm-5.3-flash", "medium"));
+}
+
+test "codex: the default medium follows the model's catalog; explicit levels and other routes do not" {
+    try std.testing.expectEqualStrings("low", wireEffort("codex", "gpt-6.1-sol", "medium"));
+    try std.testing.expectEqualStrings("high", wireEffort("codex", "gpt-6.1-sol", "high"));
+    try std.testing.expectEqualStrings("low", wireEffort("codex", "gpt-6.1-sol", "low"));
+    try std.testing.expectEqualStrings("medium", wireEffort("codex", "gpt-6-sol", "medium"));
+    try std.testing.expectEqualStrings("medium", wireEffort("openai", "gpt-6.1-sol", "medium"));
+    try std.testing.expectEqualStrings("low", catalogVerbosity("codex", "gpt-6.1-sol").?);
+    try std.testing.expect(catalogVerbosity("openai", "gpt-6.1-sol") == null);
+}
+
+test "codex bodies carry the catalog text verbosity; a compaction summary does not" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    var agent = try @import("agent_request_body_responses.zig").testAgentFor(a, "codex", .responses, "gpt-6.1-sol");
+    const body = try agent.buildBody(null, false, true, true);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"verbosity\":\"low\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"effort\":\"low\"") != null);
+    agent.compaction_request = true;
+    const summary = try agent.buildBody(null, false, true, true);
+    defer std.testing.allocator.free(summary);
+    try std.testing.expect(std.mem.indexOf(u8, summary, "\"verbosity\"") == null);
 }

@@ -112,7 +112,15 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     try s.write(false);
     server_compact.noteExposure(self);
     try server_compact.writeContextManagement(self, s);
-    if (self.output_schema) |schema_json| try writeTextFormat(s, schema_json);
+    if (self.output_schema) |schema_json| try writeTextFormat(s, schema_json) else if (!self.compaction_request and !self.server_compaction_request) {
+        if (@import("effort_route.zig").catalogVerbosity(self.provider.id, self.provider.model)) |v| {
+            try s.objectField("text");
+            try s.beginObject();
+            try s.objectField("verbosity");
+            try s.write(v);
+            try s.endObject();
+        }
+    }
     // Prewarm: generate:false and no transport fields — connection setup, not inference (openai/codex).
     if (self.ws_prewarm) try s.objectField("generate") else try s.objectField("stream");
     // No top-level max_output_tokens: codex rejects it ("Unsupported parameter") on gpt-5.6-*.
