@@ -312,9 +312,10 @@ pub fn runSubcommand(io: Io, gpa: Allocator, arena: Allocator, init: std.process
         return true;
     }
 
-    // `harness login [codex] [--refresh]`: OAuth login. Default target is
+    // `harness login [name] [--refresh]`: OAuth login. Default target is
     // codegraff (device-code flow, writes ~/.simple-harness-codegraff.json);
-    // `codex` (or --refresh) runs the ChatGPT PKCE/refresh flow → ~/.codex/auth.json.
+    // `chatgpt` or `codex` (or --refresh) runs the ChatGPT PKCE/refresh flow →
+    // ~/.codex/auth.json. args.loginTarget owns the names.
     if (flags.login_flag) {
         const home = keys_cli.homeEnv(init.environ_map) orelse std.process.fatal("no HOME/USERPROFILE", .{});
         if (flags.xai_login) try oauth.xaiLogin(io, gpa, arena, home) else if (flags.kimi_login) try oauth.kimiLogin(io, gpa, arena, home) else if (flags.zai_login) try oauth.zaiLogin(io, gpa, arena, home) else if (flags.codex_login or flags.refresh_flag) try oauth.codexLogin(io, gpa, arena, home, flags.refresh_flag) else try oauth.codegraffLogin(io, gpa, arena, home);

@@ -261,10 +261,15 @@ pub fn parse(init: std.process.Init) !Flags {
             }
         }
         if (flags.positionals.items.len > 0 and std.mem.eql(u8, flags.positionals.items[0], "login")) flags.login_flag = true;
-        if (flags.positionals.items.len > 1 and std.mem.eql(u8, flags.positionals.items[1], "codex")) flags.codex_login = true;
-        if (flags.positionals.items.len > 1 and std.mem.eql(u8, flags.positionals.items[1], "kimi")) flags.kimi_login = true;
-        if (flags.positionals.items.len > 1 and std.mem.eql(u8, flags.positionals.items[1], "xai")) flags.xai_login = true;
-        if (flags.positionals.items.len > 1 and @import("oauth_zai.zig").isLoginName(flags.positionals.items[1])) flags.zai_login = true;
+        if (flags.login_flag and flags.positionals.items.len > 1) {
+            const name = flags.positionals.items[1];
+            const target = loginTarget(name) orelse
+                std.process.fatal("unknown login '{s}' — graff login [codegraff|chatgpt|kimi|xai|zai]", .{name});
+            flags.codex_login = std.mem.eql(u8, target, "codex");
+            flags.kimi_login = std.mem.eql(u8, target, "kimi");
+            flags.xai_login = std.mem.eql(u8, target, "xai");
+            flags.zai_login = std.mem.eql(u8, target, "zai");
+        }
     }
 
     // One-shot print mode: `harness -p "prompt"` or a bare positional prompt
@@ -309,6 +314,31 @@ pub fn parse(init: std.process.Init) !Flags {
     }
 
     return flags;
+}
+
+/// The provider a login name means, for `graff login <name>` and `/login
+/// <name>` alike. codex is the ChatGPT account login, so the names people
+/// reach for (chatgpt, openai, gpt, oai) land there too. Null: not a login.
+pub fn loginTarget(name: []const u8) ?[]const u8 {
+    const aliases = [_][2][]const u8{
+        .{ "codex", "codex" }, .{ "chatgpt", "codex" },       .{ "openai", "codex" },    .{ "gpt", "codex" },
+        .{ "oai", "codex" },   .{ "codegraff", "codegraff" }, .{ "graff", "codegraff" }, .{ "kimi", "kimi" },
+        .{ "xai", "xai" },     .{ "grok", "xai" },
+    };
+    for (aliases) |pair| if (std.ascii.eqlIgnoreCase(name, pair[0])) return pair[1];
+    if (@import("oauth_zai.zig").isLoginName(name)) return "zai";
+    return null;
+}
+
+test "loginTarget: chatgpt and codex are one login; unknown names are not logins" {
+    for ([_][]const u8{ "codex", "chatgpt", "ChatGPT", "openai", "gpt", "oai" }) |name|
+        try std.testing.expectEqualStrings("codex", loginTarget(name).?);
+    try std.testing.expectEqualStrings("codegraff", loginTarget("graff").?);
+    try std.testing.expectEqualStrings("xai", loginTarget("grok").?);
+    try std.testing.expectEqualStrings("kimi", loginTarget("kimi").?);
+    try std.testing.expectEqualStrings("zai", loginTarget("zai").?);
+    try std.testing.expect(loginTarget("chatgptt") == null);
+    try std.testing.expect(loginTarget("") == null);
 }
 
 test "tui and repl are pager subcommands, not one-shot prompts" {
