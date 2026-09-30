@@ -6,9 +6,11 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
+import codex_app_server
 import list_price
 import measurement
 import request_capture
@@ -440,6 +442,43 @@ class MeasurementTests(unittest.TestCase):
             measurement.private_logs(sandboxes, 'fixture stdout', 'fixture stderr')
             if os.name != 'nt':
                 self.assertEqual((Path(sandboxes) / '.eval-stdout.txt').stat().st_mode & 0o777, 0o600)
+
+
+class CodexAppServerDriverTests(unittest.TestCase):
+    def test_sub_agent_threads_neither_answer_nor_end_the_root_turn(self):
+        root, child = 'thread-root', 'thread-child'
+
+        def usage(tid, total):
+            return {'method': 'thread/tokenUsage/updated', 'params': {'threadId': tid, 'tokenUsage': {'total': total}}}
+
+        events = [
+            {'method': 'turn/started', 'params': {'threadId': root, 'turn': {'id': 'turn-root'}}},
+            {'method': 'turn/started', 'params': {'threadId': child, 'turn': {'id': 'turn-child'}}},
+            usage(root, {'inputTokens': 100, 'cachedInputTokens': 60, 'outputTokens': 10}),
+            usage(child, {'inputTokens': 40, 'cachedInputTokens': 0, 'outputTokens': 5}),
+            {'method': 'item/completed', 'params': {'threadId': child, 'item': {'type': 'agentMessage', 'text': 'one half'}}},
+            {'method': 'turn/completed', 'params': {'threadId': child, 'turn': {'id': 'turn-child', 'status': 'completed'}}},
+            usage(root, {'inputTokens': 250, 'cachedInputTokens': 200, 'outputTokens': 30}),
+            {'method': 'item/completed', 'params': {'threadId': root, 'item': {'type': 'agentMessage', 'text': 'wrote report.json'}}},
+            {'method': 'turn/completed', 'params': {'threadId': root, 'turn': {'id': 'turn-root', 'status': 'completed'}}},
+        ]
+
+        class FakeServer:
+            def answer_server_request(self, msg):
+                return False
+
+            def request(self, method, params, on_event=None, timeout=60.0):
+                return {'turn': {'id': 'turn-root'}}
+
+            def next(self, timeout):
+                return events.pop(0) if events else None
+
+        answer, status, _, usage_total, calls = codex_app_server.run_turn(FakeServer(), root, 'go', time.monotonic() + 5)
+        self.assertEqual(answer, 'wrote report.json')
+        self.assertEqual(status, 'completed')
+        # The child's usage counts; the root's later total replaces its earlier one.
+        self.assertEqual(usage_total, {'inputTokens': 290, 'cachedInputTokens': 200, 'outputTokens': 35})
+        self.assertEqual(calls, 3)
 
 
 if __name__ == '__main__':

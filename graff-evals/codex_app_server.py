@@ -172,8 +172,25 @@ def text_input(text: str) -> list[dict]:
     return [{"type": "text", "text": text, "text_elements": []}]
 
 
-def run_turn(srv: AppServer, thread_id: str, text: str, deadline: float, steer: str = "", steer_after: str = "text"):
-    """One turn; returns (final agent text, turn status, steer outcome)."""
+def summed(totals: dict) -> dict:
+    """Every thread's cumulative usage added up: sub-agent threads bill too."""
+    out: dict = {}
+    for usage in totals.values():
+        for key, value in (usage or {}).items():
+            if isinstance(value, (int, float)):
+                out[key] = out.get(key, 0) + value
+    return out
+
+
+def run_turn(srv: AppServer, thread_id: str, text: str, deadline: float, steer: str = "", steer_after: str = "text",
+             totals: dict | None = None):
+    """One turn; returns (final agent text, turn status, steer outcome).
+
+    Sub-agents run on their own threads over the same connection. Only the
+    root thread's events start, answer or end the turn; every thread's usage
+    counts (`totals` maps thread id to its cumulative usage, across turns).
+    """
+    totals = {} if totals is None else totals
     state = {"turn": None, "done": None, "answer": "", "steered": "", "usage": None, "armed": 0.0, "t0": time.monotonic()}
     delay = float(os.environ.get("EVAL_STEER_DELAY_S", "0"))
 
@@ -182,22 +199,25 @@ def run_turn(srv: AppServer, thread_id: str, text: str, deadline: float, steer: 
             return
         method = msg.get("method")
         params = msg.get("params") or {}
-        if method == "turn/started":
+        tid = params.get("threadId")
+        root = tid is None or tid == thread_id
+        if method == "turn/started" and root:
             state["turn"] = (params.get("turn") or {}).get("id") or state["turn"]
-        elif method == "item/started" and (params.get("item") or {}).get("type") == "agentMessage" and state.get("steer_at") and not state.get("after_item"):
+        elif method == "item/started" and root and (params.get("item") or {}).get("type") == "agentMessage" and state.get("steer_at") and not state.get("after_item"):
             state["after_item"] = time.monotonic()
         elif method == "item/completed":
             item = params.get("item") or {}
-            trace(item_sizes(item))
-            if item.get("type") == "agentMessage":
+            trace(dict(item_sizes(item), thread="root" if root else "child"))
+            if root and item.get("type") == "agentMessage":
                 state["answer"] = item.get("text") or state["answer"]
         elif method == "thread/tokenUsage/updated":
-            state["usage"] = (params.get("tokenUsage") or {}).get("total")
-            trace({"ev": "usage", "last": (params.get("tokenUsage") or {}).get("last")})
+            totals[tid or thread_id] = (params.get("tokenUsage") or {}).get("total")
+            state["usage"] = summed(totals)
+            trace({"ev": "usage", "thread": "root" if root else "child", "last": (params.get("tokenUsage") or {}).get("last")})
             state["calls"] = state.get("calls", 0) + 1
             if os.environ.get("EVAL_DEBUG"):
                 print(f"[usage-event] {json.dumps(params.get('tokenUsage'))}", file=sys.stderr)
-        elif method == "turn/completed":
+        elif method == "turn/completed" and root:
             state["done"] = params.get("turn") or {}
         if steer and not state["steered"] and state["turn"]:
             trigger = method in ("item/agentMessage/delta", "item/reasoning/summaryTextDelta") if steer_after == "text" else method == "turn/started"
@@ -266,11 +286,12 @@ def main():
         thread = srv.request("thread/start", {"model": model, "cwd": sandbox, "approvalPolicy": "never",
                                               "sandbox": "danger-full-access", "ephemeral": True}, timeout=60)
         thread_id = (thread.get("thread") or {}).get("id")
+        totals: dict = {}
         answer, status, steered, usage, calls = run_turn(srv, thread_id, prompt, deadline, os.environ.get("EVAL_STEER", ""),
-                                                         os.environ.get("EVAL_STEER_AFTER", "text"))
+                                                         os.environ.get("EVAL_STEER_AFTER", "text"), totals)
         turns = 1
         if os.environ.get("EVAL_FOLLOWUP") and status == "completed":
-            answer, status, _, usage2, calls2 = run_turn(srv, thread_id, os.environ["EVAL_FOLLOWUP"], deadline)
+            answer, status, _, usage2, calls2 = run_turn(srv, thread_id, os.environ["EVAL_FOLLOWUP"], deadline, totals=totals)
             usage, calls, turns = usage2 or usage, calls + calls2, 2
         print(answer)
         print(f"[codex-app-server] status={status} steer={steered or '-'} turns={turns}", file=sys.stderr)
