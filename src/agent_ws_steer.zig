@@ -321,6 +321,8 @@ pub fn billEnded(self: *Agent, response: std.json.ObjectMap) void {
             written = usageInt(d.object, "cache_write_tokens");
         };
         self.recordCost(@max(in - cached - written, 0), cached, written, usageInt(u.object, "output_tokens"));
+        // Its own usage line: the trace keeps one pending usage per call.
+        if (self.tracer) |tr| @import("usage_trace.zig").emit(tr, self.label, self.sub, self.provider.model);
     }
 }
 
