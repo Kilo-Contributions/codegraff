@@ -353,7 +353,7 @@ fn hostField(tool: []const u8) []const u8 {
     if (std.mem.eql(u8, tool, "codedb")) return "command";
     if (std.mem.eql(u8, tool, "sleep_ms")) return "ms";
     if (std.mem.eql(u8, tool, "llm_query")) return "prompt";
-    if (std.mem.eql(u8, tool, "bash")) return "command";
+    if (std.mem.eql(u8, tool, "bash") or std.mem.eql(u8, tool, "shell")) return "command";
     if (std.mem.eql(u8, tool, "webfetch")) return "url";
     if (std.mem.eql(u8, tool, "subagent")) return "prompt";
     return "arg";
@@ -568,4 +568,8 @@ test "extractCallBound: a bare bound name passes its text; write_file takes path
     try std.testing.expect((try extractCallBound(a, "write_file(\"out.json\", missing)", &binds)) == null);
     // Other tools keep one positional argument.
     try std.testing.expect((try extractCallBound(a, "read_file(\"a\", notes)", &binds)) == null);
+    // shell is the catalog name for the command tool: its one positional
+    // argument is `command`, as the tool description tells scripts to use it.
+    const sh = (try extractCallBound(a, "r = shell(\"python3 x.py\")", &binds)).?;
+    try std.testing.expectEqualStrings("{\"command\":\"python3 x.py\"}", sh.args_json);
 }
