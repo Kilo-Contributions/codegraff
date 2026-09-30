@@ -99,10 +99,18 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     // Root and title requests rendezvous after launch-time CA loading.
     http.waitForClientReady(self.io);
     if (http.takeCaWarmFailure()) if (self.tracer) |tr| tr.note("ca_prewarm_failed", "CA bundle rescan failed; request will use lazy TLS initialization");
+    var tools_now = tools_in;
     if (self.registry) |reg| {
+        const stale = self.toolsJson();
         if (@import("mcp_pages.zig").beforeRequest(reg)) { // joins deferred starts, re-lists changed servers
             self.invalidateRootTools();
             try self.ensureRootTools(self.provider.kind);
+            // The caller's snapshot is the catalog that just went stale. Send the
+            // rebuilt one, or servers that joined miss this request and change
+            // `tools` on the next, throwing away the prompt cache (ADR 0221).
+            if (tools_now) |t| if (stale.len > 0 and t.ptr == stale.ptr) {
+                tools_now = self.toolsJson();
+            };
         }
     }
     var budget_permit: ?run_budget_mod.Permit = null;
@@ -124,7 +132,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     // so the model lands a text answer now instead of asking for a tool the
     // budget can never pay for — which is how the audit smoke died narrating.
     // compaction/title requests pass tools=null already and skip this whole.
-    var tools = try @import("jev_tool.zig").refreshCatalogForRequest(self, tools_in);
+    var tools = try @import("jev_tool.zig").refreshCatalogForRequest(self, tools_now);
     if (self.tracer) |tr| {
         if (tools) |t| if (t.len == 0) tr.note("tools", "empty catalog at request time (#695)");
     }

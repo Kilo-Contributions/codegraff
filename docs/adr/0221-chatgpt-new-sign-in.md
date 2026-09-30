@@ -145,6 +145,22 @@ process rather than restarting anything.
   announced again; on any other route the items are removed and the tail
   carries the tools as before. Before this, the MCP suite hit the cache on
   12 to 29% of its input on this route against 60 to 65% on Codex.
+- **MiMo keeps `tools` frozen too.** MiMo's chat wire renders `tools` ahead
+  of the system prompt: a probe that appended one tool went from a full cache
+  hit to none, so every load re-billed the whole prompt. Chat has no
+  `additional_tools` item, but MiMo calls a tool that a system message
+  announces, so on MiMo routes the loaded tail rides one system message per
+  load, tagged so the tag never reaches the wire. MiMo's parser types arguments only for declared
+  tools and returns an announced tool's values as strings (`"5"`,
+  `"[\"a\"]"`); `tool_call_repair.retypeArgs` restores their schema types.
+  Other chat providers keep the tail until each is checked the same way.
+- **The first request carries every MCP server that is ready.** `-p` starts
+  MCP in the background and never waits out a handshake (ADR 0035). A server
+  restored from cache was ready before the first request, but that request
+  sent the catalog snapshot taken before the join, so `load_tool_schemas`'
+  listing grew on the second request: one sure cache miss per session on
+  every provider. The first request now gives queued starts up to 100 ms,
+  merges the finished ones, and sends the rebuilt catalog.
 - **Transport**: live turns use the Responses WebSocket like codex, chaining
   `previous_response_id` on the held socket, steering GPT-6 turns, and
   prewarming when `GRAFF_WS_PREWARM` is set. One-shot and quiet turns stay on
