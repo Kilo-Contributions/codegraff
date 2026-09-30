@@ -268,6 +268,9 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
     // Lost arguments rebuilt from the reply's own tool-call markup (MiMo only).
     if (@import("effort_route.zig").mimoRoute(self.provider.id, self.provider.model))
         _ = try tool_call_repair.repairCalls(self.arena, self.scratchAlloc(), &message, self.toolsJson());
+    // Announced tools come back untyped where the wire types only declared ones (MiMo, Claude).
+    if (@import("additional_tools.zig").active(self.provider))
+        _ = try tool_call_repair.retypeArgs(self.arena, self.scratchAlloc(), &message, self.toolsJson());
     // #1247: calls the server's parser left in `content` as markup.
     _ = try tool_call_repair.recoverInlineCalls(self.arena, self.scratchAlloc(), &message, self.toolsJson());
     const msg_obj = tools_mod.json_args.object(message) orelse {

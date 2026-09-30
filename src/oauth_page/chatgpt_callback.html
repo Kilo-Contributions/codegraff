@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Graff · Sign in with ChatGPT</title>
+<style>
+:root{--paper:#f6eedf;--rice:#fffaf0;--ink:#1b1714;--ink-rgb:27 23 20;--coral:#d45a43;--coral-strong:#b3422e;--coral-hover:#bd4935;--on-coral:#fff;--cobalt:#2654d9;--panel:#2654d9;--gold:#f7a63b;--line:rgb(27 23 20 / .15);
+--display:"Sinar Grotesk","Gramatika",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+--body:"Gramatika",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+--mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--paper:#100f0d;--rice:#191714;--ink:#f3ecdf;--ink-rgb:243 236 223;--coral:#ef8069;--coral-strong:#ef8069;--coral-hover:#f39580;--on-coral:#100f0d;--cobalt:#91adff;--panel:#1d3a8f;--gold:#ffc16b;--line:rgb(243 236 223 / .16)}}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--paper);color:var(--ink);font:400 16px/1.5 var(--body);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;background-image:radial-gradient(circle at 20% 10%,rgb(var(--ink-rgb) / .06) 0 .65px,transparent .8px),radial-gradient(circle at 80% 60%,rgb(var(--ink-rgb) / .045) 0 .55px,transparent .75px);background-size:7px 7px,11px 11px}
+header{position:relative;z-index:1;display:flex;align-items:center;gap:.7rem;height:4rem;padding:0 1.25rem;border-bottom:1px solid var(--line)}
+header img{display:block;width:28px;height:28px;border-radius:6px}
+.brand{font:600 1.125rem/1 var(--display);letter-spacing:-.025em}
+.context{padding-left:.7rem;border-left:1px solid var(--line);font-size:.8125rem;color:rgb(var(--ink-rgb) / .55)}
+main{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr);max-width:1280px;min-height:calc(100vh - 4rem);margin:0 auto}
+.copy{order:2;display:flex;align-items:center;padding:3rem 1.25rem}
+.inner{width:100%;max-width:28rem}
+.eyebrow{margin:0 0 1rem;font-size:.875rem;font-weight:500;color:var(--coral)}
+h1{margin:0;font:600 3rem/.95 var(--display);letter-spacing:-.045em;text-wrap:balance}
+.lede{margin:1.25rem 0 0;font-size:.875rem;line-height:1.5rem;color:rgb(var(--ink-rgb) / .62)}
+.ledger{margin:2rem 0 0;padding:0;list-style:none;border-top:1px solid var(--line)}
+.ledger li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.25rem 1rem;padding:.75rem 0;border-bottom:1px solid var(--line);font-size:.875rem}
+.ledger li>span{color:rgb(var(--ink-rgb) / .55)}
+.ledger strong{font-weight:500;overflow-wrap:anywhere}
+.dot{display:inline-block;width:.45rem;height:.45rem;margin:0 .5rem .1rem 0;border-radius:50%;background:var(--coral)}
+.off{background:rgb(var(--ink-rgb) / .3)}
+.actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:2rem}
+.btn{display:inline-flex;min-height:2.75rem;align-items:center;justify-content:center;padding:0 1.25rem;border-radius:6px;font:600 .875rem/1 var(--body);text-decoration:none;transition:color .15s,border-color .15s,background-color .15s}
+.btn-primary{background:var(--coral-strong);color:var(--on-coral)}
+.btn-primary:hover{background:var(--coral-hover)}
+.btn-secondary{border:1px solid rgb(var(--ink-rgb) / .22);background:var(--rice);color:var(--ink)}
+.btn-secondary:hover{border-color:var(--cobalt);color:var(--cobalt)}
+a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.hint{margin:1.25rem 0 0;font-size:.875rem;color:rgb(var(--ink-rgb) / .62)}
+footer{margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--line);font-size:.75rem;line-height:1.25rem;color:rgb(var(--ink-rgb) / .48)}
+aside{order:1;position:relative;min-height:250px;overflow:hidden;border-bottom:1px solid var(--line);background:var(--panel);background-clip:padding-box}
+aside img{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);object-fit:cover}
+.caption{position:absolute;left:1.25rem;right:1.25rem;bottom:1.25rem;max-width:24rem;padding:1rem 1.25rem;border:1px solid rgb(var(--ink-rgb) / .2);background:var(--paper)}
+.caption p{margin:0}
+.big{font:600 1.5rem/1 var(--display);letter-spacing:-.03em}
+.small{margin-top:.5rem!important;font-size:.75rem;line-height:1.25rem;color:rgb(var(--ink-rgb) / .55)}
+body[data-state="first"] [data-for]:not([data-for~="first"]),
+body[data-state="ok"] [data-for]:not([data-for~="ok"]),
+body[data-state="noplan"] [data-for]:not([data-for~="noplan"]),
+body[data-state="denied"] [data-for]:not([data-for~="denied"]),
+body[data-state="error"] [data-for]:not([data-for~="error"]){display:none!important}
+@media (min-width:640px){.copy{padding:4rem 2.5rem}h1{font-size:3.75rem}.lede{font-size:1rem;line-height:1.75rem}.caption{right:auto;left:1.75rem;bottom:1.75rem}}
+@media (min-width:1024px){main{grid-template-columns:minmax(0,.88fr) minmax(500px,1.12fr)}.copy{order:1;padding:5rem 4rem}aside{order:2;min-height:100%;border-bottom:0;border-left:1px solid var(--line)}.caption{left:2rem;bottom:2rem}}
+@media (prefers-color-scheme:dark){header img{padding:3px;background:#f3ecdf}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body data-state="{{state}}">
+<header><img src="{{emblem}}" alt="" width="28" height="28"><span class="brand">Graff</span><span class="context">secure sign-in</span></header>
+<main>
+<section class="copy"><div class="inner">
+<p class="eyebrow">Sign in with ChatGPT</p>
+<h1 data-for="first">You're using your ChatGPT plan.</h1>
+<h1 data-for="ok">You're signed in.</h1>
+<h1 data-for="noplan">Signed in. Plan usage is off.</h1>
+<h1 data-for="denied">Sign-in cancelled.</h1>
+<h1 data-for="error">Sign-in didn't finish.</h1>
+<p class="lede" data-for="first">Eligible requests in Graff now use your ChatGPT plan. You can review usage and set limits in ChatGPT settings.</p>
+<p class="lede" data-for="ok">Graff keeps using your ChatGPT plan on this computer.</p>
+<p class="lede" data-for="noplan">Graff can't use your ChatGPT plan until you allow it. Sign in again and approve plan usage, or keep using an API key.</p>
+<p class="lede" data-for="denied">Nothing changed. Start the sign-in again from Graff when you're ready.</p>
+<p class="lede" data-for="error">Graff couldn't complete the sign-in. Graff shows what went wrong.</p>
+<ul class="ledger" data-for="first ok noplan">
+<li><span>Account</span><strong>{{account}}</strong></li>
+<li><span>ChatGPT plan</span><strong data-for="first ok"><i class="dot"></i>In use</strong><strong data-for="noplan"><i class="dot off"></i>Not allowed</strong></li>
+<li><span>Credentials</span><strong>Stored on this computer</strong></li>
+</ul>
+<div class="actions" data-for="first ok">
+<a class="btn btn-secondary" href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">Manage usage</a>
+</div>
+<p class="hint">Return to Graff to continue. You can close this tab.</p>
+<footer>Graff is the open-source coding harness. Your ChatGPT tokens stay on this computer and are never sent to Codegraff.</footer>
+</div></section>
+<aside><img src="{{art}}" alt="Two workshop mice complete a careful handoff of a sealed envelope and a brass key."><div class="caption"><p class="big">One secure handoff. No password to remember.</p><p class="small">Sign in with ChatGPT for Graff.</p></div></aside>
+</main>
+<script>if(location.protocol==="http:"){try{history.replaceState(null,"","/auth/done")}catch(e){}}</script>
+</body>
+</html>

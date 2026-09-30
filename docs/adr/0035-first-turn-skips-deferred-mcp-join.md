@@ -4,6 +4,8 @@ Status: accepted 2026-08-26
 
 Later-request joining is updated by [ADR 0104](0104-live-publication-and-deferred-tool-evidence.md): only finished handshakes join before a model request.
 
+The first request is updated by [ADR 0221](0221-chatgpt-new-sign-in.md): it gives queued starts up to 100 ms and merges the ones that finished. A dormant server restored from cache starts in milliseconds; a real handshake still joins on a later request.
+
 ## Context
 
 Interactive `--yolo` (including `graff acp`) starts MCP handshakes in the

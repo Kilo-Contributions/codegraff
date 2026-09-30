@@ -33,6 +33,23 @@ test "OpenAI catalog configuration carries its models endpoint" {
     }
 }
 
+test "parseModels reads the ChatGPT plan's Codex-shaped list and skips hidden rows" {
+    var state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer state.deinit();
+    const snapshot = parseModels(state.allocator(), "chatgpt-new",
+        \\{"models":[
+        \\ {"slug":"gpt-6.1-sol","display_name":"GPT-6.1-Sol","visibility":"list","context_window":272000,"max_context_window":872000},
+        \\ {"slug":"gpt-reserve","display_name":"Reserve","visibility":"hide","context_window":272000}
+        \\]}
+    ) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 1), snapshot.models.len);
+    try std.testing.expectEqualStrings("chatgpt-new", snapshot.models[0].provider);
+    try std.testing.expectEqualStrings("gpt-6.1-sol", snapshot.models[0].name);
+    try std.testing.expectEqual(@as(u64, 272_000), snapshot.models[0].context);
+    const spec = provider.specFor("chatgpt-new") orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqualStrings("https://api.openai.com/v1/models?client_version=0.159.0", modelsUrl(spec));
+}
+
 test "parseModels reads Vercel context_window and skips non-language types" {
     var state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer state.deinit();

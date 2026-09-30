@@ -19,7 +19,8 @@ The first-party client never splits those two ids.
 
 - Codex `session_id` (HTTP extra headers and the WS handshake) is the same
   value as the Responses body's `prompt_cache_key` (`requestCacheKey`:
-  project root for main/`/btw`, four role lanes for children).
+  project root for main/`/btw`, four role lanes for children; ADR 0223: the
+  account base when the codex provider has an account id).
 - `sessionId()` stays a per-process UUIDv4 for the persisted graff session
   record. It is not the ChatGPT cache partition.
 - `store: false` is unchanged (openai/codex also sends `store: false`).

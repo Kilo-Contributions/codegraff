@@ -30,7 +30,19 @@ const Agent = @import("agent.zig").Agent;
 /// The live agent's chain-invariant properties. Both the check and the record
 /// go through here, so they can never disagree about what was compared.
 pub fn propsFor(self: *const Agent) u64 {
-    return propsFp(self.provider.model, @tagName(self.reasoning), self.fast, self.toolsJson(), self.systemPrompt());
+    var arena_state = std.heap.ArenaAllocator.init(self.gpa);
+    defer arena_state.deinit();
+    return propsFp(self.provider.model, @tagName(self.reasoning), self.fast, wireTools(self, arena_state.allocator()), self.systemPrompt());
+}
+
+/// The `tools` a request carries. Where loads ride additional_tools items
+/// (ADR 0221) the loaded tail stays off the wire, so a load does not end the
+/// chain: its announcement travels in the delta instead.
+fn wireTools(self: *const Agent, arena: std.mem.Allocator) []const u8 {
+    const additional_tools = @import("additional_tools.zig");
+    const tools = self.toolsJson();
+    if (!additional_tools.active(self.provider)) return tools;
+    return additional_tools.stripTail(self, arena, tools);
 }
 
 /// GRAFF_CODEX_FULL_RESEND=1 (armed by session_settings.applyEnvKnobs):
@@ -51,8 +63,10 @@ pub var g_xai_ws_chain = false;
 /// May this request chain onto the held response instead of re-anchoring?
 /// Brands whose Responses WS holds prior state in-memory and accept
 /// `previous_response_id` + delta input (including store:false / ZDR).
+/// The ChatGPT plan route (ADR 0221) does, on the socket only.
 pub fn chainBrandOk(provider_id: []const u8) bool {
-    return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "xai");
+    return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "xai") or
+        std.mem.eql(u8, provider_id, "chatgpt-new");
 }
 
 /// A failed turn must drop the chain: not-found (ZDR / store:false evict),
@@ -78,7 +92,8 @@ pub fn shouldReanchorRequest(body: []const u8, message: []const u8, code: ?[]con
 pub fn chainUsable(self: *const Agent) bool {
     if (g_force_full_resend) return false;
     const xai_chain = g_xai_ws_chain and std.mem.eql(u8, self.provider.id, "xai");
-    if (!std.mem.eql(u8, self.provider.id, "codex") and !xai_chain) return false;
+    const always = std.mem.eql(u8, self.provider.id, "codex") or std.mem.eql(u8, self.provider.id, "chatgpt-new");
+    if (!always and !xai_chain) return false;
     return usable(
         self.codex_ws != null,
         self.codex_prev_id != null,
@@ -185,9 +200,10 @@ test "chainUsable: xAI chains on a held socket when opted in" {
     try std.testing.expect(usable(true, true, 1, 2, 0, 0, 7, 7));
 }
 
-test "chainBrandOk: xAI and codex chain; anthropic does not" {
+test "chainBrandOk: xAI, codex and the ChatGPT plan chain; anthropic does not" {
     try std.testing.expect(chainBrandOk("codex"));
     try std.testing.expect(chainBrandOk("xai"));
+    try std.testing.expect(chainBrandOk("chatgpt-new"));
     try std.testing.expect(!chainBrandOk("anthropic"));
     try std.testing.expect(!chainBrandOk("kimi"));
 }

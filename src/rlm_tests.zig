@@ -100,6 +100,32 @@ test "runScript reads a fixture via speculated read_file and prints it" {
     try std.testing.expect(std.mem.indexOf(u8, nested.text, "hello-rlm") != null);
 }
 
+test "runScript saves a bound result with write_file(path, name) for the shell" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "note.txt", .data = "hello-rlm\n" });
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const n = try tmp.dir.realPath(io, &path_buf);
+    var dummy_client: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer dummy_client.deinit();
+    const saved = rlm.available;
+    defer {
+        rlm.available = saved;
+        rlm.resetLive(gpa, io);
+    }
+    rlm.available = true;
+    var ctx = testCtx(gpa, io, &dummy_client);
+    ctx.agent_cwd = path_buf[0..n];
+    const out = try rlm.runScript(ctx, "x = read_file(\"note.txt\")\nwrite_file(\"copy.txt\", x)");
+    defer gpa.free(out.text);
+    try std.testing.expect(!out.is_error);
+    var buf: [64]u8 = undefined;
+    const copied = try tmp.dir.readFile(io, "copy.txt", &buf);
+    try std.testing.expect(std.mem.indexOf(u8, copied, "hello-rlm") != null);
+}
+
 test "runScript splits a semicolon one-liner and prints both binds" {
     const gpa = std.testing.allocator;
     const io = std.testing.io;

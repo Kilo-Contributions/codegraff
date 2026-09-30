@@ -8,8 +8,8 @@
 //! shorter: max(latency) instead of sum(latency).
 //!
 //! `--yolo` (including `-p`) sets `defer_join`: tasks start immediately but
-//! the first model call is not blocked. `joinBeforeRequest` merges them on
-//! later model calls as each handshake finishes (ADR 0035). Lean `-p` with no project `.mcp.json`
+//! the first model call is not blocked. `joinBeforeRequest` merges each one
+//! that has finished (ADR 0035, 0221). Lean `-p` with no project `.mcp.json`
 //! skips imported global/plugin handshakes (ADR 0029 is the project file).
 //! `joinPending` still blocks for `/mcp` and teardown.
 
@@ -360,14 +360,18 @@ fn noteMcpDeferred(io: Io) void {
     } });
 }
 
-/// First model call: do not wait for deferred MCP handshakes (ADR 0035).
-/// Later requests only consume ready outcomes; `/mcp` and teardown may wait.
+/// No model request waits out a deferred MCP handshake (ADR 0035), but each
+/// merges the ones already finished, the first included: a dormant server
+/// restored from cache that merged later would change the catalog mid-session
+/// and throw away the prompt cache (ADR 0221; mcp_pages.settle gives the first
+/// request 100 ms for it). `/mcp` and teardown may wait.
 pub fn joinBeforeRequest(reg: *Registry) bool {
     reg.mutex.lockUncancelable(reg.io);
     const decision = firstRequestJoin(reg.pending_starts.len, &reg.first_request_join_skipped);
-    const merged = if (decision == .join) joinReadyLocked(reg) else false;
+    const merged = if (decision != .none) joinReadyLocked(reg) else false;
+    const waiting = reg.pending_starts.len > 0;
     reg.mutex.unlock(reg.io);
-    if (decision == .skip) noteMcpDeferred(reg.io);
+    if (decision == .skip and waiting) noteMcpDeferred(reg.io);
     return merged;
 }
 
@@ -513,8 +517,7 @@ test "#860 later requests leave unfinished handshakes queued and consume ready t
     const ready = try a.create(std.atomic.Value(bool));
     ready.* = .init(true);
     reg.pending_starts[1].ready = ready;
-    try std.testing.expect(!joinBeforeRequest(&reg));
-    try std.testing.expect(joinBeforeRequest(&reg));
+    try std.testing.expect(joinBeforeRequest(&reg)); // the first request merges the finished one, never the slow one
     try std.testing.expect(!flag.load(.acquire));
     try std.testing.expect(alreadyStarting(&reg, "slow"));
     try std.testing.expect(!alreadyStarting(&reg, "ready"));

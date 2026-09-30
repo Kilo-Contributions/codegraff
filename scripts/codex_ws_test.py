@@ -526,6 +526,13 @@ def assert_midturn_requests(mock: CodexMock) -> None:
         )
 
     final_input = final.body.get("input")
+    # ADR 0221: where loaded tools ride additional_tools items, a compacted
+    # history re-announces them next to the handoff; nothing else may ride along.
+    handoff_items = (
+        [item for item in final_input if not (isinstance(item, dict) and item.get("type") == "additional_tools")]
+        if isinstance(final_input, list)
+        else []
+    )
     final_texts = (
         [text for item in final_input if (text := user_text(item)) is not None]
         if isinstance(final_input, list)
@@ -534,7 +541,7 @@ def assert_midturn_requests(mock: CodexMock) -> None:
     if (
         final.body.get("type") != "response.create"
         or not isinstance(final_input, list)
-        or len(final_input) != 1
+        or len(handoff_items) != 1
         or len(final_texts) != 1
         or not final_texts[0].startswith(
             "Context: the earlier conversation was compacted"

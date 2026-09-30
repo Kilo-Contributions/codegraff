@@ -17,7 +17,10 @@ pub fn isAuthError(msg: []const u8) bool {
         util.indexOfIgnoreCase(msg, "unauthorized") != null or
         util.indexOfIgnoreCase(msg, "expired") != null or
         util.indexOfIgnoreCase(msg, "authentication") != null or
-        util.indexOfIgnoreCase(msg, "invalid_api_key") != null;
+        util.indexOfIgnoreCase(msg, "invalid_api_key") != null or
+        util.indexOfIgnoreCase(msg, "invalid_token") != null or // OAuth bearer error (RFC 6750), the ChatGPT plan route's 401
+        util.indexOfIgnoreCase(msg, "subscription_sharing_invalid_user") != null or // the plan route's other 401: sign in again
+        util.indexOfIgnoreCase(msg, "subscription_sharing_v2_invalid_user") != null; // its older name
 }
 
 test "isAuthError (#148): auth failures only, not credits/rate/other" {
@@ -26,6 +29,9 @@ test "isAuthError (#148): auth failures only, not credits/rate/other" {
     try std.testing.expect(isAuthError("Unauthorized"));
     try std.testing.expect(isAuthError("authentication_error"));
     try std.testing.expect(isAuthError("invalid_api_key"));
+    try std.testing.expect(isAuthError("invalid_token"));
+    try std.testing.expect(isAuthError("subscription_sharing_invalid_user"));
+    try std.testing.expect(isAuthError("subscription_sharing_v2_invalid_user"));
     // NOT auth — must never trigger a refresh loop
     try std.testing.expect(!isAuthError("You have run out of credits or need a Grok subscription."));
     try std.testing.expect(!isAuthError("rate limit exceeded"));
@@ -63,7 +69,7 @@ pub fn adoptFreshAuth(self: *Agent, fresh: oauth.FreshKey) void {
 fn warnUnpersistedRefresh(self: *Agent) void {
     const name = oauth.takePersistError() orelse return;
     if (self.tracer) |tr| tr.note("oauth_refresh", "refreshed token could not be written to auth.json");
-    self.say("[⚠ refreshed the Codex token but could not save it ({s}) — run `graff login codex` before your next session]\n", .{name}) catch {};
+    self.say("[⚠ refreshed the {s} token but could not save it ({s}) — run `graff login {s}` before your next session]\n", .{ self.provider.id, name, self.provider.id }) catch {};
 }
 
 /// #148/#402: adopt a credential another writer has already produced BEFORE the
@@ -383,6 +389,14 @@ pub fn errorCode(root: std.json.ObjectMap) ?[]const u8 {
     if (root.get("code")) |cv| {
         if (cv == .string) return cv.string;
     }
+    // The ChatGPT plan route's 401: {"detail":{"error_code":"invalid_token"}}.
+    if (root.get("detail")) |dv| {
+        if (dv == .object) {
+            if (dv.object.get("error_code")) |cv| {
+                if (cv == .string) return cv.string;
+            }
+        }
+    }
     // Responses failure events wrap the same error object under `response`.
     if (root.get("response")) |rv| {
         if (rv == .object) {
@@ -432,31 +446,15 @@ test "sseKeepAliveOnly: comment-only bodies true, data/error/JSON bodies false" 
     try std.testing.expect(!sseKeepAliveOnly("{\"error\":{\"message\":\"x\"}}"));
 }
 
-/// #opencode-parity: a 429 body naming a billing/quota cap (OpenAI insufficient_quota,
-/// "exceeded your current quota", "quota exceeded") — a usage limit a retry can't
-/// clear, unlike transient rate-limit throttling — so we fail fast + fail over rather
-/// than burning retry attempts.
-/// The phrase agent_request stamps into `last_api_error` when a 429 body named
-/// a billing/credit cap rather than transient throttling. It is a const, not a
-/// literal spelled twice, because a second reader now depends on it: a worker's
-/// in-turn retry ladder (subagent_retry.hardQuotaCap) reads this marker back
-/// out of the message to tell "the account is capped" — where re-asking is
-/// pure waste — from "slow down", where re-asking is the whole point.
-pub const quota_cap_marker = "quota/billing cap";
+// Quota caps and ChatGPT plan usage limits live in agent_request_quota.zig
+// (600-line cap); re-exported so call sites keep saying `policy.`.
+const quota = @import("agent_request_quota.zig");
+pub const quota_cap_marker = quota.quota_cap_marker;
+pub const isQuotaExceeded = quota.isQuotaExceeded;
+pub const isPlanUsageLimit = quota.isPlanUsageLimit;
 
-pub fn isQuotaExceeded(body: []const u8) bool {
-    return util.indexOfIgnoreCase(body, "insufficient_quota") != null or
-        util.indexOfIgnoreCase(body, "insufficient quota") != null or
-        util.indexOfIgnoreCase(body, "exceeded your current quota") != null or
-        util.indexOfIgnoreCase(body, "quota exceeded") != null;
-}
-
-test "isQuotaExceeded (#opencode-parity): billing cap detected, transient throttle not" {
-    try std.testing.expect(isQuotaExceeded("{\"error\":{\"code\":\"insufficient_quota\",\"message\":\"You exceeded your current quota\"}}"));
-    try std.testing.expect(isQuotaExceeded("Quota Exceeded for this key"));
-    // transient rate-limit -> NOT a quota cap; must still retry
-    try std.testing.expect(!isQuotaExceeded("Rate limit reached. Please try again in 20s."));
-    try std.testing.expect(!isQuotaExceeded("429 too many requests"));
+test {
+    _ = quota;
 }
 
 test "errorCode (#203): pulls root.error.code (openai/lmstudio), falls back to root.code, else null" {

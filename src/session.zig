@@ -131,8 +131,11 @@ pub fn sessionTitle(root: *Agent) []const u8 {
 /// durable state a resume would want back. Concretely, at least one of:
 ///   - a user message (>= 1 message with role "user"),
 ///   - a non-null standing goal (/goal steering),
-///   - a non-empty todo list, or
-///   - recorded tool activity this session.
+///   - a non-empty todo list,
+///   - recorded tool activity this session, or
+///   - a server compaction blob. In-stream compaction prunes every prompt
+///     before the blob, so a text-only turn that compacted has no user
+///     message left; the blob carries it.
 /// A truly blank draft (no user turn, no goal, no todos, no tools) is NOT
 /// meaningful, so saveSession skips it rather than leaving an "Untitled
 /// session" file on disk (#184). Callers that only want to avoid the blank-draft
@@ -141,6 +144,7 @@ pub fn hasMeaningfulState(root: *Agent) bool {
     if (root.goal != null) return true;
     if (root.todos.items.len > 0) return true;
     if (root.tools_used.entries.items.len > 0) return true;
+    if (@import("compaction_window.zig").latestBlob(root.messages.items) != null) return true;
     for (root.messages.items) |m| {
         if (m != .object) continue;
         if (session_peer.isHumanUserTurn(m)) return true;

@@ -75,7 +75,28 @@ pub fn buildBody(gpa: Allocator, provider: Provider, prompt: []const u8) ![]u8 {
             try s.endObject();
             try s.endArray();
         },
-        .responses => {
+        .responses => if (std.mem.eql(u8, provider.id, "chatgpt-new")) {
+            // The ChatGPT plan route takes only stored-nothing streamed
+            // requests with an input array, and no output cap (ADR 0221).
+            try s.objectField("input");
+            try s.beginArray();
+            try s.beginObject();
+            try s.objectField("role");
+            try s.write("user");
+            try s.objectField("content");
+            try s.write(prompt);
+            try s.endObject();
+            try s.endArray();
+            try s.objectField("reasoning");
+            try s.beginObject();
+            try s.objectField("effort");
+            try s.write("low");
+            try s.endObject();
+            try s.objectField("store");
+            try s.write(false);
+            try s.objectField("stream");
+            try s.write(true);
+        } else {
             try s.objectField("max_output_tokens");
             try s.write(max_out_tokens);
             try s.objectField("input");
@@ -120,7 +141,33 @@ pub fn buildBody(gpa: Allocator, provider: Provider, prompt: []const u8) ![]u8 {
     return aw.toOwnedSlice();
 }
 
+/// The `response.output_text.delta` text of a streamed body, or null when
+/// `raw` is a plain JSON response.
+fn sseText(gpa: Allocator, raw: []const u8) ?[]u8 {
+    const head = std.mem.trimStart(u8, raw, " \t\r\n");
+    if (!std.mem.startsWith(u8, head, "event:") and !std.mem.startsWith(u8, head, "data:")) return null;
+    var out: std.ArrayList(u8) = .empty;
+    var lines = std.mem.splitScalar(u8, raw, '\n');
+    while (lines.next()) |line| {
+        const data = std.mem.trim(u8, line, " \r");
+        if (!std.mem.startsWith(u8, data, "data:")) continue;
+        var parsed = std.json.parseFromSlice(Value, gpa, std.mem.trim(u8, data["data:".len..], " "), .{}) catch continue;
+        defer parsed.deinit();
+        if (parsed.value != .object) continue;
+        const kind = tools.strField(parsed.value, "type") orelse continue;
+        if (!std.mem.eql(u8, kind, "response.output_text.delta")) continue;
+        out.appendSlice(gpa, tools.strField(parsed.value, "delta") orelse continue) catch {};
+    }
+    return out.toOwnedSlice(gpa) catch null;
+}
+
 fn extract(gpa: Allocator, kind: Provider.Kind, raw: []const u8) ToolOutput {
+    if (sseText(gpa, raw)) |streamed| {
+        defer gpa.free(streamed);
+        const text = std.mem.trim(u8, streamed, " \t\r\n");
+        if (text.len == 0) return .{ .text = gpa.dupe(u8, "rlm: llm_query returned no text") catch &.{}, .is_error = true };
+        return .{ .text = gpa.dupe(u8, text) catch &.{} };
+    }
     var parsed = std.json.parseFromSlice(Value, gpa, raw, .{}) catch {
         return .{ .text = gpa.dupe(u8, "rlm: llm_query returned non-JSON") catch &.{}, .is_error = true };
     };
@@ -157,6 +204,23 @@ test "llm_query body is tools-off and carries the prompt on every wire" {
         try std.testing.expect(std.mem.indexOf(u8, body, "\"tools\"") == null);
         try std.testing.expect(std.mem.indexOf(u8, body, "grok-4.6") != null);
     }
+}
+
+test "llm_query on the ChatGPT plan route streams, stores nothing and reads SSE text" {
+    const gpa = std.testing.allocator;
+    var p = sampleProvider(.responses);
+    p.id = "chatgpt-new";
+    p.model = "gpt-6.1-sol";
+    const body = try buildBody(gpa, p, "hi");
+    defer gpa.free(body);
+    for ([_][]const u8{ "\"stream\":true", "\"store\":false", "\"role\":\"user\"" }) |part|
+        try std.testing.expect(std.mem.indexOf(u8, body, part) != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "max_output_tokens") == null);
+    const sse = "event: response.created\ndata: {\"type\":\"response.created\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"4\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"2\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n";
+    const out = extract(gpa, .responses, sse);
+    defer gpa.free(out.text);
+    try std.testing.expect(!out.is_error);
+    try std.testing.expectEqualStrings("42", out.text);
 }
 
 test "llm_query extract reads assistant text from each wire shape" {

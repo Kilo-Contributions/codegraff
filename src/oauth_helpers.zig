@@ -92,7 +92,7 @@ pub fn writeCodexAuth(io: Io, arena: Allocator, home: []const u8, id_token: []co
 /// `Option<DateTime<Utc>>`). The literal "harness-login" this used to write is
 /// not a timestamp — tolerable in a file only `graff login` touched, not in one
 /// a silent mid-turn refresh now rewrites under the other CLI's feet.
-fn rfc3339Utc(buf: *[24]u8, unix_ms: i64) []const u8 {
+pub fn rfc3339Utc(buf: *[24]u8, unix_ms: i64) []const u8 {
     const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(@max(0, @divFloor(unix_ms, 1000))) };
     const yd = es.getEpochDay().calculateYearDay();
     const md = yd.calculateMonthDay();
@@ -220,7 +220,8 @@ pub fn readCodexAuth(io: Io, arena: Allocator, codex_home: []const u8) ?StoredCo
 /// retryable. codex-rs caches exactly these for the current auth snapshot so a
 /// dead credential stops costing a round trip per request.
 pub fn permanentRefreshFailure(code: []const u8) bool {
-    const permanent = [_][]const u8{ "invalid_grant", "invalid_client", "refresh_token_expired", "refresh_token_reused", "refresh_token_invalidated" };
+    // OpenAI's SIWC list adds invalid_refresh_token and token_expired (ADR 0221).
+    const permanent = [_][]const u8{ "invalid_grant", "invalid_client", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_reused", "refresh_token_invalidated" };
     for (permanent) |p| if (std.mem.eql(u8, code, p)) return true;
     return false;
 }
@@ -536,9 +537,14 @@ test "#402: a refresh write preserves the fields the codex CLI owns" {
     try std.testing.expectEqual(@as(usize, 1), names);
 }
 
+/// Opens `url` in the default browser, or in GRAFF_BROWSER when set (an app
+/// name for `open -a` on macOS, a command elsewhere).
 pub fn openBrowser(io: Io, url: []const u8) void {
+    const chosen: ?[]const u8 = if (std.c.getenv("GRAFF_BROWSER")) |v| std.mem.span(v) else null;
     const argv: []const []const u8 = if (builtin.os.tag == .macos)
-        &.{ "open", url }
+        (if (chosen) |app| &.{ "open", "-a", app, url } else &.{ "open", url })
+    else if (chosen) |cmd|
+        &.{ cmd, url }
     else
         &.{ "xdg-open", url };
     var child = std.process.spawn(io, .{ .argv = argv, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore }) catch return;

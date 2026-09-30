@@ -330,6 +330,8 @@ test {
     _ = retry_hint;
     _ = agent_compact_summary_test;
     _ = side_question_tests;
+    _ = @import("cache_key_tests.zig"); // ADR 0223: moved off http_headers.zig (600-line cap)
+    _ = @import("mcp_shapes_tests.zig"); // ADR 0225: moved off mcp_shapes.zig (600-line cap)
     _ = json_controls;
     _ = effort_route;
     _ = agent_request_encrypted_tests;
@@ -396,4 +398,5 @@ test {
     _ = @import("destructive_git.zig"); // #1269: destructive-git tokenizer tables
     _ = @import("output_elide.zig"); // #1271: over-cap output keeps head and tail
     _ = @import("graff_dir.zig"); // #1273: .graff/.gitignore keeps run state out of git
+    _ = @import("additional_tools.zig"); // ADR 0221: loaded tools as additional_tools items on the ChatGPT plan route
 }

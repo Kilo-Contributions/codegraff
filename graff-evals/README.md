@@ -48,6 +48,11 @@ CODEGRAFF_API_KEY=cg_sk_… ./run.py --suite swe --harness graff-dev,opencode-co
 ./run.py --suite live --harness graff-dev --reps 3 -j 1
 # same SuperGrok seat, other harnesses (OpenCode / Pi / exo local-process):
 ./run.py --suite live --harness opencode,pi-xai,exo --reps 3 -j 1
+# ChatGPT login, 1:1 with the Codex app server (needs `codex`; the driver copies the
+# login without its refresh token). Keep --output-root outside any repo so neither
+# harness reads repo docs; the mcp suite then needs scripts/linear_fixture_mcp.py
+# copied next to that root (the setup looks for it in a parent directory).
+./run.py --suite core,mcp --harness graff-codex-repl,codex-app-server --model gpt-6.1-sol -j 6
 ```
 
 ## Run it

@@ -95,16 +95,24 @@ pub fn noteClientSummary(chars: usize) void {
 /// of 1,000 guarantees every real graff context crosses it; the flag is route-
 /// gated so a non-OpenAI Responses provider can never enter this path.
 pub fn writeContextManagement(self: *const Agent, s: anytype) !void {
+    try writeContextManagementBody(s, directive(self) orelse return);
+}
+
+/// The compaction threshold this request's body carries, or null for none.
+pub fn directive(self: anytype) ?u64 {
     // #502: an explicit-compact provider (xAI) ignores the in-stream directive
     // — probed live; compaction goes through explicitCompact instead.
-    if (self.provider.serverCompactUrl() != null) return;
-    const threshold = if (self.server_compaction_request and manualRoute(self.provider) == .in_stream)
-        @as(u64, 1_000)
-    else if (enabled(self.provider))
-        self.provider.compactAt()
-    else
-        return;
-    try writeContextManagementBody(s, threshold);
+    if (self.provider.serverCompactUrl() != null) return null;
+    if (self.server_compaction_request and manualRoute(self.provider) == .in_stream) return 1_000;
+    if (!enabled(self.provider)) return null;
+    const threshold = self.provider.compactAt();
+    // A request carrying the directive answers every GPT-6 `response.steer`
+    // with steering_not_supported (probed on Codex). It is inert below its
+    // threshold, so a root turn that can steer leaves it off until the
+    // context comes within a quarter of the threshold; from there compaction
+    // wins and a follow-up supersedes the reply instead (agent_ws_steer).
+    if (@import("agent_ws_steer.zig").rootTurnOnSteeringRoute(self) and self.last_context_tokens +| threshold / 4 < threshold) return null;
+    return threshold;
 }
 
 pub fn writeContextManagementBody(s: anytype, threshold: u64) !void {
@@ -130,7 +138,8 @@ pub fn manualRoute(p: Provider) ManualRoute {
     if (p.kind != .responses) return .local;
     if (std.mem.eql(u8, p.id, "openai")) return .standalone;
     if (std.mem.eql(u8, p.id, "codegraff") and @import("provider_codegraff.zig").openaiGptFamily(p.model)) return .standalone;
-    if (std.mem.eql(u8, p.id, "codex")) return .in_stream;
+    // The ChatGPT plan route refuses /responses/compact (ADR 0221).
+    if (std.mem.eql(u8, p.id, "codex") or std.mem.eql(u8, p.id, "chatgpt-new")) return .in_stream;
     return .local;
 }
 
@@ -212,7 +221,7 @@ fn compactStandalone(self: *Agent) !usize {
     var compact_provider = self.provider;
     compact_provider.url = try compactEndpoint(self.arena, self.provider.url);
     var conv_buf: [96]u8 = undefined;
-    const conv = @import("http_headers.zig").promptCacheKey(self.io, self.label, self, &conv_buf);
+    const conv = @import("http_headers.zig").requestCacheKey(self.io, self.label, self, self.provider, &conv_buf);
     const response_body = try http.postWatched(self.gpa, self.io, self.client, compact_provider, body, conv);
     defer self.gpa.free(response_body);
     const response = std.json.parseFromSliceLeaky(std.json.Value, self.arena, response_body, .{ .allocate = .alloc_always }) catch {
@@ -475,7 +484,7 @@ pub fn explicitCompact(self: *Agent) bool {
     cp.url = compact_url;
     if (!main_mod.json_mode and @import("repl.zig").g_debug) self.say("[compacting server-side: {d} item(s)…]\n", .{self.messages.items.len}) catch {};
     var conv_buf: [96]u8 = undefined;
-    const conv = @import("http_headers.zig").promptCacheKey(self.io, self.label, self, &conv_buf);
+    const conv = @import("http_headers.zig").requestCacheKey(self.io, self.label, self, self.provider, &conv_buf);
     const resp = http.postWatched(self.gpa, self.io, self.client, cp, body, conv) catch |err| {
         if (self.tracer) |tr| tr.note("compact", @errorName(err));
         return false;

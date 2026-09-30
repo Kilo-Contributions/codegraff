@@ -55,7 +55,7 @@ the newest beta. Both check the download against the release's `SHA256SUMS`.
 <summary>Other sign-ins, installing from a checkout, and editors</summary>
 
 ```sh
-graff login codex               # ChatGPT account
+graff login chatgpt             # ChatGPT account (same as: graff login codex)
 graff login kimi
 graff login zai
 graff login xai
@@ -161,7 +161,7 @@ sandbox MCP.
 ```
 graff [flags]                 interactive session
 graff -p "prompt"             one question (answer on stdout)
-graff login [codegraff|codex|kimi|xai|zai]
+graff login [codegraff|chatgpt|kimi|xai|zai]   (codex = chatgpt)
 graff key set <provider> <key>
 graff mcp add <name | url | @scope/pkg | uvx:pkg | json>
 graff mcp add <name> -- <cmd>

@@ -46,7 +46,7 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
     defer if (bearer.len > 0) gpa.free(bearer);
     var headers_buf: [12]std.http.Header = undefined;
     var conv_buf: [96]u8 = undefined;
-    const conv = http_headers.requestCacheKey(self.io, self.label, self, provider.id, &conv_buf);
+    const conv = http_headers.requestCacheKey(self.io, self.label, self, provider, &conv_buf);
     const extra = http_headers.providerHeadersWithConv(self.io, provider, bearer, &headers_buf, conv);
 
     var name_store: [16][64]u8 = undefined;

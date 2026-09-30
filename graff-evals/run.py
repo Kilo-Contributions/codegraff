@@ -527,6 +527,8 @@ def main():
     ap.add_argument("--suite", default="all",
                     help="core, rlm, swe, mcp, inhouse, live, comma-mix, or all (core+rlm+swe; mcp/inhouse/live are opt-in)")
     ap.add_argument("--reps", type=int, default=1)
+    ap.add_argument("--interleave", action="store_true",
+                    help="order runs task by task across harnesses, so A/B arms see the same backend conditions")
     ap.add_argument("--jobs", "-j", type=int, default=1,
                     help="parallel task×harness runs (default 1; each has its own sandbox)")
     ap.add_argument("--interactive", action="store_true", help="pick a task+harness, watch it live")
@@ -573,6 +575,10 @@ def main():
                 continue
             for rep in range(1, args.reps + 1):
                 work.append((hname, harness, task, model, rep))
+    if args.interleave:
+        arm_at = {h: i for i, h in enumerate(args.harness.split(","))}
+        task_at = {tid: i for i, tid in enumerate(picked)}
+        work.sort(key=lambda w: (w[4], task_at[w[2]["id"]], arm_at[w[0]]))
     jobs = max(1, args.jobs)
     print(f"{len(work)} runs · {jobs} worker{'s' if jobs != 1 else ''} · {out_path}", flush=True)
     records = []

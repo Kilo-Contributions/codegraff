@@ -147,9 +147,11 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
                 }
             }
             if (tools) |t| {
+                // ADR 0221: on MiMo and DeepSeek the loaded tail rides a message instead (additional_tools.zig).
+                const at = @import("additional_tools.zig");
                 try s.objectField("tools");
                 // #261 follow-up: the rest need the root-schema repair too.
-                try @import("tool_call_repair.zig").writeChatTools(&s, self.scratchAlloc(), t, self.provider.id, self.provider.model);
+                try @import("tool_call_repair.zig").writeChatTools(&s, self.scratchAlloc(), if (at.active(self.provider)) at.stripTail(self, self.scratchAlloc(), t) else t, self.provider.id, self.provider.model);
                 if (force_tool or @import("meta_wire.zig").restricted(self.provider.id, self.provider.model)) {
                     try s.objectField("tool_choice"); // #751: Meta is auto-only
                     try s.write(@import("meta_wire.zig").toolChoice(force_tool, self.provider.id, self.provider.model));
@@ -185,9 +187,9 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             // Sticky cache partition. Same value as x-grok-conv-id (xAI
             // official maximize-hits). Root is the project id; children
             // share a role lane so sibling scouts reuse system+tools.
-            try http_headers.writeRequestCacheKey(&s, self.io, self.label, self, self.provider.id);
+            try http_headers.writeRequestCacheKey(&s, self.io, self.label, self, self.provider);
             var session_key: [96]u8 = undefined; // #1284: OpenRouter's sticky session + Anthropic breakpoint
-            try @import("openrouter_cache.zig").write(&s, self.provider.id, self.provider.model, http_headers.requestCacheKey(self.io, self.label, self, self.provider.id, &session_key), @import("cache_ttl.zig").control(self));
+            try @import("openrouter_cache.zig").write(&s, self.provider.id, self.provider.model, http_headers.requestCacheKey(self.io, self.label, self, self.provider, &session_key), @import("cache_ttl.zig").control(self));
             // Provider-specific thinking controls and reasoning effort.
             try @import("zai_wire.zig").writeChatExtras(&s, self.provider.id, self.provider.model, self.sendReasoningEffort(), @import("effort_route.zig").wireEffort(self.provider.id, self.provider.model, @tagName(self.reasoning)));
             // --output-schema: structured outputs (xAI docs' response_format).

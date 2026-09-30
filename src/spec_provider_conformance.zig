@@ -33,6 +33,7 @@ fn loginName(l: ProviderSpec.LoginKind) []const u8 {
         .kimi_device => "kimi_device",
         .xai_device => "xai_device",
         .zai_cli => "zai_cli",
+        .chatgpt_browser => "chatgpt_browser",
     };
 }
 

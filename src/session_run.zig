@@ -102,7 +102,9 @@ pub fn runReplCommand(gpa: Allocator, io: Io, environ_map: anytype, root: *agent
         .registry = root.registry,
         .tracer = root.tracer,
         .run_budget = root.run_budget,
-        .sys_normal = root.sys_normal,
+        // The base, as in tui_launch: each turn's setSystemPrompts composes the
+        // constraint block onto it, so root.sys_normal would stack a second copy.
+        .sys_normal = if (root.sys_base.len > 0) root.sys_base else root.sys_normal,
         .tools_anthropic = root.tools_anthropic,
         .tools_openai = root.tools_openai,
         .tools_responses = root.tools_responses,
@@ -117,6 +119,10 @@ pub fn runReplCommand(gpa: Allocator, io: Io, environ_map: anytype, root: *agent
     }
     repl_glue.bindHostCommands();
     defer repl_glue.unbindHostCommands();
+    // ADR 0215: nothing wakes a scripted repl after its last line, so each
+    // turn waits for the background work it started, as `-p` does.
+    @import("run_idle.zig").enabled = true;
+    defer @import("run_idle.zig").enabled = false;
     try repl.runScripted(gpa, io, environ_map, in, out, &repl_ctx, repl_glue.replTurnCb, repl_glue.replModelCb, repl_glue.replCancelCb, root.provider.model, models_buf.items);
     // Same stderr footer as `-p`, so evals can score the scripted REPL the
     // same way. TTY `graff repl` is the TUI and keeps the restore tail clean.

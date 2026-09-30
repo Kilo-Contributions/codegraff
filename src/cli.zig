@@ -23,6 +23,13 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.11
+    \\  • codex prompt cache is per account: a new repo starts warm
+    \\  • tool loads keep the cached prefix; rare tools load on demand
+    \\  • MCP says how it slims results and keeps the full result
+    \\  • GPT-6 follow-ups steer the running reply; graff login chatgpt
+    \\  • scripted repl sends the prompt once and waits for background work
+    \\
     \\0.0.302.10
     \\  • a tool call cut off mid-response is refused with its cause, not run
     \\  • /loop waits for its background work; resends never start a second turn
