@@ -60,16 +60,23 @@ live on 2026-09-30, and all 45 checks behaved as documented:
   again). Any of them can also arrive mid-stream as `response.failed`, and
   OpenAI never moves the request to another billing path. Some responses
   still carry older names for the same codes (`subscription_sharing_v2_…`),
-  and a grant that does not cover the request fails with `chatpass_v2_…`. An expired access
-  token is a 401 with `{"detail":{"error_code":"invalid_token"}}`. A rejected
-  field is a 400 whose `detail` names it.
+  and a grant that does not cover the request fails with `chatpass_v2_…`.
+  An expired access token is a 401 with
+  `{"detail":{"error_code":"invalid_token"}}`. A rejected field is a 400
+  whose `detail` names it.
 - **Tokens.** The access token is a one-hour RS256 JWT (`aud`
   `https://api.openai.com/v1`, `iss` `https://auth.openai.com`, the issued
   `client_id`, the granted scopes, and opaque OpenAI metadata graff never
-  reads). A refresh returns a new access token and a replacement refresh
-  token; refresh tokens last 30 days, renewed by every refresh.
-  `earliest_refresh_at` falls six minutes before expiry, and a refresh
-  before it answers `invalid_grant` and spends the refresh token.
+  reads). OpenAI documents that a refresh returns a new access token and a
+  replacement refresh token, and that refresh tokens last 30 days, renewed
+  by every refresh. `earliest_refresh_at` falls six minutes before expiry.
+- **Refresh does not work yet.** Every refresh tried so far was refused with
+  HTTP 400 `{"error":"invalid_grant"}` and no description. That includes an
+  unused refresh token sent 63 seconds after `earliest_refresh_at` with
+  exactly the documented request (the issued `client_id`, the refresh token
+  and `resource`, no `scope`) from a clock in step with OpenAI's. Until that
+  changes a sign-in lasts one hour: a turn still running when the access
+  token expires fails with `invalid_token`, and the person signs in again.
 
 OpenAI also documents running Codex app-server on the same token (stdio to
 app-server, then HTTP/SSE, with `supports_websockets=false`). Graff calls
@@ -108,13 +115,15 @@ process rather than restarting anything.
   split and the stale one spends the sign-in. Refresh sends `resource` and the
   issued client id five minutes before expiry (inside the six-minute window)
   or after a 401, under the existing refresh mutex, and never before
-  `earliest_refresh_at`: OpenAI answers an early refresh with
-  `invalid_grant`, which spends the refresh token. A lock file beside the
+  `earliest_refresh_at`, which OpenAI names as the earliest renewal. A lock
+  file beside the
   record serializes refreshes across graff processes, as OpenAI asks: the
   loser of a race would present a replaced token (`refresh_token_reused`) and
   force a new sign-in, so it re-reads the record under the lock and adopts
-  the winner's token. An unusable refresh token is cleared; a network
-  failure keeps everything.
+  the winner's token. OpenAI's answer to a refused renewal (time, code and
+  description) is kept in the record as `last_refresh_error`; a code OpenAI
+  calls unusable also clears the refresh token, and a network failure keeps
+  everything.
   `graff logout chatgpt-new` revokes the refresh token and keeps the client id and
   host id.
 - **Request shape**: no prompt-cache options or anchor (those stay keyed to
@@ -153,7 +162,36 @@ lists both. Hosted use (the gateway, hosted sandboxes) is out of scope;
 OpenAI requires a separate agreement for it. The live account catalog is a
 follow-up, so the offline model rows can lag a rollout. HTTP requests re-send
 the whole input and caching is intermittent, so one-shot runs pay the most;
-live turns chain on the socket instead. A refresh before
-`earliest_refresh_at` spends the refresh token, so that gate must hold. A
-sign-in lives as long as graff refreshes it within 30 days; after a longer
-gap the error says to run `graff login chatgpt-new` again.
+live turns chain on the socket instead. While OpenAI refuses refreshes, a
+sign-in lasts an hour and a longer task stops at the hour with a sign-in
+error; once refresh works, a sign-in lives as long as graff refreshes it
+within 30 days.
+
+## Compared with the Codex route
+
+The same probes and the same graff build ran against both ChatGPT-plan
+routes on 2026-09-30, with gpt-6.1-sol:
+
+- **Same on both.** The model list and context windows (272k by default,
+  872k at most). The request rules: `store: false`, `stream: true`, array
+  input, no system-role items, and the same refused fields (`temperature`,
+  `max_output_tokens`, `metadata`, `user`, `previous_response_id` over
+  HTTP and the others listed above). Function and custom tools (flat, in a
+  namespace, or as `additional_tools`), parallel tool calls, `web_search`,
+  structured output, reasoning summaries, image and PDF input,
+  `service_tier`, verbosity and in-stream compaction. On the socket:
+  chaining on the same connection only, a `generate: false` prewarm, and
+  steering a GPT-6 answer. In graff, a tool call's follow-up rides the
+  socket as a delta on both routes, and a forced compaction kept every fact
+  a later turn asked for.
+- **Only on Codex.** Hosted image generation, hosted `tool_search`, the
+  `codex.rate_limits` stream events and the plan windows `/usage` shows, and
+  working token refresh.
+- **On neither.** File search, Code Interpreter, computer use, hosted MCP,
+  programmatic tool calling and audio input.
+
+For the harness, moving to the new route means deferred tools load through
+graff's own `load_tool_schemas` rather than hosted tool search (graff
+already does this on every provider except codex), image generation comes
+from another provider, `/usage` can only link to ChatGPT's usage settings,
+and a sign-in lasts an hour until OpenAI's refresh works.

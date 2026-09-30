@@ -237,7 +237,7 @@ test "ChatGPT sign-in: a sign-in saved before the move is adopted, never copied"
     try std.testing.expectEqual(@as(u32, 0o600), (try dir.statFile(io, "chatgpt-new.json", .{})).permissions.toMode() & 0o777);
 }
 
-test "ChatGPT sign-in: an unusable refresh token is cleared and the access token kept" {
+test "ChatGPT sign-in: a refused renewal is recorded; an unusable refresh token is cleared, the access token kept" {
     const io = std.testing.io;
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -248,9 +248,15 @@ test "ChatGPT sign-in: an unusable refresh token is cleared and the access token
     const home = try tmpHome(&tmp, &buf);
     const r = chatgpt.parseRecord(a, probe_record).?;
     try saveIn(tmp.dir, a, r);
-    chatgpt.dropRefresh(io, a, home, r);
-    const saved = chatgpt.parseRecord(a, try std.Io.Dir.cwd().readFileAlloc(io, chatgpt.recordPath(a, home), a, .limited(64 * 1024))).?;
+    // A transient code keeps the refresh token for a later try, but says why.
+    chatgpt.recordRefreshFailure(io, a, home, r, "temporarily_unavailable", "try later");
+    var saved = chatgpt.parseRecord(a, try std.Io.Dir.cwd().readFileAlloc(io, chatgpt.recordPath(a, home), a, .limited(64 * 1024))).?;
+    try std.testing.expectEqualStrings("ref-1", saved.refresh);
+    try std.testing.expect(std.mem.endsWith(u8, saved.refresh_error, " temporarily_unavailable: try later"));
+    chatgpt.recordRefreshFailure(io, a, home, r, "invalid_grant", "");
+    saved = chatgpt.parseRecord(a, try std.Io.Dir.cwd().readFileAlloc(io, chatgpt.recordPath(a, home), a, .limited(64 * 1024))).?;
     try std.testing.expectEqualStrings("", saved.refresh);
+    try std.testing.expect(std.mem.endsWith(u8, saved.refresh_error, " invalid_grant: "));
     try std.testing.expectEqualStrings("tok-1", saved.access); // usable until it expires
     try std.testing.expectEqualStrings("oaiapp_x", saved.client_id); // the next sign-in skips registration
     try std.testing.expect(@import("oauth_helpers.zig").permanentRefreshFailure("refresh_token_reused"));

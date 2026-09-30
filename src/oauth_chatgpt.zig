@@ -94,6 +94,8 @@ pub const Record = struct {
     expires_at: i64 = 0,
     earliest_refresh_at: i64 = 0,
     scopes: []const []const u8 = &.{},
+    /// The last refused renewal: when, OpenAI's code and its description.
+    refresh_error: []const u8 = "",
 
     pub fn planEnabled(r: Record) bool {
         for (r.scopes) |s| if (std.mem.eql(u8, s, plan_scope)) return true;
@@ -122,6 +124,7 @@ pub fn parseRecord(arena: Allocator, bytes: []const u8) ?Record {
         .refresh = strFieldObj(o, "refresh_token") orelse "",
         .expires_at = util.intFieldObj(o, "expires_at", 0),
         .earliest_refresh_at = util.intFieldObj(o, "earliest_refresh_at", 0),
+        .refresh_error = strFieldObj(o, "last_refresh_error") orelse "",
     };
     if (o.get("scopes")) |s| if (s == .array) {
         var list: std.ArrayList([]const u8) = .empty;
@@ -148,6 +151,7 @@ pub fn serializeRecord(arena: Allocator, r: Record, saved_at: []const u8) ![]con
     for (r.scopes) |s| try list.append(.{ .string = s });
     try obj.put(arena, "scopes", .{ .array = list });
     try obj.put(arena, "saved_at", .{ .string = saved_at });
+    if (r.refresh_error.len > 0) try obj.put(arena, "last_refresh_error", .{ .string = r.refresh_error });
     var aw: Io.Writer.Allocating = .init(arena);
     var json: std.json.Stringify = .{ .writer = &aw.writer };
     try json.write(Value{ .object = obj });
@@ -452,10 +456,16 @@ pub fn refreshLocked(io: Io, gpa: Allocator, arena: Allocator, home: []const u8,
 /// OpenAI: clear an unusable refresh token so no process replays it. The
 /// access token stays until it expires; after that the request error says to
 /// sign in again. Called with the record lock held.
-pub fn dropRefresh(io: Io, arena: Allocator, home: []const u8, r: Record) void {
-    var cleared = r;
-    cleared.refresh = "";
-    writeRecord(io, arena, home, cleared) catch {};
+/// Keep OpenAI's answer to a refused renewal in the record: otherwise the
+/// refresh fails silently and only the later 401 shows. A code OpenAI calls
+/// unusable also clears the refresh token; the access token stays until it
+/// expires, and the issued client id lets the next sign-in skip registration.
+pub fn recordRefreshFailure(io: Io, arena: Allocator, home: []const u8, r: Record, code: []const u8, description: []const u8) void {
+    var next = r;
+    var stamp: [24]u8 = undefined;
+    next.refresh_error = std.fmt.allocPrint(arena, "{s} {s}: {s}", .{ helpers.rfc3339Utc(&stamp, util.unixMs(io)), code, description }) catch code;
+    if (helpers.permanentRefreshFailure(code)) next.refresh = "";
+    writeRecord(io, arena, home, next) catch {};
 }
 
 fn refreshed(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, r: Record) ?Record {
@@ -464,10 +474,9 @@ fn refreshed(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, r: Reco
     const body = form(arena, &.{ .{ "grant_type", "refresh_token" }, .{ "client_id", r.client_id }, .{ "refresh_token", r.refresh }, .{ "resource", resource } }) catch return null;
     const tok = helpers.oauthFormPost(io, gpa, arena, token_url, body) catch return null; // transient: keep everything
     if (tok.get("error")) |e| {
-        if (helpers.permanentRefreshFailure(if (e == .string) e.string else "")) {
-            dead_refresh = id;
-            dropRefresh(io, arena, home, r);
-        }
+        const code = if (e == .string) e.string else "";
+        if (helpers.permanentRefreshFailure(code)) dead_refresh = id;
+        recordRefreshFailure(io, arena, home, r, code, strFieldObj(tok, "error_description") orelse "");
         return null;
     }
     const now_s = @divTrunc(util.unixMs(io), 1000);
