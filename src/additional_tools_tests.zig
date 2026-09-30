@@ -312,3 +312,27 @@ test "Codex and the OpenAI API: a tool load leaves tools byte-identical and adds
             try std.testing.expect(std.mem.indexOf(u8, toolsOf(after), "\"defer_loading\":true") != null);
     }
 }
+
+test "a child keeps the tools the root loaded; only the root's request strips them" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const saved_fold = native_fold.enabled;
+    const saved_stable = mcp_schema_gate.g_stable_catalog;
+    defer {
+        native_fold.enabled = saved_fold;
+        mcp_schema_gate.g_stable_catalog = saved_stable;
+        native_fold.clearLoadedSession();
+    }
+    native_fold.enabled = true;
+    mcp_schema_gate.g_stable_catalog = true;
+    native_fold.clearLoadedSession();
+    // webfetch is folded on the root and part of every child's own catalog.
+    native_fold.markLoaded("webfetch");
+    var child = try testAgentFor(a, "codex", .responses, "gpt-6.1-sol");
+    child.sub = true;
+    try std.testing.expect(additional_tools.active(child.provider));
+    const body = try child.buildBody(child.toolsJson(), false, true, true);
+    defer std.testing.allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, toolsOf(body), "\"name\":\"webfetch\"") != null);
+}
