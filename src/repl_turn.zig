@@ -239,6 +239,9 @@ pub fn replTurnCb(ctx_ptr: ?*anyopaque, gpa: Allocator, history: []const repl.Tu
     var agent = turnAgent(c, gpa, arena, params, &sink.writer, &approvals) catch return null;
     defer agent.tools_used.deinit(gpa);
     defer @import("agent_render_cleanup.zig").deinit(&agent);
+    // The turn's agent dies here, so the Responses socket it opened and its
+    // chain id die with it; otherwise every WS turn leaks a connection.
+    defer agent.closeCodexWs();
     borrowHistory(c, &agent, history, arena, &scratch_state) catch return null;
     defer {
         c.provider = agent.provider;
