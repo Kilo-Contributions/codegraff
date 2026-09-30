@@ -1,7 +1,7 @@
 /-
   Provider table kernel.
 
-  Twenty-two baked rows. Each row is data: an id plus the axes `Kind`,
+  Twenty-four baked rows. Each row is data: an id plus the axes `Kind`,
   `Auth`, login, catalog, and two bools. The program does not branch per
   brand. Adding a vendor is one constructor here and one line in
   `provider.zig`; the Zig fixture test is the ratchet.
@@ -24,6 +24,7 @@ inductive Login where
   | kimiDevice
   | xaiDevice
   | zaiCli
+  | chatgptBrowser
 deriving DecidableEq, Repr, BEq
 
 inductive Catalog where
@@ -68,6 +69,7 @@ def specs : List Row :=
   , { id := "mlx",        kind := .openai,    auth := .bearer }
   , { id := "lmstudio",   kind := .openai,    auth := .bearer }
   , { id := "codex",      kind := .responses, auth := .bearer,  login := .codexDevice, catalog := .codex, subLogin := true }
+  , { id := "chatgpt-new", kind := .responses, auth := .bearer,  login := .chatgptBrowser, subLogin := true }
   ]
 
 def ids : List String := specs.map (·.id)
@@ -86,8 +88,8 @@ def xApiKeyCount : Nat := countWhere (fun r => r.auth == .xApiKey) specs
 
 def providerRows : Nat := specs.length
 
-theorem provider_cube : providerRows = 23 := by native_decide
-theorem responses_vendors : responsesCount = 2 := by native_decide
+theorem provider_cube : providerRows = 24 := by native_decide
+theorem responses_vendors : responsesCount = 3 := by native_decide
 theorem one_x_api_key : xApiKeyCount = 1 := by native_decide
 
 theorem unique_ids : unique ids = true := by native_decide

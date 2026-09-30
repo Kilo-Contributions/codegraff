@@ -208,6 +208,15 @@
       "catalog": "codex",
       "sub_login": true,
       "takes_effort": false
+    },
+    {
+      "id": "chatgpt-new",
+      "kind": "responses",
+      "auth": "bearer",
+      "login": "chatgpt_browser",
+      "catalog": "baked",
+      "sub_login": true,
+      "takes_effort": false
     }
   ]
 }

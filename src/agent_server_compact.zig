@@ -130,7 +130,8 @@ pub fn manualRoute(p: Provider) ManualRoute {
     if (p.kind != .responses) return .local;
     if (std.mem.eql(u8, p.id, "openai")) return .standalone;
     if (std.mem.eql(u8, p.id, "codegraff") and @import("provider_codegraff.zig").openaiGptFamily(p.model)) return .standalone;
-    if (std.mem.eql(u8, p.id, "codex")) return .in_stream;
+    // The ChatGPT plan route refuses /responses/compact (ADR 0221).
+    if (std.mem.eql(u8, p.id, "codex") or std.mem.eql(u8, p.id, "chatgpt-new")) return .in_stream;
     return .local;
 }
 

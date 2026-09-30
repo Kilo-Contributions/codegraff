@@ -370,10 +370,12 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
                 return true;
             }
         }
-        // codex is the OpenAI/ChatGPT login; accept the natural aliases.
+        // codex is the OpenAI/ChatGPT login; accept the natural aliases. The
+        // plan's new sign-in for open-source apps is opt-in (ADR 0221).
         if (std.mem.eql(u8, target, "oai") or std.mem.eql(u8, target, "openai") or
             std.mem.eql(u8, target, "chatgpt") or std.mem.eql(u8, target, "gpt"))
             target = "codex";
+        if (@import("oauth_chatgpt.zig").isLoginName(target)) target = "chatgpt-new";
         if (std.mem.eql(u8, target, "graff")) target = "codegraff";
         if (std.mem.eql(u8, target, "grok")) target = "xai";
         if (@import("oauth_zai.zig").isLoginName(target)) target = "zai";
@@ -410,6 +412,12 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
                 try out.flush();
                 return true;
             };
+        } else if (std.mem.eql(u8, target, "chatgpt-new")) {
+            @import("oauth_chatgpt.zig").login(root.io, root.gpa, arena, home) catch |err| {
+                try out.print("\xe2\x9c\x97 chatgpt-new login failed: {t}\n", .{err});
+                try out.flush();
+                return true;
+            };
         } else {
             // A pure API-key provider, or something unrecognized.
             if (provider_mod.specFor(target) != null) {
@@ -417,7 +425,7 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
                 try out.flush();
                 return true;
             }
-            try out.print("can't log into '{s}' \xe2\x80\x94 try /login codegraff | codex | kimi | xai | zai (others: /key <provider> <key>)\n", .{target});
+            try out.print("can't log into '{s}' \xe2\x80\x94 try /login codegraff | codex | chatgpt-new | kimi | xai | zai (others: /key <provider> <key>)\n", .{target});
             try out.flush();
             return true;
         }

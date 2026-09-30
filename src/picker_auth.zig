@@ -81,6 +81,12 @@ pub fn reloadLoginKey(root: *Agent, keys: *Keys, arena: Allocator, provider_id: 
                 source.* = .login;
                 reloaded = true;
             }
+        } else if (std.mem.eql(u8, provider_id, "chatgpt-new")) {
+            if (@import("oauth_chatgpt.zig").loadChatgptOAuth(root.io, root.gpa, arena, home, false, null)) |k| {
+                value.* = k;
+                source.* = .login;
+                reloaded = true;
+            }
         }
         // #402: the live Agent holds its OWN Provider copy — providers.applyProviderInner
         // is otherwise the only writer — so refreshing Keys alone left the active
@@ -317,6 +323,12 @@ pub fn offerProviderAuth(
         } else if (std.mem.eql(u8, pid, "zai")) {
             oauth.zaiLogin(root.io, root.gpa, arena, home) catch |err| {
                 try out.print("\xe2\x9c\x97 zai login failed: {t}\n", .{err});
+                try out.flush();
+                return;
+            };
+        } else if (std.mem.eql(u8, pid, "chatgpt-new")) {
+            @import("oauth_chatgpt.zig").login(root.io, root.gpa, arena, home) catch |err| {
+                try out.print("\xe2\x9c\x97 chatgpt login failed: {t}\n", .{err});
                 try out.flush();
                 return;
             };

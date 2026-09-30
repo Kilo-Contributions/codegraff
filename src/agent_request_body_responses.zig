@@ -92,7 +92,7 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     // complete with only reasoning items and zero output text.
     try s.write(if ((self.compaction_request or self.server_compaction_request) and !@import("effort_route.zig").mimoRoute(self.provider.id, self.provider.model)) "low" else @import("effort_route.zig").wireEffort(self.provider.id, self.provider.model, @tagName(self.reasoning)));
     // summary:auto streams reasoning_summary_text.delta (reasoningDelta already parses it); without it silent reasoning emits NO frames — the stall watchdog cannot tell thinking from a dead socket.
-    if (is_codex) {
+    if (is_codex or std.mem.eql(u8, self.provider.id, "chatgpt-new")) {
         try s.objectField("summary");
         try s.write("auto");
     }

@@ -44,6 +44,7 @@ pub const Flags = struct {
     kimi_login: bool = false,
     xai_login: bool = false,
     zai_login: bool = false,
+    chatgpt_login: bool = false,
     help_flag: bool = false,
     version_flag: bool = false,
     print_flag: bool = false,
@@ -265,12 +266,13 @@ pub fn parse(init: std.process.Init) !Flags {
         if (flags.positionals.items.len > 1 and std.mem.eql(u8, flags.positionals.items[1], "kimi")) flags.kimi_login = true;
         if (flags.positionals.items.len > 1 and std.mem.eql(u8, flags.positionals.items[1], "xai")) flags.xai_login = true;
         if (flags.positionals.items.len > 1 and @import("oauth_zai.zig").isLoginName(flags.positionals.items[1])) flags.zai_login = true;
+        if (flags.positionals.items.len > 1 and @import("oauth_chatgpt.zig").isLoginName(flags.positionals.items[1])) flags.chatgpt_login = true;
     }
 
     // One-shot print mode: `harness -p "prompt"` or a bare positional prompt
     // (`harness "say hi"`). Subcommands (login/key) are not prompts.
     flags.is_subcommand = flags.positionals.items.len > 0 and
-        (std.mem.eql(u8, flags.positionals.items[0], "login") or std.mem.eql(u8, flags.positionals.items[0], "key") or std.mem.eql(u8, flags.positionals.items[0], "mcp") or std.mem.eql(u8, flags.positionals.items[0], "learn") or
+        (std.mem.eql(u8, flags.positionals.items[0], "login") or std.mem.eql(u8, flags.positionals.items[0], "logout") or std.mem.eql(u8, flags.positionals.items[0], "key") or std.mem.eql(u8, flags.positionals.items[0], "mcp") or std.mem.eql(u8, flags.positionals.items[0], "learn") or
             std.mem.eql(u8, flags.positionals.items[0], "serve") or std.mem.eql(u8, flags.positionals.items[0], "update") or std.mem.eql(u8, flags.positionals.items[0], "title") or std.mem.eql(u8, flags.positionals.items[0], "repl") or std.mem.eql(u8, flags.positionals.items[0], "tui") or
             std.mem.eql(u8, flags.positionals.items[0], "worktree") or std.mem.eql(u8, flags.positionals.items[0], "sandboxes") or std.mem.eql(u8, flags.positionals.items[0], "cube") or std.mem.eql(u8, flags.positionals.items[0], "models") or
             std.mem.eql(u8, flags.positionals.items[0], "remote-control") or std.mem.eql(u8, flags.positionals.items[0], "remote") or @import("acp.zig").isAcpSubcommand(flags.positionals.items[0])); // `acp` also arms ACP's stdout discipline (json_mode) — see acp.isAcpSubcommand

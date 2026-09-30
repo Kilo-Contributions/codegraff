@@ -353,9 +353,13 @@ pub fn refreshOAuthKey(io: Io, gpa: Allocator, arena: Allocator, home: []const u
     const is_kimi = std.mem.eql(u8, provider_id, "kimi");
     const is_xai = std.mem.eql(u8, provider_id, "xai");
     const is_codex = std.mem.eql(u8, provider_id, "codex");
-    if (!is_kimi and !is_xai and !is_codex) return null;
+    const is_chatgpt = std.mem.eql(u8, provider_id, "chatgpt-new");
+    if (!is_kimi and !is_xai and !is_codex and !is_chatgpt) return null;
     oauth_refresh_mutex.lockUncancelable(io);
     defer oauth_refresh_mutex.unlock(io);
+    // The ChatGPT plan's new sign-in keeps one record per machine (ADR 0221),
+    // so the login vault never syncs it.
+    if (is_chatgpt) return .{ .key = @import("oauth_chatgpt.zig").loadChatgptOAuth(io, gpa, arena, home, force, stale) orelse return null };
     // Vault sync (harness ADR 0005): adopt a newer login, wait while another
     // device refreshes, or refresh under the lease and publish the result.
     const live = @import("vault_live.zig").before(io, gpa, arena, home, provider_id, force, oauth_refresh_margin_s);
