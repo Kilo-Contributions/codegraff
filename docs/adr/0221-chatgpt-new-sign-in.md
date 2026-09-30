@@ -182,6 +182,17 @@ process rather than restarting anything.
   is a `tool_addition` block in a mid-conversation system message (beta
   `inline-tools-2026-09-15`), which declares the tool, so its arguments
   come back typed, and it needs a live check first.
+- **Codex and the OpenAI API announce loads in an `additional_tools` item.**
+  On Codex, graff marked the loaded tail `defer_loading` behind hosted tool
+  search, but the array still grew: a replay of graff's own request after a
+  load read nothing back from the cache, and the model then ran a hosted
+  search for the tools it had just loaded. With `tools` frozen and the tail
+  in a developer `additional_tools` item, the same replay kept the cache and
+  the model called the tool directly, over HTTP and on a chained WebSocket
+  delta. Hosted `tool_search` stays for tools deferred in the base catalog.
+  The tail is stripped before the hosted splices, because hosted search with
+  nothing deferred is a 400 (#746). The OpenAI API documents the same item.
+  Models without hosted search (before GPT-5.4) keep appending.
 - **The first request carries every MCP server that is ready.** `-p` starts
   MCP in the background and never waits out a handshake (ADR 0035). A server
   restored from cache was ready before the first request, but that request

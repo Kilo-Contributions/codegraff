@@ -98,8 +98,9 @@ test "ChatGPT plan: a pruned item is announced again; other routes drop the item
     additional_tools.sync(&agent);
     try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
 
-    // Switching to Codex removes the items: there the catalog tail carries the tool.
-    agent.provider.id = "codex";
+    // Switching to grok removes the items: there the catalog tail carries the tool.
+    agent.provider.id = "xai";
+    agent.provider.model = "grok-4.6";
     additional_tools.sync(&agent);
     try std.testing.expectEqual(@as(usize, 0), items(agent.messages.items));
     agent.invalidateRootTools();
@@ -263,4 +264,51 @@ test "Claude chat: a direct call's load reaches the catalog, so its string argum
     const args = try std.json.parseFromSliceLeaky(std.json.Value, a, text, .{});
     try std.testing.expectEqual(@as(i64, 1), args.object.get("id").?.integer);
     try std.testing.expectEqual(@as(i64, 300000), args.object.get("wait_ms").?.integer);
+}
+
+test "Codex and the OpenAI API: a tool load leaves tools byte-identical and adds one additional_tools item" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const saved_fold = native_fold.enabled;
+    const saved_stable = mcp_schema_gate.g_stable_catalog;
+    defer {
+        native_fold.enabled = saved_fold;
+        mcp_schema_gate.g_stable_catalog = saved_stable;
+        native_fold.clearLoadedSession();
+    }
+    native_fold.enabled = true;
+    mcp_schema_gate.g_stable_catalog = true;
+
+    // Models without hosted tool search keep the tail in `tools`.
+    try std.testing.expect(!additional_tools.active((try testAgentFor(a, "codex", .responses, "gpt-5.3-codex")).provider));
+
+    for ([_][]const u8{ "codex", "openai" }) |id| {
+        native_fold.clearLoadedSession();
+        var agent = try testAgentFor(a, id, .responses, "gpt-6.1-sol");
+        try std.testing.expect(additional_tools.active(agent.provider));
+        agent.invalidateRootTools();
+        try agent.ensureRootTools(.responses);
+        additional_tools.sync(&agent);
+        try std.testing.expectEqual(@as(usize, 0), items(agent.messages.items));
+        const before = try agent.buildBody(agent.tools_responses, false, true, true);
+        defer std.testing.allocator.free(before);
+
+        native_fold.markLoaded("workflow");
+        agent.invalidateRootTools();
+        try agent.ensureRootTools(.responses);
+        additional_tools.sync(&agent);
+        try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
+        const after = try agent.buildBody(agent.tools_responses, false, true, true);
+        defer std.testing.allocator.free(after);
+
+        try std.testing.expect(toolsOf(before).len > 2);
+        try std.testing.expectEqualStrings(toolsOf(before), toolsOf(after));
+        try std.testing.expect(std.mem.indexOf(u8, toolsOf(after), "\"name\":\"workflow\"") == null);
+        const at = std.mem.indexOf(u8, after, "\"type\":\"additional_tools\"") orelse return error.TestExpectedItem;
+        try std.testing.expect(at < (std.mem.indexOf(u8, after, "],\"tools\":") orelse return error.TestExpectedTools));
+        // Hosted search ships only beside a tool it can load (#746).
+        if (std.mem.indexOf(u8, toolsOf(after), "\"type\":\"tool_search\"") != null)
+            try std.testing.expect(std.mem.indexOf(u8, toolsOf(after), "\"defer_loading\":true") != null);
+    }
 }

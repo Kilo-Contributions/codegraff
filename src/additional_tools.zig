@@ -4,11 +4,15 @@
 //! The stable catalog (ADR 0011) appends each loaded tool to the END of the
 //! `tools` array. OpenAI renders tools ahead of every message and checks cache
 //! breakpoints only at message ends, so any change to `tools` makes the whole
-//! conversation miss the cache on the next request. Codex hides that tail
-//! behind hosted tool search (`defer_loading`), which the ChatGPT plan's new
-//! sign-in refuses. OpenAI's documented alternative is a developer-role
-//! `additional_tools` input item: it adds the loaded definitions where the
-//! load happened, after the prefix it would otherwise invalidate.
+//! conversation miss the cache on the next request. Codex marked that tail
+//! `defer_loading` behind hosted tool search, but the array still grew: a
+//! probe that appended the tail read nothing back, and the model then spent a
+//! search round trip loading what it had just loaded. (The ChatGPT plan's new
+//! sign-in refuses hosted search outright.) OpenAI's documented alternative is
+//! a developer-role `additional_tools` input item: it adds the loaded
+//! definitions where the load happened, after the prefix it would otherwise
+//! invalidate. On Codex the same probe kept the prefix cached, and the model
+//! called the tool directly.
 //!
 //! MiMo's chat wire is worse off: it renders `tools` ahead of the system
 //! prompt, so one appended tool re-bills the whole prompt (a probe that
@@ -54,10 +58,17 @@ const chat_header = "Additional tools are now available. Call them exactly like 
 pub fn active(p: Provider) bool {
     if (!mcp_schema_gate.g_stable_catalog) return false;
     return switch (p.kind) {
-        .responses => std.mem.eql(u8, p.id, "chatgpt-new"),
+        .responses => std.mem.eql(u8, p.id, "chatgpt-new") or openaiRoute(p),
         .openai => @import("effort_route.zig").mimoRoute(p.id, p.model) or deepseekRoute(p) or claudeRoute(p),
         .anthropic, .interactions => false,
     };
+}
+
+/// Codex and the OpenAI API on the models that have hosted tool search. Both
+/// take `additional_tools` items (probed on Codex; documented for the API).
+fn openaiRoute(p: Provider) bool {
+    return (std.mem.eql(u8, p.id, "codex") or std.mem.eql(u8, p.id, "openai")) and
+        @import("codex_tool_search.zig").modelSupports(p.model);
 }
 
 /// The model id without a family prefix (`vendor/model`).

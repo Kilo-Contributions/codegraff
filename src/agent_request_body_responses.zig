@@ -61,7 +61,10 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     try s.endArray();
     if (tools) |t| {
         const payload = blk: {
-            var next = t;
+            // ADR 0221: loaded tools ride additional_tools items here, so the tail
+            // never reaches `tools`. Strip it before the hosted splices below: a
+            // hosted tool_search with nothing deferred left is a 400 (#746).
+            var next = if (additional_tools.active(self.provider)) additional_tools.stripTail(self, self.scratchAlloc(), t) else t;
             if (xai_hosted.active(self.provider.id, self.provider.kind)) {
                 const login = self.provider.source == .login;
                 next = xai_hosted.splice(self.scratchAlloc(), next, login) catch next;
@@ -70,8 +73,6 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
                 next = codex_tool_search.splice(self.scratchAlloc(), next) catch next;
                 next = codex_tool_search.spliceWebSearch(self.scratchAlloc(), next) catch next;
             }
-            // ADR 0221: no hosted tool search here; the loaded tail rides additional_tools items instead.
-            if (additional_tools.active(self.provider)) next = additional_tools.stripTail(self, self.scratchAlloc(), next);
             break :blk next;
         };
         const async_payload = try @import("async_tool_policy.zig").decorate(self.scratchAlloc(), self.provider, payload, self.async_tools_armed and !self.sub and !self.compaction_request and !self.server_compaction_request);
