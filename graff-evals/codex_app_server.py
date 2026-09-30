@@ -33,6 +33,38 @@ import time
 from datetime import datetime, timezone
 
 
+def trace(ev: dict) -> None:
+    """EVAL_TRACE_DIR: one JSONL per sandbox of per-call usage and item sizes
+    (what each output token went to), for output and cache analysis."""
+    root = os.environ.get("EVAL_TRACE_DIR")
+    if not root:
+        return
+    os.makedirs(root, exist_ok=True)
+    with open(os.path.join(root, os.path.basename(os.getcwd()) + ".jsonl"), "a") as fh:
+        fh.write(json.dumps(ev) + "\n")
+
+
+def item_sizes(item: dict) -> dict:
+    kind = item.get("type")
+    out = {"ev": "item", "type": kind}
+    if kind == "agentMessage":
+        text = item.get("text") or ""
+        out.update(chars=len(text), phase=item.get("phase"), head=text[:160])
+    elif kind == "reasoning":
+        out.update(summary_chars=sum(len(x) if isinstance(x, str) else len(json.dumps(x)) for x in (item.get("summary") or [])))
+    elif kind == "commandExecution":
+        out.update(chars=len(item.get("command") or ""), result_chars=len(item.get("aggregatedOutput") or ""), head=(item.get("command") or "")[:160])
+    elif kind == "fileChange":
+        out.update(chars=sum(len(json.dumps(c)) for c in (item.get("changes") or [])))
+    elif kind in ("mcpToolCall", "dynamicToolCall"):
+        out.update(tool=item.get("tool"), chars=len(json.dumps(item.get("arguments"))), result_chars=len(json.dumps(item.get("result") or item.get("contentItems"))))
+    elif kind == "collabAgentToolCall":
+        out.update(tool=item.get("tool"), chars=len(item.get("prompt") or ""))
+    elif kind == "plan":
+        out.update(chars=len(item.get("text") or ""))
+    return out
+
+
 def codex_home(model: str, sandbox: str) -> str:
     home = tempfile.mkdtemp(prefix="eval-codex-home-")
     source = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
@@ -156,10 +188,12 @@ def run_turn(srv: AppServer, thread_id: str, text: str, deadline: float, steer: 
             state["after_item"] = time.monotonic()
         elif method == "item/completed":
             item = params.get("item") or {}
+            trace(item_sizes(item))
             if item.get("type") == "agentMessage":
                 state["answer"] = item.get("text") or state["answer"]
         elif method == "thread/tokenUsage/updated":
             state["usage"] = (params.get("tokenUsage") or {}).get("total")
+            trace({"ev": "usage", "last": (params.get("tokenUsage") or {}).get("last")})
             state["calls"] = state.get("calls", 0) + 1
             if os.environ.get("EVAL_DEBUG"):
                 print(f"[usage-event] {json.dumps(params.get('tokenUsage'))}", file=sys.stderr)
