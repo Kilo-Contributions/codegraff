@@ -23,6 +23,7 @@ pub fn syncRoot(convo: *repl_glue.Conversation, root: *agent_mod.Agent) !void {
 pub fn visibleTurns(arena: Allocator, messages: std.json.Array) ![]tui.Turn {
     var turns: std.ArrayList(tui.Turn) = .empty;
     for (messages.items) |message| {
+        if (@import("additional_tools.zig").isItem(message)) continue; // tool definitions for the model, not a turn
         const role = visibleRole(message) orelse continue;
         const text = try visibleText(arena, message);
         if (text.len == 0) continue;

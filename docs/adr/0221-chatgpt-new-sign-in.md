@@ -154,6 +154,21 @@ process rather than restarting anything.
   tools and returns an announced tool's values as strings (`"5"`,
   `"[\"a\"]"`); `tool_call_repair.retypeArgs` restores their schema types.
   Other chat providers keep the tail until each is checked the same way.
+- **DeepSeek announces loaded tools in a user message.** DeepSeek renders
+  `tools` after the system prompt and before the messages, so a load
+  re-billed the whole conversation. Its cache only hits up to a point an
+  earlier request ended or split, so the first request after a load often
+  kept little beyond the system prompt. A system announcement would be
+  worse. V4 Pro's template moves every system message up into the system
+  prompt, so an appended one re-billed the tools as well. A user message
+  renders where it was appended and kept the full cache on V4 Pro and V4
+  Flash. The model called an announced tool with typed arguments on every
+  try, as it does a declared one. So DeepSeek's announcement is a user
+  message. Its tag makes it a notice (`session_wake.isNotice`), so `/edit`,
+  ACP replay and prompt lookups never take it for a prompt, and the TUI
+  transcript leaves it out. A wire change drops it (`history_translate`).
+  Hot-context updates still ride a system message on chat wires, so on
+  DeepSeek each project-instructions change costs one miss.
 - **The first request carries every MCP server that is ready.** `-p` starts
   MCP in the background and never waits out a handshake (ADR 0035). A server
   restored from cache was ready before the first request, but that request

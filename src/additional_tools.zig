@@ -17,6 +17,14 @@
 //! only for declared tools, so tool_call_repair.retypeArgs restores the
 //! announced tools' argument types.
 //!
+//! DeepSeek renders `tools` right after the system prompt, so a load re-bills
+//! every message. A system announcement would not help there: V4 Pro's template
+//! moves every system message up into the system prompt, which also re-bills
+//! the tools. A user message stays where it was appended, so on DeepSeek the
+//! announcement is user-role. Its tag makes it a notice, never a prompt
+//! (session_wake.isNotice). The model calls announced tools with typed
+//! arguments, as it does declared ones.
+//!
 //! So on these routes the tail never reaches `tools`, and before each request
 //! `sync` announces every loaded tool that no announcement in the history
 //! carries yet: once per tool, and again only if compaction pruned it.
@@ -41,9 +49,16 @@ pub fn active(p: Provider) bool {
     if (!mcp_schema_gate.g_stable_catalog) return false;
     return switch (p.kind) {
         .responses => std.mem.eql(u8, p.id, "chatgpt-new"),
-        .openai => @import("effort_route.zig").mimoRoute(p.id, p.model),
+        .openai => @import("effort_route.zig").mimoRoute(p.id, p.model) or deepseekRoute(p),
         .anthropic, .interactions => false,
     };
+}
+
+/// DeepSeek models, direct or through Codegraff.
+fn deepseekRoute(p: Provider) bool {
+    const name = if (std.mem.lastIndexOfScalar(u8, p.model, '/')) |slash| p.model[slash + 1 ..] else p.model;
+    return (std.mem.eql(u8, p.id, "deepseek") or std.mem.eql(u8, p.id, "codegraff")) and
+        std.ascii.startsWithIgnoreCase(name, "deepseek-");
 }
 
 /// The loaded tail as tool entries for the agent's wire: exactly what the
@@ -109,15 +124,16 @@ pub fn sync(self: *Agent) void {
     var fresh = std.json.Array.init(arena);
     for (tail) |t| if (!announced(arena, self.messages.items, toolName(t))) fresh.append(t) catch return;
     if (fresh.items.len == 0) return;
-    const item = announcement(arena, self.provider.kind, fresh) catch return;
+    const item = announcement(arena, self.provider, fresh) catch return;
     self.messages.append(item) catch {};
 }
 
 /// A developer-role `additional_tools` item on Responses. The chat wire has no
-/// such item, so there it is a system message with one definition per line.
-fn announcement(arena: Allocator, kind: Provider.Kind, tools: std.json.Array) !Value {
+/// such item, so there it is a message with one definition per line: system
+/// on MiMo, user on DeepSeek.
+fn announcement(arena: Allocator, p: Provider, tools: std.json.Array) !Value {
     var item: std.json.ObjectMap = .empty;
-    if (kind == .responses) {
+    if (p.kind == .responses) {
         try item.put(arena, "type", .{ .string = item_type });
         try item.put(arena, "role", .{ .string = "developer" });
         try item.put(arena, "tools", .{ .array = tools });
@@ -127,7 +143,7 @@ fn announcement(arena: Allocator, kind: Provider.Kind, tools: std.json.Array) !V
     try aw.writer.writeAll(chat_header);
     for (tools.items) |t| try aw.writer.print("{s}\n", .{try std.json.Stringify.valueAlloc(arena, t, .{})});
     try aw.writer.writeAll("</tools>");
-    try item.put(arena, "role", .{ .string = "system" });
+    try item.put(arena, "role", .{ .string = if (deepseekRoute(p)) "user" else "system" });
     try item.put(arena, "content", .{ .string = aw.writer.buffered() });
     try item.put(arena, origin_key, .{ .string = item_type });
     return .{ .object = item };

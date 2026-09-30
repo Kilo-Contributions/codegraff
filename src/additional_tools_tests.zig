@@ -1,6 +1,6 @@
 //! Tests for additional_tools.zig (ADR 0221): a load on the ChatGPT plan
-//! route or MiMo's chat wire must leave `tools` byte-identical and announce
-//! the tool in the conversation instead.
+//! route or on MiMo's or DeepSeek's chat wire must leave `tools`
+//! byte-identical and announce the tool in the conversation instead.
 
 const std = @import("std");
 const additional_tools = @import("additional_tools.zig");
@@ -167,7 +167,58 @@ test "MiMo chat: a tool load leaves tools byte-identical and adds one system ann
     _ = agent.messages.pop();
     additional_tools.sync(&agent);
     try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
-    agent.provider.model = "deepseek-v4-pro";
+    agent.provider.model = "glm-5.3";
     additional_tools.sync(&agent);
     try std.testing.expectEqual(@as(usize, 0), items(agent.messages.items));
+}
+
+test "DeepSeek chat: a tool load leaves tools byte-identical and adds one user announcement that is not a prompt" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const saved_fold = native_fold.enabled;
+    const saved_stable = mcp_schema_gate.g_stable_catalog;
+    defer {
+        native_fold.enabled = saved_fold;
+        mcp_schema_gate.g_stable_catalog = saved_stable;
+        native_fold.clearLoadedSession();
+    }
+    native_fold.enabled = true;
+    mcp_schema_gate.g_stable_catalog = true;
+
+    // DeepSeek's own API and the gateway, Pro and Flash.
+    for ([_][2][]const u8{ .{ "deepseek", "deepseek-v4-pro" }, .{ "codegraff", "deepseek-v4-flash" } }) |route| {
+        native_fold.clearLoadedSession();
+        var agent = try testAgentFor(a, route[0], .openai, route[1]);
+        try std.testing.expect(additional_tools.active(agent.provider));
+        agent.invalidateRootTools();
+        try agent.ensureRootTools(.openai);
+        const before = try agent.buildBody(agent.tools_openai, false, true, true);
+        defer std.testing.allocator.free(before);
+
+        native_fold.markLoaded("workflow");
+        agent.invalidateRootTools();
+        try agent.ensureRootTools(.openai);
+        additional_tools.sync(&agent);
+        try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
+        const note = agent.messages.items[agent.messages.items.len - 1];
+        // User-role: DeepSeek moves system messages up into the system prompt.
+        try std.testing.expectEqualStrings("user", note.object.get("role").?.string);
+        try std.testing.expect(std.mem.indexOf(u8, note.object.get("content").?.string, "\"name\":\"workflow\"") != null);
+        // Harness text, not something the human typed.
+        try std.testing.expect(@import("messages.zig").userPromptText(note) == null);
+        try std.testing.expect(@import("session_wake.zig").isNotice(note));
+        const after = try agent.buildBody(agent.tools_openai, false, true, true);
+        defer std.testing.allocator.free(after);
+
+        try std.testing.expect(chatToolsOf(before).len > 2);
+        try std.testing.expectEqualStrings(chatToolsOf(before), chatToolsOf(after));
+        try std.testing.expect(std.mem.indexOf(u8, after, "_graff_origin") == null);
+
+        // A switch to another wire drops the announcement rather than carrying it as text.
+        var msgs = agent.messages;
+        @import("history_translate.zig").translateHistory(a, &msgs, .anthropic);
+        try std.testing.expectEqual(@as(usize, 0), items(msgs.items));
+        for (msgs.items) |m| try std.testing.expect(std.mem.indexOf(u8, try std.json.Stringify.valueAlloc(a, m, .{}), "workflow") == null);
+    }
 }

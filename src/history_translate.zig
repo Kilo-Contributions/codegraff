@@ -20,6 +20,8 @@ pub fn translateHistory(arena: Allocator, msgs: *std.json.Array, to_kind: Provid
     var out = std.json.Array.init(arena);
     for (msgs.items) |m| {
         if (m != .object) continue;
+        // The new route announces loaded tools its own way, or not at all (ADR 0221).
+        if (@import("additional_tools.zig").isItem(m)) continue;
         if (hot_context.isHotContext(m)) {
             out.append(hot_context.retyped(arena, to_kind, extractText(arena, m)) catch continue) catch {};
             continue;

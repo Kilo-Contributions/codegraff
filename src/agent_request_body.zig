@@ -147,7 +147,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
                 }
             }
             if (tools) |t| {
-                // ADR 0221: on MiMo the loaded tail rides a system message instead (additional_tools.zig).
+                // ADR 0221: on MiMo and DeepSeek the loaded tail rides a message instead (additional_tools.zig).
                 const at = @import("additional_tools.zig");
                 try s.objectField("tools");
                 // #261 follow-up: the rest need the root-schema repair too.
