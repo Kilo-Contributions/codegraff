@@ -29,12 +29,13 @@ const WatchdogFired = http.WatchdogFired;
 /// GRAFF_WS_PREWARM=1 opts in.
 pub var g_enabled = false;
 
-/// Should this fresh connection prewarm? Codex or xAI (on-socket chain),
-/// session start (nothing sent, no chain anchor), and not under the full-resend
-/// experiment (seeding the chain would fight the flag's premise).
+/// Should this fresh connection prewarm? Codex, the ChatGPT plan or xAI
+/// (on-socket chain), session start (nothing sent, no chain anchor), and not
+/// under the full-resend experiment (seeding the chain would fight the flag's
+/// premise).
 pub fn eligible(self: *const Agent) bool {
     if (!g_enabled) return false;
-    const brand = std.mem.eql(u8, self.provider.id, "codex") or
+    const brand = std.mem.eql(u8, self.provider.id, "codex") or std.mem.eql(u8, self.provider.id, "chatgpt-new") or
         (std.mem.eql(u8, self.provider.id, "xai") and codex_chain.g_xai_ws_chain);
     if (!brand) return false;
     if (codex_chain.g_force_full_resend) return false;

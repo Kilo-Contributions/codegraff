@@ -51,7 +51,7 @@ const rawNonblockStdin = Agent.rawNonblockStdin;
 const drainSteerStdin = Agent.drainSteerStdin;
 
 /// WS: root Responses turns when enabled and not fallen back this session
-/// (codex + xai + Codegraff; Platform OpenAI GPT-6 for `response.steer`).
+/// (codex + xai + Codegraff + ChatGPT plan; Platform OpenAI GPT-6 for steering).
 pub fn wsEligible(self: *Agent) bool {
     return @import("agent_ws_steer.zig").providerHasWs(self.provider.id, self.provider.model) and transport_gate.eligible(.{ .kind = self.provider.kind, .is_sub = self.sub, .codex_ws = main_mod.g_codex_ws, .ws_off = self.ws_off, .has_out = self.out != null, .quiet = self.stream_quiet });
 }
