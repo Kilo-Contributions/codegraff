@@ -429,9 +429,10 @@ pub fn annotate(gpa: Allocator, arena: Allocator, io: Io, cwd: ?[]const u8, text
     store.mu.lockUncancelable(io);
     defer store.mu.unlock(io);
     loadUnlocked(gpa, io, cwd);
-    if (store.map.count() == 0) return text;
     var aw: Io.Writer.Allocating = .init(arena);
     try aw.writer.writeAll(text);
+    try aw.writer.writeAll(slim_rule);
+    if (store.map.count() == 0) return aw.toOwnedSlice();
     try aw.writer.writeAll("\nreturn_shapes (field names + broad types, never values):\n");
     var it = store.map.iterator();
     while (it.next()) |e| {
@@ -444,6 +445,12 @@ pub fn annotate(gpa: Allocator, arena: Allocator, io: Io, cwd: ?[]const u8, text
     }
     return aw.toOwnedSlice();
 }
+
+/// ADR 0225: what `slim` (exec.zig) does to every large list result, said
+/// where the model first meets the tools. Unsaid, the model wrote code for
+/// the full rows, failed on the first missing field, and spent calls finding
+/// the real shape.
+pub const slim_rule = "\nLarge list results from these tools come back slimmed, in rlm binds too: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. Code against those fields.";
 
 pub fn lookup(io: Io, name: []const u8) ?[]const u8 {
     store.mu.lockUncancelable(io);

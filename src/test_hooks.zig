@@ -330,6 +330,7 @@ test {
     _ = retry_hint;
     _ = agent_compact_summary_test;
     _ = side_question_tests;
+    _ = @import("mcp_shapes_tests.zig"); // ADR 0225: moved off mcp_shapes.zig (600-line cap)
     _ = json_controls;
     _ = effort_route;
     _ = agent_request_encrypted_tests;
