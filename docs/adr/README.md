@@ -252,6 +252,7 @@ record only when you need the evidence or the edge cases.
 | [0223](0223-codex-cache-partition-is-the-account.md) | Codex with a ChatGPT account id partitions the prompt cache by account, not repo: the system+tools prefix carries no cwd, so turn 1 in any repo reads the prefix another repo warmed. Children keep their role lanes on the account base; other providers keep the project key (ADR 0069). |
 | [0224](0224-six-rare-natives-join-the-fold.md) | `render_html`, `agent_message`, `install_agent_tool`, `read_tool_result`, `subagent_resume` and `schedule_task` join `native_fold.folded`: listed by `load_tool_schemas`, auto-loaded on a confident call, no longer paid on every request. |
 | [0225](0225-mcp-load-result-states-the-slim-rule.md) | Every MCP load/search/select result says how large list results are slimmed (identity fields; comment lists become `{n, latest_author}`), so a fresh project does not code against dropped fields. A direct call's slimmed result keeps the full payload as a `read_tool_result` handle; rlm binds stay plain slim JSON. |
+| [0226](0226-codex-follows-the-catalog-effort-and-verbosity.md) | On the codex provider, graff's default `medium` effort is sent as the model catalog's default level, and the Responses body carries the catalog's `text.verbosity` (not on compaction or output-schema requests). Any other effort is sent as chosen. |
 
 ## When to write one
 

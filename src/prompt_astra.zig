@@ -114,7 +114,14 @@ test "GPT6 emitted requests keep one stable guidance block and refresh on model 
                 try testing.expect(std.mem.indexOf(u8, instructions, "# GPT-6 Sol working guidance") == null);
                 try testing.expect(std.mem.indexOf(u8, instructions, "# GPT-6.1 Sol working guidance") == null);
             }
-            try testing.expectEqualStrings(if (std.mem.eql(u8, model, "mimo-v2.6-flash")) (if (std.mem.eql(u8, provider, "codegraff")) "high" else "low") else "medium", parsed.value.object.get("reasoning").?.object.get("effort").?.string);
+            // ADR 0226: on codex the default medium is the catalog's level (low for gpt-6.1-sol).
+            const effort: []const u8 = if (std.mem.eql(u8, model, "mimo-v2.6-flash"))
+                (if (std.mem.eql(u8, provider, "codegraff")) "high" else "low")
+            else if (std.mem.eql(u8, provider, "codex") and std.mem.eql(u8, model, "gpt-6.1-sol"))
+                "low"
+            else
+                "medium";
+            try testing.expectEqualStrings(effort, parsed.value.object.get("reasoning").?.object.get("effort").?.string);
             var followup: std.json.ObjectMap = .empty;
             try followup.put(a, "role", .{ .string = "user" });
             try followup.put(a, "content", .{ .string = "continue with the requested work" });

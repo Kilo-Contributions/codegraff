@@ -144,6 +144,8 @@ fn parseCodexSnapshot(arena: Allocator, data: []const u8) ?CodexSnapshot {
             .provider = "codex",
             .name = arena.dupe(u8, slug) catch continue,
             .context = context,
+            .default_effort = @import("effort_route.zig").catalogLevel(arena, item.object, &.{ "default_effort", "default_reasoning_level" }, &@import("effort_route.zig").effort_levels),
+            .default_verbosity = @import("effort_route.zig").catalogLevel(arena, item.object, &.{"default_verbosity"}, &@import("effort_route.zig").verbosity_levels),
         }) catch continue;
     }
     const models = rows.toOwnedSlice(arena) catch return null;
@@ -259,7 +261,10 @@ fn writeCodexCache(io: Io, arena: Allocator, home: []const u8, version: []const 
         aw.writer.writeAll("{\"name\":") catch return;
         var name_stringify: std.json.Stringify = .{ .writer = &aw.writer };
         name_stringify.write(model.name) catch return;
-        aw.writer.print(",\"context\":{d}}}", .{model.context}) catch return;
+        aw.writer.print(",\"context\":{d}", .{model.context}) catch return;
+        if (model.default_effort) |v| aw.writer.print(",\"default_effort\":\"{s}\"", .{v}) catch return;
+        if (model.default_verbosity) |v| aw.writer.print(",\"default_verbosity\":\"{s}\"", .{v}) catch return;
+        aw.writer.writeByte('}') catch return;
     }
     aw.writer.writeAll("]}\n") catch return;
     for ([_][]const u8{ codexDirPath(arena, home), codexFlatPath(arena, home) }) |path| {
