@@ -4,9 +4,10 @@
 //! (`client_id=dynamic_agent_client` plus `agent_name_hint`); later sign-ins
 //! reuse the issued `oaiapp_…` id and skip consent. Browser PKCE with an OIDC
 //! nonce, a loopback callback on 127.0.0.1, and one stable
-//! `ext_agent_host_id` per machine. The record lives in
-//! <home>/.openai/credentials/graff-oauth.json (0600); requests go to the
-//! public Responses endpoint with the access token as the bearer.
+//! `ext_agent_host_id` per machine. The record lives in graff's own
+//! directory, <home>/.graff/credentials/chatgpt-new.json (0600 in a 0700
+//! directory); requests go to the public Responses endpoint with the access
+//! token as the bearer.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -29,7 +30,8 @@ const scopes = "openid profile email offline_access resource.invoke chatgpt.toke
 pub const plan_scope = "chatgpt.tokens.use.direct";
 pub const dynamic_client = "dynamic_agent_client";
 pub const agent_name = "Graff";
-pub const oauth_dir = ".openai";
+/// Where sign-ins were saved before the record moved into graff's directory.
+const legacy_dir = ".openai";
 pub const manage_usage_url = "https://chatgpt.com/settings/usage";
 /// Appended to a plan-usage failure so the person knows where to look.
 pub const usage_hint = "ChatGPT plan usage limit; manage usage at " ++ manage_usage_url;
@@ -41,12 +43,43 @@ pub fn isLoginName(name: []const u8) bool {
 }
 
 pub fn recordPath(arena: Allocator, home: []const u8) []const u8 {
-    return credential_store.oauthPath(arena, home, oauth_dir);
+    return credential_store.graffCredentialPath(arena, home, "chatgpt-new.json");
 }
 
 fn hostPath(arena: Allocator, home: []const u8) []const u8 {
-    const dir = std.fs.path.dirname(recordPath(arena, home)) orelse return "";
-    return std.fmt.allocPrint(arena, "{s}/graff-host-id", .{dir}) catch "";
+    return credential_store.graffCredentialPath(arena, home, "chatgpt-new-host-id");
+}
+
+/// A saved sign-in, here or still at its old path. Presence only, so listing
+/// providers never moves or refreshes anything.
+pub fn onDisk(io: Io, arena: Allocator, home: []const u8) bool {
+    for ([_][]const u8{ recordPath(arena, home), credential_store.oauthPath(arena, home, legacy_dir) }) |path| {
+        if (Io.Dir.cwd().statFile(io, path, .{})) |_| return true else |_| {}
+    }
+    return false;
+}
+
+/// Move a sign-in saved under <home>/.openai/credentials into graff's
+/// directory, so nobody signs in again. A rename, never a copy: two copies of
+/// a rotating refresh token split, and the stale one spends the sign-in.
+fn adoptLegacy(io: Io, arena: Allocator, home: []const u8) void {
+    const cwd = Io.Dir.cwd();
+    const old_record = credential_store.oauthPath(arena, home, legacy_dir);
+    const old_dir = std.fs.path.dirname(old_record) orelse return;
+    const old_host = std.fmt.allocPrint(arena, "{s}/graff-host-id", .{old_dir}) catch return;
+    var moved = false;
+    for ([_][2][]const u8{ .{ old_record, recordPath(arena, home) }, .{ old_host, hostPath(arena, home) } }) |move| {
+        _ = cwd.statFile(io, move[0], .{}) catch continue;
+        if (cwd.statFile(io, move[1], .{})) |_| continue else |_| {}
+        ensureDirs(io, arena, home);
+        cwd.rename(move[0], cwd, move[1], io) catch continue;
+        moved = true;
+    }
+    if (!moved) return;
+    cwd.deleteFile(io, std.fmt.allocPrint(arena, "{s}.lock", .{old_record}) catch return) catch {};
+    // Only once empty: another tool may keep its own files there.
+    cwd.deleteDir(io, old_dir) catch return;
+    cwd.deleteDir(io, std.fs.path.dirname(old_dir) orelse return) catch {};
 }
 
 /// One registration's saved sign-in, in the JSON shape OpenAI's docs show.
@@ -122,19 +155,25 @@ pub fn serializeRecord(arena: Allocator, r: Record, saved_at: []const u8) ![]con
 }
 
 fn readRecord(io: Io, arena: Allocator, home: []const u8) ?Record {
-    const data = Io.Dir.cwd().readFileAlloc(io, recordPath(arena, home), arena, .limited(64 * 1024)) catch return null;
+    const path = recordPath(arena, home);
+    const data = Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(64 * 1024)) catch |err| retry: {
+        if (err != error.FileNotFound) return null;
+        adoptLegacy(io, arena, home);
+        break :retry Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(64 * 1024)) catch return null;
+    };
     return parseRecord(arena, data);
 }
 
+/// <home>/.graff keeps whatever mode it has (it holds sessions too); the
+/// credentials directory under it is owner-only.
 fn ensureDirs(io: Io, arena: Allocator, home: []const u8) void {
     const credentials = std.fs.path.dirname(recordPath(arena, home)) orelse return;
-    const base = std.fs.path.dirname(credentials) orelse return;
-    for ([_][]const u8{ base, credentials }) |path| {
-        Io.Dir.cwd().createDir(io, path, credential_store.private_dir) catch {};
-        const dir = Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch continue;
-        defer dir.close(io);
-        if (builtin.os.tag != .windows) dir.setPermissions(io, credential_store.private_dir) catch {};
-    }
+    Io.Dir.cwd().createDir(io, std.fs.path.dirname(credentials) orelse return, credential_store.private_dir) catch {};
+    Io.Dir.cwd().createDir(io, credentials, credential_store.private_dir) catch {};
+    // iterate=true: a default openDir can be O_PATH on Linux, where fchmod panics.
+    const dir = Io.Dir.cwd().openDir(io, credentials, .{ .iterate = true }) catch return;
+    defer dir.close(io);
+    if (builtin.os.tag != .windows) dir.setPermissions(io, credential_store.private_dir) catch {};
 }
 
 fn writeRecord(io: Io, arena: Allocator, home: []const u8, r: Record) !void {

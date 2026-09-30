@@ -100,8 +100,12 @@ process rather than restarting anything.
   published JWKS, then issuer, audience (the issued client id), expiry and
   nonce. Plan usage needs the `chatgpt.tokens.use.direct` scope; a sign-in
   without it is saved but never used for requests.
-- **One record per machine** in `<home>/.openai/credentials/graff-oauth.json`
-  (0600, atomic), with the host id beside it. Refresh sends `resource` and the
+- **One record per machine** in graff's own directory,
+  `<home>/.graff/credentials/chatgpt-new.json` (0600 in a 0700 directory,
+  written atomically), with the host id beside it. A sign-in saved under the
+  earlier `<home>/.openai/credentials/graff-oauth.json` moves there on first
+  read: a rename, never a copy, because two copies of a rotating refresh token
+  split and the stale one spends the sign-in. Refresh sends `resource` and the
   issued client id five minutes before expiry (inside the six-minute window)
   or after a 401, under the existing refresh mutex, and never before
   `earliest_refresh_at`: OpenAI answers an early refresh with

@@ -125,11 +125,11 @@ test "ChatGPT sign-in: loading needs plan usage and never refreshes a fresh toke
     var real_buf: [std.fs.max_path_bytes]u8 = undefined;
     const home = real_buf[0..try tmp.dir.realPath(io, &real_buf)];
     try std.testing.expect(chatgpt.loadChatgptOAuth(io, std.testing.allocator, a, home, false, null) == null);
-    try tmp.dir.createDir(io, ".openai", credential_store.private_dir);
-    try tmp.dir.createDir(io, ".openai/credentials", credential_store.private_dir);
+    try tmp.dir.createDir(io, ".graff", credential_store.private_dir);
+    try tmp.dir.createDir(io, ".graff/credentials", credential_store.private_dir);
     const write = struct {
         fn record(d: std.Io.Dir, alloc: std.mem.Allocator, r: chatgpt.Record) !void {
-            try credential_store.replaceFile(std.testing.io, d, ".openai/credentials/graff-oauth.json", try chatgpt.serializeRecord(alloc, r, "now"), credential_store.private_file);
+            try credential_store.replaceFile(std.testing.io, d, ".graff/credentials/chatgpt-new.json", try chatgpt.serializeRecord(alloc, r, "now"), credential_store.private_file);
         }
     };
     var r = chatgpt.parseRecord(a, probe_record).?;
@@ -155,13 +155,13 @@ test "ChatGPT sign-in: loading needs plan usage and never refreshes a fresh toke
 
 fn tmpHome(tmp: *std.testing.TmpDir, buf: *[std.fs.max_path_bytes]u8) ![]const u8 {
     const io = std.testing.io;
-    try tmp.dir.createDir(io, ".openai", credential_store.private_dir);
-    try tmp.dir.createDir(io, ".openai/credentials", credential_store.private_dir);
+    try tmp.dir.createDir(io, ".graff", credential_store.private_dir);
+    try tmp.dir.createDir(io, ".graff/credentials", credential_store.private_dir);
     return buf[0..try tmp.dir.realPath(io, buf)];
 }
 
 fn saveIn(dir: std.Io.Dir, alloc: std.mem.Allocator, r: chatgpt.Record) !void {
-    try credential_store.replaceFile(std.testing.io, dir, ".openai/credentials/graff-oauth.json", try chatgpt.serializeRecord(alloc, r, "now"), credential_store.private_file);
+    try credential_store.replaceFile(std.testing.io, dir, ".graff/credentials/chatgpt-new.json", try chatgpt.serializeRecord(alloc, r, "now"), credential_store.private_file);
 }
 
 test "ChatGPT sign-in: a refresh takes a lock a second graff would block on" {
@@ -207,6 +207,34 @@ test "ChatGPT sign-in: a refresh another graff already made is adopted, not repe
     signed_out.refresh = "";
     try saveIn(tmp.dir, a, signed_out);
     try std.testing.expect(chatgpt.refreshLocked(io, std.testing.allocator, a, home, before) == null);
+}
+
+test "ChatGPT sign-in: a sign-in saved before the move is adopted, never copied" {
+    const io = std.testing.io;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const home = buf[0..try tmp.dir.realPath(io, &buf)];
+    try tmp.dir.createDir(io, ".openai", credential_store.private_dir);
+    try tmp.dir.createDir(io, ".openai/credentials", credential_store.private_dir);
+    try credential_store.replaceFile(io, tmp.dir, ".openai/credentials/graff-oauth.json", try chatgpt.serializeRecord(a, chatgpt.parseRecord(a, probe_record).?, "now"), credential_store.private_file);
+    try tmp.dir.writeFile(io, .{ .sub_path = ".openai/credentials/graff-host-id", .data = host ++ "\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = ".openai/credentials/graff-oauth.json.lock", .data = "" });
+    try std.testing.expect(chatgpt.onDisk(io, a, home)); // listing providers still sees it
+    // The first read moves it into graff's directory: no sign-in, no network.
+    try std.testing.expectEqualStrings("tok-1", chatgpt.loadChatgptOAuth(io, std.testing.allocator, a, home, false, null).?);
+    try std.testing.expectEqualStrings(host ++ "\n", try tmp.dir.readFileAlloc(io, ".graff/credentials/chatgpt-new-host-id", a, .limited(128)));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(io, ".openai", .{})); // emptied, so removed
+    try std.testing.expect(chatgpt.onDisk(io, a, home));
+    try std.testing.expectEqualStrings("tok-1", chatgpt.loadChatgptOAuth(io, std.testing.allocator, a, home, false, null).?);
+    if (@import("builtin").os.tag == .windows) return;
+    const dir = try tmp.dir.openDir(io, ".graff/credentials", .{});
+    defer dir.close(io);
+    try std.testing.expectEqual(@as(u32, 0o700), (try dir.stat(io)).permissions.toMode() & 0o777);
+    try std.testing.expectEqual(@as(u32, 0o600), (try dir.statFile(io, "chatgpt-new.json", .{})).permissions.toMode() & 0o777);
 }
 
 test "ChatGPT sign-in: an unusable refresh token is cleared and the access token kept" {
