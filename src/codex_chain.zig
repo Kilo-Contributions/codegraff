@@ -30,7 +30,19 @@ const Agent = @import("agent.zig").Agent;
 /// The live agent's chain-invariant properties. Both the check and the record
 /// go through here, so they can never disagree about what was compared.
 pub fn propsFor(self: *const Agent) u64 {
-    return propsFp(self.provider.model, @tagName(self.reasoning), self.fast, self.toolsJson(), self.systemPrompt());
+    var arena_state = std.heap.ArenaAllocator.init(self.gpa);
+    defer arena_state.deinit();
+    return propsFp(self.provider.model, @tagName(self.reasoning), self.fast, wireTools(self, arena_state.allocator()), self.systemPrompt());
+}
+
+/// The `tools` a request carries. Where loads ride additional_tools items
+/// (ADR 0221) the loaded tail stays off the wire, so a load does not end the
+/// chain: its announcement travels in the delta instead.
+fn wireTools(self: *const Agent, arena: std.mem.Allocator) []const u8 {
+    const additional_tools = @import("additional_tools.zig");
+    const tools = self.toolsJson();
+    if (!additional_tools.active(self.provider)) return tools;
+    return additional_tools.stripTail(self, arena, tools);
 }
 
 /// GRAFF_CODEX_FULL_RESEND=1 (armed by session_settings.applyEnvKnobs):

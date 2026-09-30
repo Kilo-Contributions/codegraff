@@ -89,7 +89,7 @@ fn claudeRoute(p: Provider) bool {
 
 /// The loaded tail as tool entries for the agent's wire: exactly what the
 /// stable catalog would append to `tools`.
-fn tailEntries(self: *Agent, arena: Allocator) ![]const Value {
+fn tailEntries(self: *const Agent, arena: Allocator) ![]const Value {
     const connected: []const mcp.Tool = if (self.registry) |reg| try reg.snapshotTools(arena) else &.{};
     var aw: Io.Writer.Allocating = .init(arena);
     var s: std.json.Stringify = .{ .writer = &aw.writer };
@@ -200,7 +200,7 @@ fn dropItems(messages: *std.json.Array) void {
 /// The request's `tools` without the loaded tail. Always re-serialized on these
 /// routes, even with nothing loaded, so the bytes stay identical from the first
 /// request to the last.
-pub fn stripTail(self: *Agent, arena: Allocator, tools_json: []const u8) []const u8 {
+pub fn stripTail(self: *const Agent, arena: Allocator, tools_json: []const u8) []const u8 {
     const tail = tailEntries(self, arena) catch return tools_json;
     var v = std.json.parseFromSliceLeaky(Value, arena, tools_json, .{ .allocate = .alloc_always }) catch return tools_json;
     if (v != .array) return tools_json;
