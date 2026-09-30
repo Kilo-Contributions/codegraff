@@ -254,6 +254,7 @@ record only when you need the evidence or the edge cases.
 | [0225](0225-mcp-load-result-states-the-slim-rule.md) | Every MCP load/search/select result says how large list results are slimmed (identity fields; comment lists become `{n, latest_author}`), so a fresh project does not code against dropped fields. A direct call's slimmed result keeps the full payload as a `read_tool_result` handle; rlm binds stay plain slim JSON. |
 | [0226](0226-codex-follows-the-catalog-effort-and-verbosity.md) | On the codex provider, graff's default `medium` effort is sent as the model catalog's default level, and the Responses body carries the catalog's `text.verbosity` (not on compaction or output-schema requests). Any other effort is sent as chosen. |
 | [0227](0227-children-inherit-the-roots-loaded-mcp-tools.md) | A spawned child's catalog gains the MCP tools its root loaded, with full schemas (`worker_mcp.inherit` into `Agent.worker_tools`, served first by `toolsJson`). Unloaded tools stay out; children still have no load tool. |
+| [0228](0228-read-only-child-calls-declared-read-only-mcp-tools.md) | An MCP tool is a read when its server declares `readOnlyHint: true` (`mcp.Tool.read_only`). A read-only (informational) child may call those and inherits only those from its root; undeclared MCP tools stay refused. |
 
 ## When to write one
 

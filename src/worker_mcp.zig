@@ -22,19 +22,22 @@ pub fn inherit(agent: *Agent) void {
     const registry = agent.registry orelse return;
     const base = agent.toolsJson();
     const tools = registry.snapshotTools(agent.arena) catch return;
-    const built = withLoaded(agent.arena, agent.provider.kind, base, tools);
+    const built = withLoaded(agent.arena, agent.provider.kind, base, tools, agent.read_only);
     if (built.ptr != base.ptr) agent.worker_tools = built;
 }
 
 /// `base` (a JSON array of tool entries) plus an entry for each loaded MCP
-/// tool in `tools`. `base` itself when nothing is loaded.
-pub fn withLoaded(arena: Allocator, kind: Provider.Kind, base: []const u8, tools: []const mcp.Tool) []const u8 {
+/// tool in `tools`; for a read-only child, only the tools their server
+/// declares read-only, the ones its gate lets it call (ADR 0228). `base`
+/// itself when nothing qualifies.
+pub fn withLoaded(arena: Allocator, kind: Provider.Kind, base: []const u8, tools: []const mcp.Tool, read_only: bool) []const u8 {
     var aw: std.Io.Writer.Allocating = .init(arena);
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     var n: usize = 0;
     s.beginArray() catch return base;
     for (tools) |t| {
         if (mcp_schema_gate.omitMcp(t.qualified_name) or !mcp_schema_gate.isLoaded(t.qualified_name)) continue;
+        if (read_only and !t.read_only) continue;
         schema.writeToolEntry(&s, kind, t.qualified_name, t.description, .{ .value = t.input_schema }) catch return base;
         n += 1;
     }
@@ -58,14 +61,14 @@ test "a child's catalog gains the MCP tools the root loaded, and only those" {
     mcp_schema_gate.g_policy = .{ .enabled = true, .budget = 0, .eager = &.{} };
     const all = try @import("mcp_schema_gate_tests.zig").fixture(a, "wiki", 2, 200);
     const base = "[{\"type\":\"function\",\"name\":\"shell\"}]";
-    try std.testing.expectEqualStrings(base, withLoaded(a, .responses, base, all)); // nothing loaded yet
+    try std.testing.expectEqualStrings(base, withLoaded(a, .responses, base, all, false)); // nothing loaded yet
     mcp_schema_gate.autoLoad(a, all, all[1].qualified_name); // what a root's direct call does
-    const out = withLoaded(a, .responses, base, all);
+    const out = withLoaded(a, .responses, base, all, false);
     const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a, out, .{});
     try std.testing.expectEqual(@as(usize, 2), parsed.array.items.len);
     try std.testing.expect(std.mem.indexOf(u8, out, all[1].qualified_name) != null);
     try std.testing.expect(std.mem.indexOf(u8, out, all[0].qualified_name) == null);
-    const alone = withLoaded(a, .responses, "[]", all);
+    const alone = withLoaded(a, .responses, "[]", all, false);
     try std.testing.expectEqual(@as(usize, 1), (try std.json.parseFromSliceLeaky(std.json.Value, a, alone, .{})).array.items.len);
 }
 
@@ -105,4 +108,24 @@ test "a spawned child's catalog carries the tools its root loaded" {
     try std.testing.expect(std.mem.indexOf(u8, got, all[1].qualified_name) != null);
     try std.testing.expect(std.mem.indexOf(u8, got, all[0].qualified_name) == null);
     try std.testing.expect(std.mem.startsWith(u8, got, static[0 .. static.len - 1]));
+}
+
+test "a read-only child inherits only the loaded tools declared read-only (ADR 0228)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    mcp_schema_gate.reset();
+    defer mcp_schema_gate.reset();
+    const saved_policy = mcp_schema_gate.g_policy;
+    defer mcp_schema_gate.g_policy = saved_policy;
+    mcp_schema_gate.g_policy = .{ .enabled = true, .budget = 0, .eager = &.{} };
+    const all = try @import("mcp_schema_gate_tests.zig").fixture(a, "wiki", 2, 200);
+    all[0].read_only = true;
+    mcp_schema_gate.autoLoad(a, all, all[0].qualified_name);
+    mcp_schema_gate.autoLoad(a, all, all[1].qualified_name);
+    const base = "[{\"type\":\"function\",\"name\":\"shell\"}]";
+    const reader = withLoaded(a, .responses, base, all, true);
+    try std.testing.expect(std.mem.indexOf(u8, reader, all[0].qualified_name) != null);
+    try std.testing.expect(std.mem.indexOf(u8, reader, all[1].qualified_name) == null);
+    try std.testing.expect(std.mem.indexOf(u8, withLoaded(a, .responses, base, all, false), all[1].qualified_name) != null);
 }

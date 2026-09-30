@@ -150,11 +150,14 @@ fn gateHarnessPolicyWrite(self: *Agent, call: ToolCall) !?ExecResult {
 
 /// An informational child keeps its read, search and read-only shell tools
 /// (#1360); withholding the whole catalog left audits with nothing to inspect.
-/// Writes are refused the way plan mode refuses them at the root.
-fn readOnlyChildAllows(call: ToolCall) bool {
+/// Writes are refused the way plan mode refuses them at the root. An MCP tool
+/// is a read when it is a companion read or its server declares it read-only
+/// (ADR 0228).
+fn readOnlyChildAllows(registry: ?*mcp.Registry, call: ToolCall) bool {
     for ([_][]const u8{ "write_file", "edit_file", "imagegen", "peer_message", "learn_candidate" }) |name|
         if (std.mem.eql(u8, call.name, name)) return false;
-    if (mcp.Registry.isMcp(call.name)) return companionReadOnly(call.name, call.input);
+    if (mcp.Registry.isMcp(call.name)) return companionReadOnly(call.name, call.input) or
+        (if (registry) |reg| reg.declaresReadOnly(call.name) else false);
     if (!shell_tool.runsCommand(call.name)) return true;
     const args = json_args.object(call.input) orelse return true;
     const cmd_val = args.get("command") orelse return true; // action=output / kill
@@ -173,12 +176,23 @@ test "a read-only child keeps reads and read-only shell, not writes (#1360)" {
             return .{ .id = "c", .name = name, .input = v };
         }
     }.f;
-    try std.testing.expect(readOnlyChildAllows(call(a, "read_file", "{\"path\":\"src/main.zig\"}")));
-    try std.testing.expect(readOnlyChildAllows(call(a, "bash", "{\"command\":\"ls src\"}")));
-    try std.testing.expect(readOnlyChildAllows(call(a, "bash", "{\"action\":\"output\",\"id\":3}")));
-    try std.testing.expect(!readOnlyChildAllows(call(a, "write_file", "{\"path\":\"a\",\"content\":\"b\"}")));
-    try std.testing.expect(!readOnlyChildAllows(call(a, "edit_file", "{}")));
-    try std.testing.expect(!readOnlyChildAllows(call(a, "bash", "{\"command\":\"rm -rf build\"}")));
+    try std.testing.expect(readOnlyChildAllows(null, call(a, "read_file", "{\"path\":\"src/main.zig\"}")));
+    try std.testing.expect(readOnlyChildAllows(null, call(a, "bash", "{\"command\":\"ls src\"}")));
+    try std.testing.expect(readOnlyChildAllows(null, call(a, "bash", "{\"action\":\"output\",\"id\":3}")));
+    try std.testing.expect(!readOnlyChildAllows(null, call(a, "write_file", "{\"path\":\"a\",\"content\":\"b\"}")));
+    try std.testing.expect(!readOnlyChildAllows(null, call(a, "edit_file", "{}")));
+    try std.testing.expect(!readOnlyChildAllows(null, call(a, "bash", "{\"command\":\"rm -rf build\"}")));
+    // ADR 0228: an MCP tool is a read when its server declares it read-only.
+    var registry = mcp.Registry.empty(std.testing.allocator, std.testing.io);
+    defer registry.deinit();
+    var listed = [_]mcp.Tool{
+        .{ .server_index = 0, .original_name = "list", .qualified_name = "mcp__linear__list", .description = "", .input_schema = .null, .read_only = true },
+        .{ .server_index = 0, .original_name = "save", .qualified_name = "mcp__linear__save", .description = "", .input_schema = .null },
+    };
+    registry.tools = &listed;
+    try std.testing.expect(readOnlyChildAllows(&registry, call(a, "mcp__linear__list", "{}")));
+    try std.testing.expect(!readOnlyChildAllows(&registry, call(a, "mcp__linear__save", "{}")));
+    try std.testing.expect(!readOnlyChildAllows(null, call(a, "mcp__linear__list", "{}")));
 }
 
 pub fn gateTool(self: *Agent, call: ToolCall) !?ExecResult {
@@ -197,7 +211,7 @@ pub fn gateTool(self: *Agent, call: ToolCall) !?ExecResult {
                 };
             };
         }
-        if (self.read_only and !readOnlyChildAllows(call)) return .{
+        if (self.read_only and !readOnlyChildAllows(self.registry, call)) return .{
             .text = try self.arena.dupe(u8, "this subagent is read-only (an informational task) — read, search and run read-only commands, and report the change instead of making it"),
             .is_error = true,
         };

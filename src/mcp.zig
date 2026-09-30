@@ -47,6 +47,7 @@ pub const Tool = struct {
     qualified_name: []const u8, // "mcp__<server>__<tool>" shown to the model
     description: []const u8,
     input_schema: Value, // arena-owned parsed JSON Schema
+    read_only: bool = false, // the server's `readOnlyHint` (ADR 0228)
     pub fn serverName(tool: Tool) []const u8 {
         return tool.server_name orelse @import("mcp_names.zig").serverOf(tool.qualified_name);
     }
@@ -265,6 +266,14 @@ pub const Registry = struct {
         };
         return n;
     }
+    /// Whether the server declared this qualified tool read-only (ADR 0228).
+    pub fn declaresReadOnly(reg: *Registry, qualified: []const u8) bool {
+        reg.mutex.lockUncancelable(reg.io);
+        defer reg.mutex.unlock(reg.io);
+        for (reg.tools) |t| if (std.mem.eql(u8, t.qualified_name, qualified)) return t.read_only;
+        return false;
+    }
+
     pub fn snapshotTools(reg: *Registry, allocator: Allocator) ![]Tool {
         reg.mutex.lockUncancelable(reg.io);
         defer reg.mutex.unlock(reg.io);
