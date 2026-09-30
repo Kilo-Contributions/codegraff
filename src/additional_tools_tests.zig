@@ -1,5 +1,6 @@
 //! Tests for additional_tools.zig (ADR 0221): a load on the ChatGPT plan
-//! route must leave `tools` byte-identical and announce the tool in the input.
+//! route or MiMo's chat wire must leave `tools` byte-identical and announce
+//! the tool in the conversation instead.
 
 const std = @import("std");
 const additional_tools = @import("additional_tools.zig");
@@ -104,6 +105,69 @@ test "ChatGPT plan: a pruned item is announced again; other routes drop the item
     agent.invalidateRootTools();
     try agent.ensureRootTools(.responses);
     try std.testing.expect(std.mem.indexOf(u8, agent.tools_responses, "\"name\":\"workflow\"") != null);
-    try std.testing.expect(!additional_tools.active("codex", .responses));
-    try std.testing.expect(!additional_tools.active("chatgpt-new", .openai));
+    try std.testing.expect(!additional_tools.active(agent.provider));
+    var chat = agent.provider;
+    chat.id = "chatgpt-new";
+    chat.kind = .openai;
+    try std.testing.expect(!additional_tools.active(chat));
+}
+
+/// A chat body's top-level `tools`: it precedes `messages`, where the
+/// announcement's own escaped definitions live.
+fn chatToolsOf(body: []const u8) []const u8 {
+    const start = (std.mem.indexOf(u8, body, "\"tools\":") orelse return "") + "\"tools\":".len;
+    const end = std.mem.indexOfPos(u8, body, start, ",\"messages\":") orelse return "";
+    return body[start..end];
+}
+
+test "MiMo chat: a tool load leaves tools byte-identical and adds one system announcement" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const saved_fold = native_fold.enabled;
+    const saved_stable = mcp_schema_gate.g_stable_catalog;
+    defer {
+        native_fold.enabled = saved_fold;
+        mcp_schema_gate.g_stable_catalog = saved_stable;
+        native_fold.clearLoadedSession();
+    }
+    native_fold.enabled = true;
+    mcp_schema_gate.g_stable_catalog = true;
+    native_fold.clearLoadedSession();
+
+    var agent = try testAgentFor(a, "codegraff", .openai, "mimo-v2.6-pro");
+    try std.testing.expect(additional_tools.active(agent.provider));
+    agent.invalidateRootTools();
+    try agent.ensureRootTools(.openai);
+    additional_tools.sync(&agent);
+    try std.testing.expectEqual(@as(usize, 0), items(agent.messages.items));
+    const before = try agent.buildBody(agent.tools_openai, false, true, true);
+    defer std.testing.allocator.free(before);
+
+    native_fold.markLoaded("workflow");
+    agent.invalidateRootTools();
+    try agent.ensureRootTools(.openai);
+    try std.testing.expect(std.mem.indexOf(u8, agent.tools_openai, "\"name\":\"workflow\"") != null);
+    additional_tools.sync(&agent);
+    try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
+    const note = agent.messages.items[agent.messages.items.len - 1].object;
+    try std.testing.expectEqualStrings("system", note.get("role").?.string);
+    try std.testing.expect(std.mem.indexOf(u8, note.get("content").?.string, "\"name\":\"workflow\"") != null);
+    const after = try agent.buildBody(agent.tools_openai, false, true, true);
+    defer std.testing.allocator.free(after);
+
+    try std.testing.expect(chatToolsOf(before).len > 2);
+    try std.testing.expectEqualStrings(chatToolsOf(before), chatToolsOf(after));
+    try std.testing.expect(std.mem.indexOf(u8, chatToolsOf(after), "\"name\":\"workflow\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, after, "_graff_origin") == null); // the tag never reaches the wire
+
+    // Announced once; a pruned announcement comes back; another chat model drops it.
+    additional_tools.sync(&agent);
+    try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
+    _ = agent.messages.pop();
+    additional_tools.sync(&agent);
+    try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
+    agent.provider.model = "deepseek-v4-pro";
+    additional_tools.sync(&agent);
+    try std.testing.expectEqual(@as(usize, 0), items(agent.messages.items));
 }

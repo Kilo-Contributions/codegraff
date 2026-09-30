@@ -10,6 +10,27 @@ const isLoopStop = repair.isLoopStop;
 const loop_stop_text = repair.loop_stop_text;
 const coerce = repair.coerce;
 
+test "retypeArgs gives an announced tool's string arguments their schema types" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const tools =
+        \\[{"type":"function","function":{"name":"list_comments","parameters":{"type":"object","properties":{"issue_ids":{"type":"array","items":{"type":"string"}},"limit":{"type":"integer"},"include_resolved":{"type":["boolean","null"]},"query":{"type":"string"}}}}}]
+    ;
+    // MiMo's reply for a tool announced in a message, not declared (2026-09-30).
+    var message = try std.json.parseFromSliceLeaky(Value, a,
+        \\{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"list_comments","arguments":"{\"issue_ids\": \"[\\\"ISS-1\\\", \\\"ISS-2\\\"]\", \"limit\": \"5\", \"include_resolved\": \"false\", \"query\": \"42\"}"}}]}
+    , .{});
+    try std.testing.expect(try repair.retypeArgs(a, a, &message, tools));
+    const text = message.object.get("tool_calls").?.array.items[0].object.get("function").?.object.get("arguments").?.string;
+    const args = try std.json.parseFromSliceLeaky(Value, a, text, .{});
+    try std.testing.expectEqual(@as(usize, 2), args.object.get("issue_ids").?.array.items.len);
+    try std.testing.expectEqual(@as(i64, 5), args.object.get("limit").?.integer);
+    try std.testing.expectEqual(false, args.object.get("include_resolved").?.bool);
+    try std.testing.expectEqualStrings("42", args.object.get("query").?.string); // a string parameter stays one
+    try std.testing.expect(!try repair.retypeArgs(a, a, &message, tools)); // already typed
+}
+
 test "repairCalls rebuilds lost arguments from markup, typed by the schema, and strips it" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();

@@ -305,6 +305,43 @@ pub fn repairCalls(arena: Allocator, scratch: Allocator, message: *Value, tools_
     return true;
 }
 
+/// MiMo's parser types a call's arguments from the declared `tools`. A tool
+/// announced in a message instead (additional_tools.zig) comes back with every
+/// value a string: "5" for an integer, "[\"a\"]" for an array. Re-type each
+/// string whose schema in `tools_raw` does not allow one; true when a call changed.
+pub fn retypeArgs(arena: Allocator, scratch: Allocator, message: *Value, tools_raw: []const u8) !bool {
+    if (message.* != .object) return false;
+    const tool_calls = message.object.getPtr("tool_calls") orelse return false;
+    if (tool_calls.* != .array) return false;
+    const catalog = std.json.parseFromSliceLeaky(Value, scratch, tools_raw, .{ .allocate = .alloc_always }) catch return false;
+    var changed = false;
+    for (tool_calls.array.items) |*tc| {
+        if (tc.* != .object) continue;
+        const f = tc.object.getPtr("function") orelse continue;
+        if (f.* != .object) continue;
+        const name = if (f.object.get("name")) |n| (if (n == .string) n.string else continue) else continue;
+        const props = properties(catalog, name) orelse continue;
+        const args = if (f.object.get("arguments")) |a| (if (a == .string) a.string else continue) else continue;
+        const parsed = tool_call_args.parse(scratch, args);
+        if (!parsed.valid or parsed.input != .object) continue;
+        var retyped = false;
+        var it = parsed.input.object.iterator();
+        while (it.next()) |kv| {
+            if (kv.value_ptr.* != .string) continue;
+            const prop = props.get(kv.key_ptr.*) orelse continue;
+            if (wants(prop, "string")) continue;
+            const v = coerce(scratch, kv.value_ptr.string, prop);
+            if (v == .string) continue;
+            kv.value_ptr.* = v;
+            retyped = true;
+        }
+        if (!retyped) continue;
+        try f.object.put(arena, "arguments", .{ .string = try std.json.Stringify.valueAlloc(arena, parsed.input, .{}) });
+        changed = true;
+    }
+    return changed;
+}
+
 var inline_seq = std.atomic.Value(u64).init(0);
 
 /// #1247: a reply with no structured tool calls whose `content` carries

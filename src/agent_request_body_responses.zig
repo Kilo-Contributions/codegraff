@@ -71,7 +71,7 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
                 next = codex_tool_search.spliceWebSearch(self.scratchAlloc(), next) catch next;
             }
             // ADR 0221: no hosted tool search here; the loaded tail rides additional_tools items instead.
-            if (additional_tools.active(self.provider.id, self.provider.kind)) next = additional_tools.stripTail(self, self.scratchAlloc(), next);
+            if (additional_tools.active(self.provider)) next = additional_tools.stripTail(self, self.scratchAlloc(), next);
             break :blk next;
         };
         const async_payload = try @import("async_tool_policy.zig").decorate(self.scratchAlloc(), self.provider, payload, self.async_tools_armed and !self.sub and !self.compaction_request and !self.server_compaction_request);
