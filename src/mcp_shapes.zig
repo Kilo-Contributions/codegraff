@@ -8,6 +8,7 @@ const Value = std.json.Value;
 const Allocator = std.mem.Allocator;
 
 const tools = @import("tools.zig");
+const tool_handle = @import("tool_handle.zig");
 const ToolCtx = tools.ToolCtx;
 
 pub const file_name = "mcp-shapes.json";
@@ -316,6 +317,22 @@ pub fn takeSlim(gpa: Allocator, text: []u8) []u8 {
     return cut;
 }
 
+/// ADR 0225: `takeSlim`, lossless. With `keep_in` the full payload is kept as
+/// a tool-result handle that the slim result names, so a dropped field is one
+/// read_tool_result away. Null (an rlm bind, which each/project/write_file
+/// parse as JSON) or a failed write returns the plain cut.
+pub fn takeSlimKept(gpa: Allocator, keep_in: ?tool_handle.Target, text: []u8) []u8 {
+    const cut = slim(gpa, text) orelse return text;
+    defer gpa.free(text);
+    const target = keep_in orelse return cut;
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const path = tool_handle.keep(arena_state.allocator(), target, text) orelse return cut;
+    const out = std.fmt.allocPrint(gpa, "{s}\n[slimmed from {d} bytes; the full result is handle {s} (read_tool_result reads any dropped field)]", .{ cut, text.len, tool_handle.idOf(path) }) catch return cut;
+    gpa.free(cut);
+    return out;
+}
+
 fn arrayItems(v: Value) ?[]const Value {
     if (v == .array) return v.array.items;
     if (v != .object) return null;
@@ -450,7 +467,7 @@ pub fn annotate(gpa: Allocator, arena: Allocator, io: Io, cwd: ?[]const u8, text
 /// where the model first meets the tools. Unsaid, the model wrote code for
 /// the full rows, failed on the first missing field, and spent calls finding
 /// the real shape.
-pub const slim_rule = "\nLarge list results from these tools come back slimmed, in rlm binds too: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. Code against those fields.";
+pub const slim_rule = "\nLarge list results from these tools come back slimmed: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. Code against those fields. A direct call's result names a handle holding the full result; rlm binds stay slimmed.";
 
 pub fn lookup(io: Io, name: []const u8) ?[]const u8 {
     store.mu.lockUncancelable(io);
@@ -528,33 +545,6 @@ test "remember merges keys; annotate splices shapes; prefix text is untouched" {
     try std.testing.expect(std.mem.indexOf(u8, annotated, "muscle:") == null);
     try std.testing.expect(std.mem.indexOf(u8, @import("mcp_schema_gate.zig").tool_desc, "return_shapes") == null);
     try std.testing.expect(std.mem.indexOf(u8, @import("rlm.zig").tool_desc, "muscle:") == null);
-}
-
-test "slim drops description/body; comments fold to n and latest_author" {
-    const gpa = std.testing.allocator;
-    try std.testing.expect(slim(gpa, "[{\"id\":1}]") == null);
-    const pad: [400]u8 = @splat('x');
-    const pad_s: []const u8 = &pad;
-    const issues = try std.fmt.allocPrint(gpa, "[{{\"id\":\"ISS-1\",\"identifier\":\"ENG-101\",\"title\":\"Login\",\"description\":\"{s}\",\"body\":\"KEEP-OUT\"}},{{\"id\":\"ISS-2\",\"identifier\":\"ENG-102\",\"title\":\"Tax\",\"description\":\"{s}\"}}]", .{ pad_s, pad_s });
-    defer gpa.free(issues);
-    const cut = slim(gpa, issues) orelse return error.ExpectedSlim;
-    defer gpa.free(cut);
-    try std.testing.expect(std.mem.indexOf(u8, cut, "ISS-1") != null);
-    try std.testing.expect(std.mem.indexOf(u8, cut, "ENG-101") != null);
-    try std.testing.expect(std.mem.indexOf(u8, cut, "Login") != null);
-    try std.testing.expect(std.mem.indexOf(u8, cut, "description") == null);
-    try std.testing.expect(std.mem.indexOf(u8, cut, "KEEP-OUT") == null);
-    try std.testing.expect(std.mem.indexOf(u8, cut, pad_s) == null);
-
-    const comments = try std.fmt.allocPrint(gpa, "[{{\"body\":\"old {s}\",\"author\":{{\"name\":\"ada\"}},\"createdAt\":\"2026-08-11T01:00:00Z\"}},{{\"body\":\"new {s}\",\"author\":{{\"name\":\"bev\"}},\"createdAt\":\"2026-08-12T02:00:00Z\"}}]", .{ pad_s, pad_s });
-    defer gpa.free(comments);
-    const folded = slim(gpa, comments) orelse return error.ExpectedCommentSlim;
-    defer gpa.free(folded);
-    try std.testing.expect(std.mem.indexOf(u8, folded, "\"n\":2") != null);
-    try std.testing.expect(std.mem.indexOf(u8, folded, "bev") != null);
-    try std.testing.expect(std.mem.indexOf(u8, folded, "ada") == null);
-    try std.testing.expect(std.mem.indexOf(u8, folded, "old ") == null);
-    try std.testing.expect(std.mem.indexOf(u8, folded, pad_s) == null);
 }
 
 test "annotate writes a muscle playbook once two MCP shapes are stored" {

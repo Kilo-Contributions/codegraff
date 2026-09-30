@@ -175,6 +175,16 @@ pub fn withFirstNote(arena: Allocator, r: Result, shown: *bool) ![]const u8 {
     return std.fmt.allocPrint(arena, "{s}{s}", .{ r.text, first_note });
 }
 
+/// ADR 0225: keep a payload whole as a handle (null when the run budget is
+/// spent or the write fails) — the lossless half of MCP result slimming.
+pub fn keep(arena: Allocator, target: Target, text: []const u8) ?[]const u8 {
+    return persist(arena, target, text);
+}
+
+pub fn idOf(path: []const u8) []const u8 {
+    return handleId(path);
+}
+
 fn handleId(path: []const u8) []const u8 {
     const base = std.fs.path.basename(path);
     return if (std.mem.endsWith(u8, base, ".txt")) base[0 .. base.len - 4] else base;
