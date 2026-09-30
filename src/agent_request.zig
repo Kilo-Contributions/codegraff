@@ -404,6 +404,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     if (!self.compaction_request) self.compact_transport_failures = 0;
                     usage_attempts.completed();
                     self.recordUsageResponses(obj, body.len);
+                    @import("usage_trace.zig").noteReasoning(obj);
                     try @import("agent_async_tools.zig").join(self);
                     // #414: an empty output whose usage already fills the window
                     // is an overflow the provider never reported. Re-anchor like

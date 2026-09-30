@@ -35,9 +35,24 @@ const Usage = struct {
     prefix_changed: bool = false,
     prefix_bust: ?[]const u8 = null,
     cache_miss: ?[]const u8 = null,
+    /// Of `output`, the reasoning the server reports (Responses
+    /// output_tokens_details); null when the wire has no split.
+    reasoning: ?i64 = null,
 };
 
 threadlocal var pending: ?Usage = null;
+
+/// After recordUsageResponses: the reasoning share of this response's output,
+/// so the trace separates thinking from what the model wrote.
+pub fn noteReasoning(response: std.json.ObjectMap) void {
+    if (pending == null) return;
+    const usage = response.get("usage") orelse return;
+    if (usage != .object) return;
+    const details = usage.object.get("output_tokens_details") orelse return;
+    if (details != .object) return;
+    const n = details.object.get("reasoning_tokens") orelse return;
+    if (n == .integer and n.integer >= 0) pending.?.reasoning = n.integer;
+}
 
 /// From recordCost: remember this response's usage for the next `api` line.
 pub fn note(self: *const Agent, ordinary: i64, cache_read: i64, cache_write: i64, out: i64) void {
@@ -82,6 +97,7 @@ pub fn emit(tr: anytype, label: []const u8, from_sub: bool, model: []const u8) v
         .prefix_changed = u.prefix_changed,
         .prefix_bust = u.prefix_bust,
         .cache_miss = u.cache_miss,
+        .reasoning_tokens = u.reasoning,
     });
 }
 
@@ -95,10 +111,12 @@ test "usage waits for its api line and is written once" {
         lines: u32 = 0,
         last_input: i64 = 0,
         last_miss: ?[]const u8 = null,
+        last_reasoning: ?i64 = null,
         fn write(self: *@This(), event: anytype) void {
             self.lines += 1;
             self.last_input = event.input_tokens;
             self.last_miss = event.cache_miss;
+            self.last_reasoning = event.reasoning_tokens;
         }
         fn elapsedMs(_: *@This()) i64 {
             return 0;
@@ -127,6 +145,18 @@ test "usage waits for its api line and is written once" {
     note(&agent, 50_000, 0, 0, 9);
     emit(&sink, "main", false, "gpt-6-sol");
     try std.testing.expectEqualStrings("first_request", sink.last_miss.?);
+    try std.testing.expect(sink.last_reasoning == null); // no split on the wire
+
+    // A Responses usage block splits reasoning out of the output.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(),
+        \\{"usage":{"input_tokens":10,"output_tokens":40,"output_tokens_details":{"reasoning_tokens":32}}}
+    , .{});
+    note(&agent, 10, 0, 0, 40);
+    noteReasoning(parsed.object);
+    emit(&sink, "main", false, "gpt-6-sol");
+    try std.testing.expectEqual(@as(?i64, 32), sink.last_reasoning);
 }
 
 test {
