@@ -298,5 +298,17 @@
     "env": {"GRAFF_POST_DEADLINE_SECS": "90"},
     "default_model": "gpt-6-sol",
     "note": "GPT-6 prompting guide candidate (g6-plain-prose); judged by hillclimb.py round on held-out tasks before any prompt change ships (ADR 0214)"
+  },
+  "pi-chatgpt-new": {
+    "cmd": ["npx", "-y", "@earendil-works/pi-coding-agent@0.99.1", "-p", "--mode", "json", "--provider", "openai", "--model", "{model}", "--no-session", "{prompt}"],
+    "answer": "pi-json",
+    "env": {},
+    "default_model": "gpt-6.1-sol"
+  },
+  "codex-chatgpt-new": {
+    "cmd": ["codex", "exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "-m", "{model}", "-c", "model_provider=\"openai_token_sharing\"", "-c", "model_providers.openai_token_sharing.name=\"OpenAI Token Sharing\"", "-c", "model_providers.openai_token_sharing.base_url=\"https://api.openai.com/v1\"", "-c", "model_providers.openai_token_sharing.model_catalog_url=\"https://api.openai.com/v1/models\"", "-c", "features.api_key_model_discovery=true", "-c", "model_providers.openai_token_sharing.env_key=\"ACCESS_TOKEN\"", "-c", "model_providers.openai_token_sharing.wire_api=\"responses\"", "-c", "model_providers.openai_token_sharing.requires_openai_auth=false", "-c", "model_providers.openai_token_sharing.supports_websockets=false", "{prompt}"],
+    "answer": "stdout",
+    "env": {"CODEX_HOME": "{sandbox}/.codex-home"},
+    "default_model": "gpt-6.1-sol"
   }
 }
