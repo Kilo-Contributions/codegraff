@@ -23,7 +23,7 @@ pub fn deliver(self: *Agent) !void {
 
 /// Soft steer only: `force` stays at the head of `g_steer_queue` so the
 /// REPL interrupt path still sees it after this turn unwinds.
-fn popSteerSoft() ?repl_glue.SteerEntry {
+pub fn popSteerSoft() ?repl_glue.SteerEntry {
     repl_glue.steerLock();
     defer repl_glue.steerUnlock();
     const q = &main_mod.g_steer_queue;

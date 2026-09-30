@@ -18,6 +18,10 @@ The assistant item is shaped exactly the way stepResponses
 array holds an ``output_text`` block. ``ws_turns``/``sse_turns`` count which
 transport actually served each turn so tests can prove no silent fallback.
 
+With ``on_steer`` set, the socket also takes GPT-6 ``response.steer`` frames
+while a reply streams (a reader thread feeds the sender between events), so a
+test can script accepted / pending / failed and the continuation that follows.
+
 Importable (``CodexMock().start() -> port`` / ``stop()``) and runnable:
 ``python3 scripts/codex_ws_mock.py [--port N]`` serves until Ctrl-C, tracing
 events to stderr.
@@ -29,6 +33,7 @@ import argparse
 import base64
 import hashlib
 import json
+import queue
 import socket
 import struct
 import sys
@@ -232,6 +237,15 @@ class CodexMock:
     delay_for_request: Callable[[RecordedRequest], float] | None = field(
         default=None, repr=False
     )
+    # Optional GPT-6 mid-turn steering: called for each ``response.steer`` frame
+    # with the request whose reply is streaming (None when idle), the steer
+    # event, and the events not yet sent. Returns (events to send now, the new
+    # remaining events) -- e.g. accepted now, then a cut reply and a
+    # continuation. Steer frames are recorded in ``steers`` either way.
+    on_steer: Callable[
+        [RecordedRequest | None, dict, list[dict]], tuple[list[dict], list[dict]]
+    ] | None = field(default=None, repr=False)
+    steers: list[dict] = field(default_factory=list, repr=False)
     requests: list[RecordedRequest] = field(default_factory=list, repr=False)
     prewarm_ids: dict[int, str] = field(default_factory=dict, repr=False)
     _sock: socket.socket | None = field(default=None, repr=False)
@@ -388,6 +402,9 @@ class CodexMock:
             ).encode("ascii")
         )
         self._log(f"ws upgraded (connection {connection_id})")
+        if self.on_steer is not None:
+            self._serve_ws_steering(conn, reader, headers, connection_id)
+            return
         while True:
             message = _read_message(reader, conn)
             if message.opcode == OP_CLOSE:
@@ -437,6 +454,89 @@ class CodexMock:
             # useful API body as a transport reset.
             if any(ev.get("type") == "error" for ev in events):
                 return
+
+    def _send_ws(self, conn: socket.socket, ev: dict) -> None:
+        _send_frame(conn, OP_TEXT, json.dumps(ev, separators=(",", ":")).encode("utf-8"))
+        self._log(f"ws -> {ev['type']}")
+
+    def _serve_ws_steering(
+        self,
+        conn: socket.socket,
+        reader: _SockReader,
+        headers: dict[str, str],
+        connection_id: int,
+    ) -> None:
+        """The WebSocket loop with a reader thread, so ``response.steer`` frames
+        land while a reply is still streaming (the plain loop reads only
+        between requests)."""
+        inbox: queue.Queue = queue.Queue()
+
+        def pump() -> None:
+            try:
+                while True:
+                    message = _read_message(reader, conn)
+                    inbox.put(message)
+                    if message.opcode == OP_CLOSE:
+                        return
+            except (ConnectionError, OSError):
+                inbox.put(None)
+
+        threading.Thread(target=pump, daemon=True).start()
+        streaming: RecordedRequest | None = None
+        last: RecordedRequest | None = None
+        remaining: list[dict] = []
+        delay = 0.0
+        while True:
+            try:
+                message = inbox.get(timeout=delay if remaining else None)
+            except queue.Empty:  # only while a reply streams: nothing arrived in time
+                message = False
+            if message is False:  # send the next event
+                self._send_ws(conn, remaining.pop(0))
+                if not remaining:
+                    with self._lock:
+                        self.ws_turns += 1
+                    streaming = None
+                continue
+            if message is None:
+                return
+            if message.opcode == OP_CLOSE:
+                try:
+                    _send_frame(conn, OP_CLOSE, b"")
+                except OSError:
+                    pass
+                return
+            try:
+                event = json.loads(message.payload.decode("utf-8"))
+            except ValueError:
+                continue
+            etype = event.get("type") if isinstance(event, dict) else None
+            self._log(f"ws <- {etype} ({len(message.payload)}b)")
+            if etype == "response.steer":
+                with self._lock:
+                    self.steers.append(event)
+                now, remaining = self.on_steer(streaming or last, event, remaining)
+                for ev in now:
+                    self._send_ws(conn, ev)
+                if streaming is None and remaining:
+                    streaming = last
+                continue
+            if etype != "response.create":
+                continue
+            if event.get("generate") is False:
+                prewarm_id = f"resp_prewarm_{self.ws_turns + 1}"
+                with self._lock:
+                    self.prewarm_ids[connection_id] = prewarm_id
+                self._send_ws(conn, {"type": "response.completed", "response": {"id": prewarm_id, "usage": dict(USAGE)}})
+                continue
+            for ev in remaining:  # what the last reply still owed goes out first
+                self._send_ws(conn, ev)
+            request = self._record("ws", connection_id, event, headers)
+            streaming = last = request
+            remaining = list(self._events_for(request))
+            delay = self.delay_for_request(request) if self.delay_for_request else 0.0
+            if delay <= 0:
+                delay = 0.001
 
     def _serve_sse(
         self, conn: socket.socket, reader: _SockReader, headers: dict[str, str]

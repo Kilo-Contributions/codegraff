@@ -56,6 +56,22 @@ pub fn send(text: []const u8) bool {
     return true;
 }
 
+/// Put follow-ups back at the head of the queue, in order: a steer the server
+/// rejected, or one a failed stream never delivered (agent_ws_steer). Takes
+/// the page-allocated texts; one the queue cannot hold is dropped.
+pub fn requeue(texts: []const []const u8) void {
+    repl_glue.steerLock();
+    defer repl_glue.steerUnlock();
+    var at: usize = 0;
+    for (texts) |t| {
+        main_mod.g_steer_queue.insert(std.heap.page_allocator, at, .{ .text = t, .force = false }) catch {
+            std.heap.page_allocator.free(t);
+            continue;
+        };
+        at += 1;
+    }
+}
+
 /// Soft follow-ups the finished turn never delivered (they arrived after its
 /// last reply), moved out for the frontend to run as the next turn. Force
 /// entries stay for the interrupt path.
