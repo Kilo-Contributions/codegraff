@@ -6,7 +6,7 @@ usage: codex_app_server.py <model> <prompt>            (cwd = the task sandbox)
 
 Codex runs from a throwaway CODEX_HOME outside the sandbox: an access-only
 copy of the ChatGPT login (no refresh token, so an eval can never rotate the
-real one), a config.toml with the model and effort, and the sandbox's
+real one), a config.toml with the model (and EVAL_EFFORT, if set), and the sandbox's
 `.mcp.json` servers registered as codex `mcp_servers`. Project docs are off
 (`project_doc_max_bytes = 0`), as graff sees none in an isolated sandbox.
 
@@ -83,9 +83,12 @@ def codex_home(model: str, sandbox: str) -> str:
     with open(os.path.join(home, "auth.json"), "w") as fh:
         json.dump(access_only, fh)
     os.chmod(os.path.join(home, "auth.json"), 0o600)
-    lines = [
-        f'model = "{model}"',
-        f'model_reasoning_effort = "{os.environ.get("EVAL_EFFORT", "medium")}"',
+    lines = [f'model = "{model}"']
+    # Unset, the app server runs at its model's catalog default effort, as
+    # graff does (ADR 0226). EVAL_EFFORT pins a level.
+    if os.environ.get("EVAL_EFFORT"):
+        lines.append(f'model_reasoning_effort = "{os.environ["EVAL_EFFORT"]}"')
+    lines += [
         'approval_policy = "never"',
         'sandbox_mode = "danger-full-access"',
         "project_doc_max_bytes = 0",
