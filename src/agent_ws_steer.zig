@@ -114,20 +114,18 @@ pub fn buildSteerFrame(gpa: Allocator, response_id: []const u8, input: []const u
     return aw.toOwnedSlice();
 }
 
-fn flushOne(self: anytype, client: *ws.WsClient, st: *Session, poll_stdin: bool) !void {
-    if (st.live_id.len == 0) return;
-    const entry = repl_glue.popSteer() orelse return;
-    if (entry.force or entry.text.len == 0) {
-        if (entry.text.len > 0) self.gpa.free(entry.text);
-        return;
-    }
-    const frame = buildSteerFrame(self.gpa, st.live_id, entry.text) catch {
-        self.gpa.free(entry.text);
-        return;
-    };
-    defer self.gpa.free(frame);
-    self.gpa.free(entry.text);
+/// Queued steer text is page-allocated (steer_input, steer_now.send) and every
+/// consumer frees it there; freeing it with gpa aborted release builds on each
+/// queued prompt ("pointer being freed was not allocated"). A force entry
+/// stays queued for the interrupt path, as in turn_inbox.
+fn flushOne(self: anytype, client: anytype, st: *Session, poll_stdin: bool) !void {
     _ = poll_stdin;
+    if (st.live_id.len == 0) return;
+    const entry = @import("turn_inbox.zig").popSteerSoft() orelse return;
+    defer std.heap.page_allocator.free(entry.text);
+    if (entry.text.len == 0) return;
+    const frame = buildSteerFrame(self.gpa, st.live_id, entry.text) catch return;
+    defer self.gpa.free(frame);
     client.sendText(frame) catch return;
     st.awaiting_successor = true;
 }
@@ -159,6 +157,45 @@ test "providerHasWs: Platform OpenAI GPT-6 only; Codex always" {
     try std.testing.expect(providerHasWs("codex", "gpt-6-astra"));
     try std.testing.expect(providerHasWs("xai", "grok-4.6"));
     try std.testing.expect(providerHasWs("codegraff", "gpt-6-astra"));
+}
+
+test "a queued steer goes out and is freed where it was allocated; a force entry stays queued" {
+    const Socket = struct {
+        sent: std.ArrayList(u8) = .empty,
+        pub fn sendText(sock: *@This(), frame: []const u8) !void {
+            try sock.sent.appendSlice(std.testing.allocator, frame);
+        }
+    };
+    var sock: Socket = .{};
+    defer sock.sent.deinit(std.testing.allocator);
+    // gpa is the leak-checked test allocator: a page-allocated entry freed through it panics.
+    const agent = .{ .gpa = std.testing.allocator };
+    const page = std.heap.page_allocator;
+    repl_glue.steerLock();
+    for (main_mod.g_steer_queue.items) |e| page.free(e.text);
+    main_mod.g_steer_queue.clearRetainingCapacity();
+    try main_mod.g_steer_queue.append(page, .{ .text = try page.dupe(u8, "also mention the tests"), .force = false });
+    repl_glue.steerUnlock();
+    defer {
+        repl_glue.steerLock();
+        for (main_mod.g_steer_queue.items) |e| page.free(e.text);
+        main_mod.g_steer_queue.clearRetainingCapacity();
+        repl_glue.steerUnlock();
+    }
+
+    var st: Session = .{ .live_id = "resp_1" };
+    try flushOne(agent, &sock, &st, false);
+    try std.testing.expect(std.mem.indexOf(u8, sock.sent.items, "\"input\":\"also mention the tests\"") != null);
+    try std.testing.expect(st.awaiting_successor);
+
+    // Double-Enter's force entry belongs to the interrupt path: nothing is sent, it stays.
+    repl_glue.steerLock();
+    try main_mod.g_steer_queue.append(page, .{ .text = try page.dupe(u8, "stop"), .force = true });
+    repl_glue.steerUnlock();
+    sock.sent.clearRetainingCapacity();
+    try flushOne(agent, &sock, &st, false);
+    try std.testing.expectEqual(@as(usize, 0), sock.sent.items.len);
+    try std.testing.expectEqual(@as(usize, 1), main_mod.g_steer_queue.items.len);
 }
 
 test "buildSteerFrame is type + previous_response_id + input" {
