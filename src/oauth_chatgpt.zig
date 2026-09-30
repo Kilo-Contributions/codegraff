@@ -385,13 +385,50 @@ pub fn login(io: Io, gpa: Allocator, arena: Allocator, home: []const u8) !void {
 
 var dead_refresh: u64 = 0;
 
+/// OpenAI rotates the refresh token on every grant and asks apps to serialize
+/// refreshes for one session: a process that loses the race presents a
+/// replaced token (`refresh_token_reused`) and the person must sign in again.
+/// The lock sits beside the record (flock / NtLockFile). A filesystem without
+/// working locks degrades to the unlocked refresh.
+pub fn lockRecord(io: Io, arena: Allocator, home: []const u8) ?Io.File {
+    ensureDirs(io, arena, home);
+    const path = std.fmt.allocPrint(arena, "{s}.lock", .{recordPath(arena, home)}) catch return null;
+    return Io.Dir.cwd().createFile(io, path, .{ .truncate = false, .lock = .exclusive }) catch null;
+}
+
+/// Refresh under the lock, against the record as it is now: another graff
+/// may have refreshed while this one waited, and its replacement is then the
+/// only live refresh token. `before` is what the caller read before locking.
+/// Null when the sign-in is gone.
+pub fn refreshLocked(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, before: Record) ?[]const u8 {
+    const lock = lockRecord(io, arena, home);
+    defer if (lock) |f| f.close(io);
+    const current = readRecord(io, arena, home) orelse return null;
+    if (current.access.len == 0 or !current.planEnabled()) return null;
+    if (!std.mem.eql(u8, current.refresh, before.refresh)) return current.access;
+    const next = refreshed(io, gpa, arena, home, current) orelse return current.access;
+    return next.access;
+}
+
+/// OpenAI: clear an unusable refresh token so no process replays it. The
+/// access token stays until it expires; after that the request error says to
+/// sign in again. Called with the record lock held.
+pub fn dropRefresh(io: Io, arena: Allocator, home: []const u8, r: Record) void {
+    var cleared = r;
+    cleared.refresh = "";
+    writeRecord(io, arena, home, cleared) catch {};
+}
+
 fn refreshed(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, r: Record) ?Record {
     const id = std.hash.Wyhash.hash(0, r.refresh);
     if (id == dead_refresh) return null; // known dead: no round trip
     const body = form(arena, &.{ .{ "grant_type", "refresh_token" }, .{ "client_id", r.client_id }, .{ "refresh_token", r.refresh }, .{ "resource", resource } }) catch return null;
-    const tok = helpers.oauthFormPost(io, gpa, arena, token_url, body) catch return null; // transient
+    const tok = helpers.oauthFormPost(io, gpa, arena, token_url, body) catch return null; // transient: keep everything
     if (tok.get("error")) |e| {
-        if (helpers.permanentRefreshFailure(if (e == .string) e.string else "")) dead_refresh = id;
+        if (helpers.permanentRefreshFailure(if (e == .string) e.string else "")) {
+            dead_refresh = id;
+            dropRefresh(io, arena, home, r);
+        }
         return null;
     }
     const now_s = @divTrunc(util.unixMs(io), 1000);
@@ -414,8 +451,9 @@ fn refreshed(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, r: Reco
 }
 
 /// The access token for requests, refreshed near expiry or when `force`d by
-/// a 401. Null when signed out or when plan usage was not granted. Callers
-/// hold oauth.refreshOAuthKey's mutex, which serializes rotating refreshes.
+/// a 401. Null when signed out or when plan usage was not granted.
+/// oauth.refreshOAuthKey's mutex serializes refreshes within this process and
+/// the record lock serializes them across graff processes.
 pub fn loadChatgptOAuth(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, force: bool, stale: ?[]const u8) ?[]const u8 {
     const r = readRecord(io, arena, home) orelse return null;
     if (r.access.len == 0 or !r.planEnabled()) return null;
@@ -426,8 +464,7 @@ pub fn loadChatgptOAuth(io: Io, gpa: Allocator, arena: Allocator, home: []const 
     if (now_s < r.earliest_refresh_at) return r.access;
     const due = r.expires_at != 0 and now_s >= r.expires_at - refresh_margin_s;
     if (!(force or due) or r.refresh.len == 0) return r.access;
-    const next = refreshed(io, gpa, arena, home, r) orelse return r.access;
-    return next.access;
+    return refreshLocked(io, gpa, arena, home, r);
 }
 
 /// Sign out: revoke the refresh token, then clear the tokens. The app id,

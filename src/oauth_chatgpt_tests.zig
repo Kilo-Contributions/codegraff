@@ -152,3 +152,80 @@ test "ChatGPT sign-in: loading needs plan usage and never refreshes a fresh toke
     try write.record(tmp.dir, a, r);
     try std.testing.expect(chatgpt.loadChatgptOAuth(io, std.testing.allocator, a, home, false, null) == null);
 }
+
+fn tmpHome(tmp: *std.testing.TmpDir, buf: *[std.fs.max_path_bytes]u8) ![]const u8 {
+    const io = std.testing.io;
+    try tmp.dir.createDir(io, ".openai", credential_store.private_dir);
+    try tmp.dir.createDir(io, ".openai/credentials", credential_store.private_dir);
+    return buf[0..try tmp.dir.realPath(io, buf)];
+}
+
+fn saveIn(dir: std.Io.Dir, alloc: std.mem.Allocator, r: chatgpt.Record) !void {
+    try credential_store.replaceFile(std.testing.io, dir, ".openai/credentials/graff-oauth.json", try chatgpt.serializeRecord(alloc, r, "now"), credential_store.private_file);
+}
+
+test "ChatGPT sign-in: a refresh takes a lock a second graff would block on" {
+    const io = std.testing.io;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const home = try tmpHome(&tmp, &buf);
+    const held = chatgpt.lockRecord(io, a, home) orelse return error.NoRefreshLock;
+    const lock_path = try std.fmt.allocPrint(a, "{s}.lock", .{chatgpt.recordPath(a, home)});
+    // flock/NtLockFile are per open file description, so a second open
+    // conflicts even inside one process, exactly as another graff would.
+    try std.testing.expectError(error.WouldBlock, std.Io.Dir.cwd().createFile(io, lock_path, .{ .truncate = false, .lock = .exclusive, .lock_nonblocking = true }));
+    held.close(io);
+    const next = try std.Io.Dir.cwd().createFile(io, lock_path, .{ .truncate = false, .lock = .exclusive, .lock_nonblocking = true });
+    next.close(io);
+}
+
+test "ChatGPT sign-in: a refresh another graff already made is adopted, not repeated" {
+    const io = std.testing.io;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const home = try tmpHome(&tmp, &buf);
+    const before = chatgpt.parseRecord(a, probe_record).?; // what this process read: tok-1 / ref-1
+    var rotated = before;
+    rotated.access = "tok-2";
+    rotated.refresh = "ref-2";
+    try saveIn(tmp.dir, a, rotated);
+    // The disk moved on while this process waited for the lock: its token is
+    // adopted with no token request (tests have no network), and the
+    // replaced ref-1 is never presented.
+    try std.testing.expectEqualStrings("tok-2", chatgpt.refreshLocked(io, std.testing.allocator, a, home, before).?);
+    // Signed out meanwhile: nothing to send.
+    var signed_out = rotated;
+    signed_out.access = "";
+    signed_out.refresh = "";
+    try saveIn(tmp.dir, a, signed_out);
+    try std.testing.expect(chatgpt.refreshLocked(io, std.testing.allocator, a, home, before) == null);
+}
+
+test "ChatGPT sign-in: an unusable refresh token is cleared and the access token kept" {
+    const io = std.testing.io;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const home = try tmpHome(&tmp, &buf);
+    const r = chatgpt.parseRecord(a, probe_record).?;
+    try saveIn(tmp.dir, a, r);
+    chatgpt.dropRefresh(io, a, home, r);
+    const saved = chatgpt.parseRecord(a, try std.Io.Dir.cwd().readFileAlloc(io, chatgpt.recordPath(a, home), a, .limited(64 * 1024))).?;
+    try std.testing.expectEqualStrings("", saved.refresh);
+    try std.testing.expectEqualStrings("tok-1", saved.access); // usable until it expires
+    try std.testing.expectEqualStrings("oaiapp_x", saved.client_id); // the next sign-in skips registration
+    try std.testing.expect(@import("oauth_helpers.zig").permanentRefreshFailure("refresh_token_reused"));
+    try std.testing.expect(@import("oauth_helpers.zig").permanentRefreshFailure("invalid_refresh_token"));
+    try std.testing.expect(!@import("oauth_helpers.zig").permanentRefreshFailure("server_error"));
+}

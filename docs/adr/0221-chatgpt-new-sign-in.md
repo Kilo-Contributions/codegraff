@@ -99,7 +99,12 @@ process rather than restarting anything.
   issued client id five minutes before expiry (inside the six-minute window)
   or after a 401, under the existing refresh mutex, and never before
   `earliest_refresh_at`: OpenAI answers an early refresh with
-  `invalid_grant`, which spends the refresh token.
+  `invalid_grant`, which spends the refresh token. A lock file beside the
+  record serializes refreshes across graff processes, as OpenAI asks: the
+  loser of a race would present a replaced token (`refresh_token_reused`) and
+  force a new sign-in, so it re-reads the record under the lock and adopts
+  the winner's token. An unusable refresh token is cleared; a network
+  failure keeps everything.
   `graff logout chatgpt-new` revokes the refresh token and keeps the client id and
   host id.
 - **Request shape**: no prompt-cache options or anchor (those stay keyed to

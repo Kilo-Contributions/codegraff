@@ -220,7 +220,8 @@ pub fn readCodexAuth(io: Io, arena: Allocator, codex_home: []const u8) ?StoredCo
 /// retryable. codex-rs caches exactly these for the current auth snapshot so a
 /// dead credential stops costing a round trip per request.
 pub fn permanentRefreshFailure(code: []const u8) bool {
-    const permanent = [_][]const u8{ "invalid_grant", "invalid_client", "refresh_token_expired", "refresh_token_reused", "refresh_token_invalidated" };
+    // OpenAI's SIWC list adds invalid_refresh_token and token_expired (ADR 0221).
+    const permanent = [_][]const u8{ "invalid_grant", "invalid_client", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_reused", "refresh_token_invalidated" };
     for (permanent) |p| if (std.mem.eql(u8, code, p)) return true;
     return false;
 }
