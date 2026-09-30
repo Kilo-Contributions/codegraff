@@ -190,6 +190,9 @@ pub fn build(b: *std.Build) void {
     const acp_background_child_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-background-subagent.py" });
     acp_background_child_test.addArtifactArg(exe);
     test_step.dependOn(&acp_background_child_test.step);
+    const repl_background_wait_test = b.addSystemCommand(&.{ "python3", "scripts/test-repl-background-wait.py" });
+    repl_background_wait_test.addArtifactArg(exe);
+    test_step.dependOn(&repl_background_wait_test.step);
     const workflow_isolation_test = b.addSystemCommand(&.{ "python3", "scripts/test-workflow-isolation.py" });
     workflow_isolation_test.addArtifactArg(exe);
     test_step.dependOn(&workflow_isolation_test.step);
