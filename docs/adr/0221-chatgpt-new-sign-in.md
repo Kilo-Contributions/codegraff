@@ -12,32 +12,63 @@ signs in through the Codex CLI's client and calls the ChatGPT backend; this flow
 gives Graff its own registration and uses the public
 `https://api.openai.com/v1/responses`.
 
-The route accepts less than the metered API. Probed with a plan token:
+The route is a preview with narrower limits than the metered API. OpenAI's
+preview-limits and token-reference pages list them; each limit was probed
+live on 2026-09-30, and all 45 checks behaved as documented:
 
-- HTTP requests must set `store: false` and `stream: true`.
-  `previous_response_id`, `max_output_tokens`, `truncation`, `metadata`,
-  system-role messages, `prompt_cache_options` and `prompt_cache_breakpoint`
-  are rejected.
-- The Responses WebSocket (`wss://api.openai.com/v1/responses`, bearer only)
-  serves every listed model. On the socket `previous_response_id` chains with
-  `store: false`, so a follow-up carries only its new items; a
-  `generate: false` prewarm returns a chainable id; GPT-6 models accept
-  `response.steer` with string or item input, end the original `incomplete`
-  with reason `steered`, and stream a successor.
-- `/responses/compact`, `/responses/input_tokens`, chat completions,
-  embeddings, images, audio and files are not authorized. `GET /v1/models`
+- **Request shape.** HTTP requests set `store: false` and `stream: true`,
+  send `input` as an array, and carry instructions in `instructions` or
+  developer messages; a system-role item is rejected. The route rejects
+  `background`, `conversation`, `max_output_tokens`, `max_tool_calls`,
+  `metadata`, `moderation`, `multi_agent`, `prompt`,
+  `prompt_cache_retention`, `safety_identifier`, `temperature`,
+  `top_logprobs`, `top_p`, `truncation` and `user`, and, found by probing,
+  `prompt_cache_options` and `prompt_cache_breakpoint`. `prompt_cache_key`
+  is accepted.
+- **Conversation state.** HTTP rejects `previous_response_id`. The Responses
+  WebSocket (`wss://api.openai.com/v1/responses`, bearer only) serves every
+  listed model, and there `previous_response_id` chains with `store: false`,
+  but only to a response made on the same connection: a second socket gets
+  ``Invalid `previous_response_id` ``. A `generate: false` prewarm returns a
+  chainable id, and GPT-6 models accept `response.steer` with string or item
+  input, end the original `incomplete` with reason `steered`, and stream a
+  successor.
+- **Tools.** OpenAI asks for function and custom tools grouped in namespaces
+  or supplied as `additional_tools` input items (role `developer`); both
+  work, and flat function and custom tools are accepted too. `web_search`
+  works, subject to model and workspace policy. Image generation and tool
+  search are refused with `subscription_sharing_unsupported_capability`;
+  file search, Code Interpreter, computer use, hosted MCP and
+  `programmatic_tool_calling` are unsupported tool types.
+- **Inputs.** Text, images and files work (an inline PDF was read). Audio
+  input, the Files API and transcription do not.
+- **Other endpoints.** `/responses/compact`, `/responses/input_tokens`, chat
+  completions, embeddings and images are not authorized. `GET /v1/models`
   works but hides newer models unless `client_version` is sent.
-- Function, custom, namespaced and async tools, hosted `web_search`,
-  structured outputs, reasoning summaries and in-stream `context_management`
-  compaction work, and compaction items replay: a later turn answered from
-  the blob alone. Other hosted tools are rejected. `service_tier: "priority"`
-  is accepted and ignored.
-- Prompt-cache reads are intermittent (a repeated prefix sometimes reads back
-  a few thousand tokens); writes are never reported.
-- Plan limits arrive as `subscription_sharing_usage_limit_exceeded` or
-  `subscription_sharing_usage_unavailable`, on a 429 or mid-stream as
+- **Behavior.** Structured outputs, reasoning summaries and in-stream
+  `context_management` compaction work over HTTP and the socket. The
+  threshold counts input items, not instructions or tools, and a later turn
+  answered from the compaction blob alone. Prompt-cache reads are
+  intermittent (a repeated prefix sometimes reads back a few thousand
+  tokens); writes are never reported. `service_tier: "priority"` is accepted
+  and ignored.
+- **Errors.** Plan limits arrive as `subscription_sharing_usage_limit_exceeded`
+  or `subscription_sharing_usage_unavailable`, on a 429 or mid-stream as
   `response.failed`. An expired access token is a 401 with
-  `{"detail":{"error_code":"invalid_token"}}`.
+  `{"detail":{"error_code":"invalid_token"}}`. A rejected field is a 400
+  whose `detail` names it.
+- **Tokens.** The access token is a one-hour RS256 JWT (`aud`
+  `https://api.openai.com/v1`, `iss` `https://auth.openai.com`, the issued
+  `client_id`, the granted scopes, and opaque OpenAI metadata graff never
+  reads). A refresh returns a new access token and a replacement refresh
+  token; refresh tokens last 30 days, renewed by every refresh.
+  `earliest_refresh_at` falls six minutes before expiry, and a refresh
+  before it answers `invalid_grant` and spends the refresh token.
+
+OpenAI also documents running Codex app-server on the same token (stdio to
+app-server, then HTTP/SSE, with `supports_websockets=false`). Graff calls
+the Responses API itself, so it keeps the WebSocket and renews the token in
+process rather than restarting anything.
 
 ## Decision
 
@@ -65,16 +96,19 @@ The route accepts less than the metered API. Probed with a plan token:
   without it is saved but never used for requests.
 - **One record per machine** in `<home>/.openai/credentials/graff-oauth.json`
   (0600, atomic), with the host id beside it. Refresh sends `resource` and the
-  issued client id, near expiry or after a 401, under the existing refresh
-  mutex, and never before `earliest_refresh_at`: OpenAI answers an early
-  refresh with `invalid_grant`, which would otherwise read as a dead token.
+  issued client id five minutes before expiry (inside the six-minute window)
+  or after a 401, under the existing refresh mutex, and never before
+  `earliest_refresh_at`: OpenAI answers an early refresh with
+  `invalid_grant`, which spends the refresh token.
   `graff logout chatgpt-new` revokes the refresh token and keeps the client id and
   host id.
 - **Request shape**: no prompt-cache options or anchor (those stay keyed to
   `openai`), `reasoning.summary: "auto"`, in-stream compaction
   (`manualRoute` returns `.in_stream`), no hosted tool search, async
   `webfetch` on GPT-6 models, and RLM `llm_query` sends a streamed body and
-  reads its SSE text.
+  reads its SSE text. The tool catalog goes flat, as it does to the metered
+  API; if the route starts enforcing namespaces, the fix is to wrap it in
+  one.
 - **Transport**: live turns use the Responses WebSocket like codex, chaining
   `previous_response_id` on the held socket, steering GPT-6 turns, and
   prewarming when `GRAFF_WS_PREWARM` is set. One-shot and quiet turns stay on
@@ -101,4 +135,6 @@ OpenAI requires a separate agreement for it. The live account catalog is a
 follow-up, so the offline model rows can lag a rollout. HTTP requests re-send
 the whole input and caching is intermittent, so one-shot runs pay the most;
 live turns chain on the socket instead. A refresh before
-`earliest_refresh_at` spends the refresh token, so that gate must hold.
+`earliest_refresh_at` spends the refresh token, so that gate must hold. A
+sign-in lives as long as graff refreshes it within 30 days; after a longer
+gap the error says to run `graff login chatgpt-new` again.
