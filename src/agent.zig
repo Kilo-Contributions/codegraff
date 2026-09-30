@@ -183,6 +183,7 @@ pub const Agent = struct {
     tools_openai: []const u8 = schema.tools_openai_sub,
     tools_responses: []const u8 = schema.tools_responses_sub,
     tools_interactions: []const u8 = @import("schema_interactions.zig").tools_interactions_sub,
+    worker_tools: []const u8 = "", // ADR 0227: a spawned child's catalog plus the MCP tools its root loaded (worker_mcp.inherit); empty = the static child catalog
     todos: std.ArrayList(TodoItem) = .empty,
     eval_cmd: ?[]const u8 = null, // --eval: shell command that scores the current output (eval-driven loop)
     eval_target: u8 = 90, // --until: stop when the score reaches this (0-100)
@@ -289,9 +290,7 @@ pub const Agent = struct {
     pub fn toolsJson(self: *const Agent) []const u8 {
         return @import("agent_catalog.zig").toolsJson(self);
     }
-    pub fn ensureRootTools(self: *Agent, kind: Provider.Kind) !void {
-        return @import("agent_catalog.zig").ensureRootTools(self, kind);
-    }
+    pub const ensureRootTools = @import("agent_catalog.zig").ensureRootTools;
     pub const invalidateRootTools = @import("agent_catalog.zig").invalidateRootTools;
     pub noinline fn ensureModelCatalog(self: *Agent, keys: provider_mod.Keys) void {
         if (self.model_catalog) |*catalog|

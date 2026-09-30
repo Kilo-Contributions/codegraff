@@ -28,6 +28,7 @@ fn withExtras(arena: Allocator, base: []const schema.ToolSpec, provider: Provide
 
 pub fn toolsJson(self: *const Agent) []const u8 {
     if (self.sub) {
+        if (self.worker_tools.len != 0) return self.worker_tools; // ADR 0227
         if (main_mod.g_codedbpro_licensed) return slot(self);
         return schema.subToolsJson(self.provider.kind, no_local_tools.enabled);
     }
