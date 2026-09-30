@@ -28,6 +28,7 @@ const RetryPlan = http.RetryPlan;
 const jitter = @import("retry_jitter.zig");
 const util = @import("util.zig");
 const policy = @import("agent_request_policy.zig");
+const quota = @import("agent_request_quota.zig");
 const telemetry = @import("telemetry.zig");
 const main_mod = @import("main.zig");
 
@@ -92,8 +93,9 @@ pub fn afterServerErrorOrParseReject(self: *Agent, etype: []const u8, code: ?[]c
     // A structured terminal code outranks transient wording in the message.
     // In particular, do not retry a model the gateway cannot serve even if
     // its diagnostic also mentions capacity or a request-body parse error,
-    // or a spent ChatGPT plan allowance whose message says "try again later".
-    if (isModelUnavailable(code) or isStructuredOverflow(code) or policy.isPlanUsageLimit(code)) return false;
+    // or a ChatGPT plan code OpenAI says to stop on, such as a spent allowance
+    // whose message says "try again later" (ADR 0221).
+    if (isModelUnavailable(code) or isStructuredOverflow(code) or quota.isPlanStop(code)) return false;
     if (try retryTransientServerError(self, etype, code, msg, server_retries)) return true;
     if (try retryShortGatewayFlake(self, etype, code, msg, server_retries)) return true;
     return retryBodyParseAfterTimeouts(self, msg, state);
@@ -119,8 +121,9 @@ fn isModelUnavailable(code: ?[]const u8) bool {
 /// Do not treat invalid_request / auth / quota as a flake.
 pub fn isShortGatewayFlake(etype: []const u8, code: ?[]const u8, msg: []const u8) bool {
     // Gateway 110-byte follow-up. etype is often invalid_request_error, which
-    // would otherwise hard-fail on the "invalid" needle. Auth/quota still die.
-    if (isModelUnavailable(code) or isStructuredOverflow(code) or policy.isPlanUsageLimit(code)) return false;
+    // would otherwise hard-fail on the "invalid" needle. Auth/quota still die,
+    // and so does every ChatGPT plan code: its 503s have the transient ladder.
+    if (isModelUnavailable(code) or isStructuredOverflow(code) or quota.isPlanCode(code)) return false;
     if (isBodyParseRejection(msg)) return true;
     const hard = [_][]const u8{ "invalid", "authentication", "unauthorized", "insufficient", "quota", "permission", "tool_choice", "not found" };
     for (hard) |n| {
@@ -189,6 +192,9 @@ pub const max_server_retries: usize = 3; // #opencode-parity: bounded retries fo
 /// invalid-input errors are NOT transient and fall through to a hard fail.
 pub fn isTransientServerError(etype: []const u8, code: ?[]const u8, msg: []const u8) bool {
     if (isModelUnavailable(code)) return false;
+    // ChatGPT plan usage or user data temporarily unavailable (503, possibly
+    // mid-stream): keep the credentials and back off like an overload.
+    if (quota.isPlanTransient(code)) return true;
     const needles = [_][]const u8{ "overloaded", "server_error", "server_is_overloaded", "token parsing" };
     for (needles) |n| {
         if (util.indexOfIgnoreCase(etype, n) != null) return true;
@@ -254,7 +260,7 @@ pub fn retryTransientServerError(self: *Agent, etype: []const u8, code: ?[]const
     retries.* += 1;
     self.partial_text.clearRetainingCapacity(); // fresh re-stream after the retry, no concat
     const delay_ms = jitter.ms(self.io, serverRetryDelayMs(msg) orelse RetryPlan.delayMs(true, retries.* - 1)); // 1·2·4s, or the provider's wait; +jitter (#1274)
-    const label = transientServerLabel(msg);
+    const label = if (quota.isPlanTransient(code)) "ChatGPT plan temporarily unavailable" else transientServerLabel(msg);
     try announceTransientRetry(self, label, delay_ms, retries.*);
     if (self.tracer) |tr| tr.note("retry", label);
     if (telemetry.g_telem) |t| t.errorEvent("server_overloaded", if (msg.len > 0) msg else etype);
@@ -313,9 +319,11 @@ test "isShortGatewayFlake: internal/empty api_error retry; invalid/auth/quota do
     try std.testing.expect(!isShortGatewayFlake("api_error", null, "model not found"));
     try std.testing.expect(!isShortGatewayFlake("service_unavailable", "model_unavailable", "Codegraff cannot serve this model right now"));
     try std.testing.expect(!isShortGatewayFlake("service_unavailable", "model_unavailable", "Malformed JSON in request body"));
-    // A spent or unavailable ChatGPT plan allowance says "try again later"; it is not a flake.
+    // A ChatGPT plan code is never a flake, even when it says "try again later":
+    // its 503s ride the transient ladder and the rest stop.
     try std.testing.expect(!isShortGatewayFlake("", "subscription_sharing_usage_unavailable", "Usage is temporarily unavailable"));
     try std.testing.expect(!isShortGatewayFlake("", "subscription_sharing_usage_limit_exceeded", "Usage limit reached. Try again later."));
+    try std.testing.expect(!isShortGatewayFlake("api_error", "subscription_sharing_user_not_eligible", "Something went wrong"));
     try std.testing.expect(isShortGatewayFlake("invalid_request_error", null, "Body must be valid JSON"));
     try std.testing.expect(isShortGatewayFlake("api_error", null, "Malformed JSON in request body"));
     try std.testing.expect(!isShortGatewayFlake("invalid_request_error", null, "invalid prompt"));
@@ -342,6 +350,10 @@ test "isTransientServerError (#opencode-parity): overload/server_error retry; qu
     try std.testing.expect(!isTransientServerError("service_unavailable", "model_unavailable", "server overloaded; retry after 3 seconds"));
     // a bare "Internal Server Error" stays on the shorter gateway-flake ladder
     try std.testing.expect(!isTransientServerError("api_error", null, "Internal Server Error"));
+    // ChatGPT plan 503s back off like an overload (OpenAI's recovery table).
+    try std.testing.expect(isTransientServerError("", "subscription_sharing_usage_unavailable", "Usage cannot be checked."));
+    try std.testing.expect(isTransientServerError("", "subscription_sharing_user_unavailable", "User cannot be loaded."));
+    try std.testing.expect(!isTransientServerError("", "subscription_sharing_usage_limit_exceeded", "Usage limit reached."));
 }
 
 test "ADR 0148 (reverses #1019): token-parse 500 rides the transient server ladder, not overflow" {

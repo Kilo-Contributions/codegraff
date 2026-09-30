@@ -453,7 +453,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     // was terminal on this path: the session, and every
                     // auto-compaction it triggered, 401'd forever even after a
                     // successful /login.
-                    if (retryAfterAuthRefresh(self, msg, &auth_refreshed)) {
+                    if (retryAfterAuthRefresh(self, failure.authText(), &auth_refreshed)) {
                         // PR #195: a mid-turn resend must re-anchor — the chained
                         // WS meter desyncs otherwise — and the held socket was
                         // dialed with the stale bearer besides.

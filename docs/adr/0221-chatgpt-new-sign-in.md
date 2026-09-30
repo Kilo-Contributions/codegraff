@@ -52,11 +52,15 @@ live on 2026-09-30, and all 45 checks behaved as documented:
   intermittent (a repeated prefix sometimes reads back a few thousand
   tokens); writes are never reported. `service_tier: "priority"` is accepted
   and ignored.
-- **Errors.** Plan limits arrive as `subscription_sharing_usage_limit_exceeded`
-  or `subscription_sharing_usage_unavailable`, on a 429 or mid-stream as
-  `response.failed`. An expired access token is a 401 with
-  `{"detail":{"error_code":"invalid_token"}}`. A rejected field is a 400
-  whose `detail` names it.
+- **Errors.** OpenAI's recovery table for plan errors:
+  `subscription_sharing_usage_limit_exceeded` (429; the allowance is spent
+  until it resets), `…_usage_unavailable` and `…_user_unavailable` (503; retry
+  with bounded backoff), `…_user_not_eligible` and `…_route_not_supported`
+  (403), `…_unsupported_capability` (400), and `…_invalid_user` (401; sign in
+  again). Any of them can also arrive mid-stream as `response.failed`, and
+  OpenAI never moves the request to another billing path. An expired access
+  token is a 401 with `{"detail":{"error_code":"invalid_token"}}`. A rejected
+  field is a 400 whose `detail` names it.
 - **Tokens.** The access token is a one-hour RS256 JWT (`aud`
   `https://api.openai.com/v1`, `iss` `https://auth.openai.com`, the issued
   `client_id`, the granted scopes, and opaque OpenAI metadata graff never
@@ -119,10 +123,14 @@ process rather than restarting anything.
   prewarming when `GRAFF_WS_PREWARM` is set. One-shot and quiet turns stay on
   HTTP, which never sends `previous_response_id`; a socket failure falls back
   to it. A chat turn closes the socket it opened.
-- **Errors**: plan-usage codes fail fast, on a 429 or mid-stream, with a link
-  to ChatGPT's usage settings. They are never retried as a flake and never
-  fall back to another credential. `invalid_token` is an auth error: one
-  refresh and retry, then the error says to sign in again.
+- **Errors** follow that table. A spent allowance fails fast, on a 429 or
+  mid-stream, with a link to ChatGPT's usage settings, and never falls back
+  to another credential. The two 503s take the overload ladder (three
+  retries, 1·2·4 s) and keep the credentials. Every other plan code, including
+  one graff does not know yet, stops the turn; no plan code is retried as a
+  gateway flake. `invalid_token` and `subscription_sharing_invalid_user` are
+  auth errors: one refresh and retry (never before `earliest_refresh_at`),
+  then the error says to sign in again.
 - **Compaction**: the in-stream blob carries the prompts it pruned, so a
   history holding a blob counts as conversation state and is saved.
 - **The callback page** follows codegraff.com's design, embeds its images so it

@@ -12,6 +12,13 @@ pub const ResponsesFailure = struct {
     message: []const u8,
     code: ?[]const u8 = null,
     request_id: ?[]const u8 = null,
+
+    /// The text to test for an auth failure. The ChatGPT plan route's
+    /// subscription_sharing_invalid_user 401 names it only in the code.
+    pub fn authText(f: ResponsesFailure) []const u8 {
+        const c = f.code orelse return f.message;
+        return if (policy.isAuthError(c)) c else f.message;
+    }
 };
 
 pub const ResponsesResult = union(enum) { ok: std.json.ObjectMap, err: ResponsesFailure };
@@ -130,16 +137,26 @@ pub fn failureDiagnostic(allocator: std.mem.Allocator, provider: []const u8, fai
     // A spent ChatGPT plan allowance, often mid-stream (ADR 0221).
     if (policy.isPlanUsageLimit(failure.code)) try w.writeAll(" \xe2\x80\x94 " ++ @import("oauth_chatgpt.zig").usage_hint);
     // Reached only after the one refresh-and-retry could not help.
-    if (std.mem.eql(u8, provider, "chatgpt-new") and policy.isAuthError(failure.message)) try w.writeAll(" \xe2\x80\x94 sign in again with `graff login chatgpt-new`");
+    if (std.mem.eql(u8, provider, "chatgpt-new") and policy.isAuthError(failure.authText())) try w.writeAll(" \xe2\x80\x94 sign in again with `graff login chatgpt-new`");
     return allocator.dupe(u8, w.buffered());
 }
 
-test "failureDiagnostic points a spent ChatGPT plan at its usage page" {
+test "failureDiagnostic points a spent ChatGPT plan at its usage page, a rejected user at sign-in" {
     const a = std.testing.allocator;
     const d = try failureDiagnostic(a, "chatgpt-new", .{ .message = "Usage limit reached.", .code = "subscription_sharing_usage_limit_exceeded" });
     defer a.free(d);
     try std.testing.expect(std.mem.startsWith(u8, d, "chatgpt-new api error [subscription_sharing_usage_limit_exceeded]: Usage limit reached."));
     try std.testing.expect(std.mem.endsWith(u8, d, "https://chatgpt.com/settings/usage"));
+
+    // The route's other 401 names the failure only in its code.
+    const user: ResponsesFailure = .{ .message = "User cannot be verified.", .code = "subscription_sharing_invalid_user" };
+    try std.testing.expectEqualStrings("subscription_sharing_invalid_user", user.authText());
+    const signed_out = try failureDiagnostic(a, "chatgpt-new", user);
+    defer a.free(signed_out);
+    try std.testing.expect(std.mem.endsWith(u8, signed_out, "sign in again with `graff login chatgpt-new`"));
+    // A message that already reads as auth keeps it; a plan limit is no sign-in.
+    try std.testing.expectEqualStrings("Unauthorized", (ResponsesFailure{ .message = "Unauthorized", .code = "server_error" }).authText());
+    try std.testing.expectEqualStrings("Usage limit reached.", (ResponsesFailure{ .message = "Usage limit reached.", .code = "subscription_sharing_usage_limit_exceeded" }).authText());
 }
 
 fn writeDiagnosticField(w: *std.Io.Writer, raw: []const u8, max: usize) !void {

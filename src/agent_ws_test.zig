@@ -84,7 +84,7 @@ test "the codex .responses arm refreshes auth and re-anchors before resending (#
 
     try std.testing.expect(std.mem.indexOf(u8, arm, "responses.failureDiagnostic") != null and std.mem.indexOf(u8, arm, "resp_body[0..@min(resp_body.len, 600)]") == null);
 
-    const call = std.mem.indexOf(u8, arm, "retryAfterAuthRefresh(self, msg, &auth_refreshed)") orelse
+    const call = std.mem.indexOf(u8, arm, "retryAfterAuthRefresh(self, failure.authText(), &auth_refreshed)") orelse
         return error.ResponsesPathHasNoAuthRecovery;
     const after = arm[call..];
     const reanchor = std.mem.indexOf(u8, after, "closeCodexWs()") orelse return error.RetryDoesNotReanchor;
