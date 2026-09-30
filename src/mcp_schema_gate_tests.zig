@@ -419,7 +419,8 @@ test "mixed native MCP loads preserve earlier emitted tool entries" {
     const loaded = try gate.loadInto(a, fat, load);
     try testing.expectEqual(@as(usize, 1), loaded.loaded);
     const routes = [_]struct { id: []const u8, kind: @import("provider.zig").Provider.Kind, model: []const u8 }{
-        .{ .id = "codegraff", .kind = .openai, .model = "mimo-v2.5" },
+        // MiMo sends the loaded tail as a system message instead (additional_tools_tests.zig).
+        .{ .id = "deepseek", .kind = .openai, .model = "deepseek-v4-pro" },
         .{ .id = "xai", .kind = .responses, .model = "grok-4.6" },
         .{ .id = "codex", .kind = .responses, .model = "gpt-6-sol" },
     };
