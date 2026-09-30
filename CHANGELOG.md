@@ -10,6 +10,46 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.11
+
+### Prompt cache
+
+- With a ChatGPT account, the codex prompt cache is partitioned by account instead of by repo. The system prompt and tools carry no cwd, so the first request in a new repo reads the prefix another repo warmed. Children keep their role lanes, and other providers keep the project key (ADR 0223). (#1431)
+- A tool loaded mid-session is announced in an item instead of growing `tools`, so the cached prefix survives the load: an `additional_tools` item on the Codex and OpenAI routes, and a system or user message on the chat-completions models that take one. (#1429)
+- Six rarely used native tools load on demand: `render_html`, `agent_message`, `install_agent_tool`, `read_tool_result`, `subagent_resume` and `schedule_task`. They stay listed by `load_tool_schemas`, and a confident call still runs them (ADR 0224). (#1432)
+
+### MCP
+
+- Every MCP load, search and select result says how large list results are slimmed (identity fields; a comment list becomes `{n, latest_author}`), so a fresh project no longer codes against fields it will never see (ADR 0225). (#1433)
+- A direct call's slimmed result keeps the full payload as a tool-result handle and names it, so `read_tool_result` reads any dropped field. Inside an rlm script, binds stay plain slim JSON. (#1433)
+- The first request carries every MCP server that is ready, and loaded schemas outlive the arena that loaded them. (#1429)
+
+### GPT-6 on the Codex WebSocket
+
+- A follow-up typed while a GPT-6 reply streams is sent as `response.steer` instead of cutting the stream and resending the turn. A refused steer waits for the next turn, and the root turn leaves server compaction off while well below its threshold, because the backend will not steer those requests (ADR 0222). A queued follow-up no longer crashes when it is freed. (#1427)
+
+### Sign-in
+
+- `graff login chatgpt`, `openai`, `gpt` and `oai` are the codex login on the command line, as they already were for `/login`, and an unknown name is refused with the valid ones. (#1428)
+- Opt-in `chatgpt-new` provider: the ChatGPT plan through the sign-in for open-source apps, with WebSocket turns, chaining, steering and async tools (ADR 0221). The route refuses refresh-token renewals, so its sign-in lasts about an hour (#1422). Codex stays the ChatGPT login. (#1429)
+
+### rlm
+
+- rlm scripts are call-only, not Python, and the tool says so. A bound name passes its text as an argument, `write_file` takes `(path, content)` so a script can save a result for the shell, and `shell("…")` passes its argument as `command` instead of being refused. (#1430)
+
+### Scripted repl
+
+- A scripted `graff repl` composes each turn on the base system prompt; the constraint block was sent twice. (#1434)
+- A scripted `graff repl` waits for the background work its turn started instead of exiting at end of input with a subagent still running (ADR 0215). (#1435)
+
+### Sessions
+
+- A session holding only a compaction blob still saves, and a chat turn closes the Responses socket it opened. (#1429)
+
+### Evals
+
+- graff-evals gains a Codex app-server arm, per-call usage traces, and `run.py --interleave` for A/B runs that meet the same backend conditions. (#1436)
+
 ## v0.0.302.10
 
 ### Tool calls
