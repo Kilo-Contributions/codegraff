@@ -102,7 +102,9 @@ pub fn runReplCommand(gpa: Allocator, io: Io, environ_map: anytype, root: *agent
         .registry = root.registry,
         .tracer = root.tracer,
         .run_budget = root.run_budget,
-        .sys_normal = root.sys_normal,
+        // The base, as in tui_launch: each turn's setSystemPrompts composes the
+        // constraint block onto it, so root.sys_normal would stack a second copy.
+        .sys_normal = if (root.sys_base.len > 0) root.sys_base else root.sys_normal,
         .tools_anthropic = root.tools_anthropic,
         .tools_openai = root.tools_openai,
         .tools_responses = root.tools_responses,
