@@ -155,6 +155,12 @@ pub fn oauthPath(arena: Allocator, home: []const u8, provider_dir: []const u8) [
     return std.fmt.allocPrint(arena, "{s}/{s}/credentials/graff-oauth.json", .{ resolveHome(home), provider_dir }) catch "";
 }
 
+/// `<home>/.graff/credentials/<name>` — a login graff owns outright keeps its
+/// record here, beside the rest of graff's per-user state.
+pub fn graffCredentialPath(arena: Allocator, home: []const u8, name: []const u8) []const u8 {
+    return std.fmt.allocPrint(arena, "{s}/.graff/credentials/{s}", .{ resolveHome(home), name }) catch "";
+}
+
 /// Store an access/refresh/expiry triple at `oauthPath`, 0600 inside 0700 dirs.
 pub fn writeOAuth(io: Io, arena: Allocator, home: []const u8, provider_dir: []const u8, access: []const u8, refresh: []const u8, expires_at: i64) !void {
     // createDir is one level, so make <home>/<provider_dir> then its credentials/.

@@ -99,11 +99,18 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     // Root and title requests rendezvous after launch-time CA loading.
     http.waitForClientReady(self.io);
     if (http.takeCaWarmFailure()) if (self.tracer) |tr| tr.note("ca_prewarm_failed", "CA bundle rescan failed; request will use lazy TLS initialization");
-    if (self.registry) |reg| {
-        if (@import("mcp_pages.zig").beforeRequest(reg)) { // joins deferred starts, re-lists changed servers
-            self.invalidateRootTools();
-            try self.ensureRootTools(self.provider.kind);
-        }
+    var tools_now = tools_in;
+    const stale = self.toolsJson();
+    const joined = if (self.registry) |reg| @import("mcp_pages.zig").beforeRequest(reg) else false; // joins deferred starts, re-lists changed servers
+    if (joined or @import("additional_tools.zig").staleCatalog(self)) {
+        self.invalidateRootTools();
+        try self.ensureRootTools(self.provider.kind);
+        // The caller's snapshot is the catalog that just went stale. Send the
+        // rebuilt one, or servers that joined miss this request and change
+        // `tools` on the next, throwing away the prompt cache (ADR 0221).
+        if (tools_now) |t| if (stale.len > 0 and t.ptr == stale.ptr) {
+            tools_now = self.toolsJson();
+        };
     }
     var budget_permit: ?run_budget_mod.Permit = null;
     if (self.run_budget) |budget| {
@@ -124,7 +131,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     // so the model lands a text answer now instead of asking for a tool the
     // budget can never pay for — which is how the audit smoke died narrating.
     // compaction/title requests pass tools=null already and skip this whole.
-    var tools = try @import("jev_tool.zig").refreshCatalogForRequest(self, tools_in);
+    var tools = try @import("jev_tool.zig").refreshCatalogForRequest(self, tools_now);
     if (self.tracer) |tr| {
         if (tools) |t| if (t.len == 0) tr.note("tools", "empty catalog at request time (#695)");
     }
@@ -157,6 +164,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     // #95: scrub any malformed function_call_output before it hits the wire.
     const message_arena = self.messageMutationAlloc();
     @import("history_wire.zig").prepare(message_arena, self.provider.kind, &self.messages);
+    // ADR 0221: on the ChatGPT plan route loaded tools ride additional_tools items, so `tools` never changes.
+    if (!self.compaction_request and !self.server_compaction_request) @import("additional_tools.zig").sync(self);
     // #193 follow-up: bound any single oversized tool output (an uncapped MCP
     // result, a huge fetch on a small-window model) before send. The responses
     // path already hard-caps output above (normalizeResponsesHistory); this is the
@@ -211,7 +220,10 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
         defer self.gpa.free(body);
         if (!self.sub) {
             const hud = @import("prompt_cache_hud.zig");
-            hud.noteRequest(self.io, self.systemPrompt(), tools orelse "");
+            // Hash what goes out: where loaded tools ride announcements, the tail is not sent (ADR 0221).
+            const at = @import("additional_tools.zig");
+            const sent = if (tools) |t| (if (at.active(self.provider)) at.stripTail(self, self.scratchAlloc(), t) else t) else "";
+            hud.noteRequest(self.io, self.systemPrompt(), sent);
             var aff_buf: [96]u8 = undefined;
             hud.noteAffinity(
                 http_headers.promptCacheKey(self.io, self.label, self, &aff_buf),
@@ -334,7 +346,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                         // with a working credential sitting unused. One-way
                         // and announced — see credential_failover.
                         if (policy.handOffExhaustedPlan(self)) continue;
-                        self.last_api_error = std.fmt.allocPrint(self.arena, "rate limited (429): {s}", .{policy.quota_cap_marker}) catch "rate limited (429): quota exceeded";
+                        const plan_hint = if (std.mem.eql(u8, self.provider.id, "chatgpt-new")) " \xe2\x80\x94 " ++ @import("oauth_chatgpt.zig").usage_hint else "";
+                        self.last_api_error = std.fmt.allocPrint(self.arena, "rate limited (429): {s}{s}", .{ policy.quota_cap_marker, plan_hint }) catch "rate limited (429): quota exceeded";
                         if (telemetry.g_telem) |t| t.errorEvent("quota", self.last_api_error orelse "quota exceeded");
                         if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, 0, body.len, 0, 0, 0, true);
                         return error.ApiError;
@@ -453,7 +466,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     // was terminal on this path: the session, and every
                     // auto-compaction it triggered, 401'd forever even after a
                     // successful /login.
-                    if (retryAfterAuthRefresh(self, msg, &auth_refreshed)) {
+                    if (retryAfterAuthRefresh(self, failure.authText(), &auth_refreshed)) {
                         // PR #195: a mid-turn resend must re-anchor — the chained
                         // WS meter desyncs otherwise — and the held socket was
                         // dialed with the stale bearer besides.

@@ -108,9 +108,30 @@ pub fn listen(server: *Server, a: Allocator) void {
 /// re-list servers whose tools changed. True when the catalog must rebuild.
 pub fn beforeRequest(reg: *mcp.Registry) bool {
     const added = @import("mcp_watch.zig").poll(reg); // servers added mid-session
+    if (!reg.first_request_join_skipped) settle(reg, first_request_budget_ms);
     const joined = @import("mcp_boot.zig").joinBeforeRequest(reg) or added;
     const refreshed = refreshStale(reg);
     return joined or refreshed;
+}
+
+/// How long the first request gives queued starts. A dormant server restored
+/// from cache (mcp_lazy.zig) starts in milliseconds, and merging it on a later
+/// request would change the catalog mid-session and throw away the prompt
+/// cache (ADR 0221). A real handshake takes longer and still joins on a later
+/// request, as ADR 0035 has it.
+const first_request_budget_ms: u32 = 100;
+
+fn settle(reg: *mcp.Registry, budget_ms: u32) void {
+    var waited: u32 = 0;
+    while (waited < budget_ms) : (waited += 5) {
+        reg.mutex.lockUncancelable(reg.io);
+        const busy = for (reg.pending_starts) |t| {
+            if (t.ready) |flag| if (!flag.load(.acquire)) break true;
+        } else false;
+        reg.mutex.unlock(reg.io);
+        if (!busy) return;
+        reg.io.sleep(.fromMilliseconds(5), .awake) catch return;
+    }
 }
 
 /// Re-list every server that announced a tool change. True when the
@@ -133,4 +154,27 @@ pub fn refreshStale(reg: *mcp.Registry) bool {
         changed = true;
     }
     return changed;
+}
+
+test "the first request merges a start that finishes within its budget (ADR 0221)" {
+    const a = std.testing.allocator;
+    const io = std.testing.io;
+    const boot = @import("mcp_boot.zig");
+    var reg = mcp.Registry.empty(a, io);
+    defer reg.deinit();
+    const Task = struct {
+        fn run(task_io: Io, done: *std.atomic.Value(bool)) boot.StartOutcome {
+            defer done.store(true, .release);
+            task_io.sleep(.fromMilliseconds(20), .awake) catch {};
+            return .{};
+        }
+    };
+    const flag = try a.create(std.atomic.Value(bool));
+    flag.* = .init(false);
+    reg.pending_starts = try a.alloc(boot.PendingStart, 1);
+    reg.pending_starts[0] = .{ .future = try io.concurrent(Task.run, .{ io, flag }), .ready = flag };
+    reg.pending_names = try reg.arena().dupe([]const u8, &.{"dormant"});
+    settle(&reg, first_request_budget_ms);
+    try std.testing.expect(boot.joinBeforeRequest(&reg));
+    try std.testing.expectEqual(@as(usize, 0), reg.pending_starts.len);
 }

@@ -318,7 +318,16 @@ pub fn runSubcommand(io: Io, gpa: Allocator, arena: Allocator, init: std.process
     // ~/.codex/auth.json. args.loginTarget owns the names.
     if (flags.login_flag) {
         const home = keys_cli.homeEnv(init.environ_map) orelse std.process.fatal("no HOME/USERPROFILE", .{});
-        if (flags.xai_login) try oauth.xaiLogin(io, gpa, arena, home) else if (flags.kimi_login) try oauth.kimiLogin(io, gpa, arena, home) else if (flags.zai_login) try oauth.zaiLogin(io, gpa, arena, home) else if (flags.codex_login or flags.refresh_flag) try oauth.codexLogin(io, gpa, arena, home, flags.refresh_flag) else try oauth.codegraffLogin(io, gpa, arena, home);
+        if (flags.chatgpt_login) try @import("oauth_chatgpt.zig").login(io, gpa, arena, home) else if (flags.xai_login) try oauth.xaiLogin(io, gpa, arena, home) else if (flags.kimi_login) try oauth.kimiLogin(io, gpa, arena, home) else if (flags.zai_login) try oauth.zaiLogin(io, gpa, arena, home) else if (flags.codex_login or flags.refresh_flag) try oauth.codexLogin(io, gpa, arena, home, flags.refresh_flag) else try oauth.codegraffLogin(io, gpa, arena, home);
+        return true;
+    }
+
+    // `graff logout chatgpt-new`: revoke the plan's refresh token, clear the tokens.
+    if (flags.positionals.items.len > 0 and std.mem.eql(u8, flags.positionals.items[0], "logout")) {
+        const home = keys_cli.homeEnv(init.environ_map) orelse std.process.fatal("no HOME/USERPROFILE", .{});
+        const target = if (flags.positionals.items.len > 1) flags.positionals.items[1] else "";
+        if (!@import("oauth_chatgpt.zig").isLoginName(target)) std.process.fatal("graff logout supports: chatgpt-new", .{});
+        try @import("oauth_chatgpt.zig").logout(io, gpa, arena, home);
         return true;
     }
 
@@ -475,6 +484,12 @@ pub fn runSubcommand(io: Io, gpa: Allocator, arena: Allocator, init: std.process
                 }
             } else if (spec.login == .zai_cli) {
                 if (oauth.loadZaiOAuth(io, gpa, arena, home, false, null)) |tok| {
+                    value.* = tok;
+                    source.* = .login;
+                    continue;
+                }
+            } else if (spec.login == .chatgpt_browser) {
+                if (@import("oauth_chatgpt.zig").loadChatgptOAuth(io, gpa, arena, home, false, null)) |tok| {
                     value.* = tok;
                     source.* = .login;
                     continue;

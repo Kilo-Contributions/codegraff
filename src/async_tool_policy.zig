@@ -9,7 +9,8 @@ pub fn configure(value: ?[]const u8) void {
 
 pub fn enabled(provider: Provider) bool {
     return configured and provider.kind == .responses and
-        (std.mem.eql(u8, provider.id, "openai") or std.mem.eql(u8, provider.id, "codex")) and
+        (std.mem.eql(u8, provider.id, "openai") or std.mem.eql(u8, provider.id, "codex") or
+            std.mem.eql(u8, provider.id, "chatgpt-new")) and
         (std.mem.eql(u8, provider.model, "gpt-6-astra") or std.mem.eql(u8, provider.model, "gpt-6-sol") or std.mem.eql(u8, provider.model, "gpt-6.1-sol"));
 }
 
@@ -51,7 +52,7 @@ test "async tool policy exact route model and off switch" {
     defer configured = saved;
     configure(null);
     var p = fixture();
-    for ([_][]const u8{ "codex", "openai" }) |id| {
+    for ([_][]const u8{ "codex", "openai", "chatgpt-new" }) |id| {
         p.id = id;
         for ([_][]const u8{ "gpt-6-astra", "gpt-6-sol", "gpt-6.1-sol" }) |model| {
             p.model = model;

@@ -274,9 +274,11 @@ pub fn loadedNames() []const []const u8 {
 /// GRAFF_STABLE_CATALOG tail (schema.zig renderRootTools, #476): every tool
 /// whose schema has loaded this session, appended in LOAD ORDER after the
 /// stable catalog head — natives and MCP tools share one admission sequence.
-/// Append-only is the point: a load changes only the tools array's tail
-/// bytes, and the provider's prefix cache (tools serialize before messages)
-/// survives what a mid-array re-insertion would bust.
+/// Append-only keeps the head's bytes, but the tail still changes the tools
+/// array, and tools serialize before every message: on OpenAI's Responses
+/// caching, whose breakpoints sit at message ends, the next request misses.
+/// Codex hides the tail behind hosted tool search (defer_loading); the ChatGPT
+/// plan route moves it into additional_tools input items (additional_tools.zig).
 pub fn renderLoadedTail(s: *std.json.Stringify, kind: @import("provider.zig").Provider.Kind, out: Allocator, mcp_tools: []const @import("mcp.zig").Tool) !void {
     const schema_mod = @import("schema.zig");
     const mcp = @import("mcp.zig");

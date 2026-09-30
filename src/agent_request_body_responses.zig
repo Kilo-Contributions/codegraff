@@ -12,6 +12,7 @@ const codex_chain = @import("codex_chain.zig");
 const server_compact = @import("agent_server_compact.zig");
 const xai_hosted = @import("xai_hosted.zig");
 const codex_tool_search = @import("codex_tool_search.zig");
+const additional_tools = @import("additional_tools.zig");
 
 pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_tool: bool) !void {
     // Responses API (codex / ChatGPT, xAI, and native Codegraff aliases).
@@ -60,7 +61,10 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     try s.endArray();
     if (tools) |t| {
         const payload = blk: {
-            var next = t;
+            // ADR 0221: loaded tools ride additional_tools items here, so the tail
+            // never reaches `tools`. Strip it before the hosted splices below: a
+            // hosted tool_search with nothing deferred left is a 400 (#746).
+            var next = if (additional_tools.active(self.provider)) additional_tools.stripTail(self, self.scratchAlloc(), t) else t;
             if (xai_hosted.active(self.provider.id, self.provider.kind)) {
                 const login = self.provider.source == .login;
                 next = xai_hosted.splice(self.scratchAlloc(), next, login) catch next;
@@ -92,7 +96,7 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     // complete with only reasoning items and zero output text.
     try s.write(if ((self.compaction_request or self.server_compaction_request) and !@import("effort_route.zig").mimoRoute(self.provider.id, self.provider.model)) "low" else @import("effort_route.zig").wireEffort(self.provider.id, self.provider.model, @tagName(self.reasoning)));
     // summary:auto streams reasoning_summary_text.delta (reasoningDelta already parses it); without it silent reasoning emits NO frames — the stall watchdog cannot tell thinking from a dead socket.
-    if (is_codex) {
+    if (is_codex or std.mem.eql(u8, self.provider.id, "chatgpt-new")) {
         try s.objectField("summary");
         try s.write("auto");
     }

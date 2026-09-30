@@ -96,6 +96,7 @@ pub fn preferPlan(
         .kimi_device => oauth.loadKimiOAuth(io, gpa, arena, home, false, null),
         .xai_device => oauth.loadXaiOAuth(io, gpa, arena, home, false, null),
         .zai_cli => oauth.loadZaiOAuth(io, gpa, arena, home, false, null),
+        .chatgpt_browser => @import("oauth_chatgpt.zig").loadChatgptOAuth(io, gpa, arena, home, false, null),
         else => null,
     } orelse return;
     if (value.*) |metered| park(spec.id, metered, source.*);

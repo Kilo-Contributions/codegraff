@@ -234,6 +234,12 @@ test "hasMeaningfulState gates the blank-draft write (#184)" {
     try obj.put(arena, "content", .{ .string = "hi" });
     try root.messages.append(.{ .object = obj });
     try std.testing.expect(session.hasMeaningfulState(&root));
+
+    // In-stream compaction pruned the prompt; the blob carries it.
+    root.messages = (try std.json.parseFromSliceLeaky(Value, arena,
+        \\[{"type":"compaction","encrypted_content":"x"},{"type":"message","role":"assistant","content":[]}]
+    , .{})).array;
+    try std.testing.expect(session.hasMeaningfulState(&root));
 }
 
 // ── #273: the save path itself ────────────────────────────────────────────

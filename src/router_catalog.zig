@@ -171,7 +171,9 @@ pub fn parseModels(arena: Allocator, provider_id: []const u8, data: []const u8) 
     var rows: std.ArrayList(pricing.ModelInfo) = .empty;
     for (items.array.items) |item| {
         if (item != .object) continue;
-        const raw_id = util.strFieldObj(item.object, "id") orelse util.strFieldObj(item.object, "name") orelse continue;
+        const raw_id = util.strFieldObj(item.object, "id") orelse util.strFieldObj(item.object, "name") orelse util.strFieldObj(item.object, "slug") orelse continue;
+        // Codex-shaped lists (the ChatGPT plan's new sign-in) key rows by slug and hide some.
+        if (util.strFieldObj(item.object, "visibility")) |v| if (std.mem.eql(u8, v, "hide")) continue;
         // Google lists "models/gemini-3.8-flash" but answers to the bare id.
         const id = if (std.mem.startsWith(u8, raw_id, "models/")) raw_id["models/".len..] else raw_id;
         if (!validModelId(id)) continue;

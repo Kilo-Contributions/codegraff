@@ -47,11 +47,13 @@ pub fn modelSupports(model: []const u8) bool {
 /// supersedes the reply instead (steer_now), as for models without steering.
 pub var g_unsupported = false;
 
-/// GPT-6 on the routes that implement steering (Platform OpenAI and Codex).
-/// Other sockets serving GPT-6 names supersede the reply instead.
+/// GPT-6 on the routes that implement steering (Platform OpenAI, Codex and
+/// the ChatGPT plan route, ADR 0221). Other sockets serving GPT-6 names
+/// supersede the reply instead.
 pub fn active(provider_id: []const u8, model: []const u8) bool {
     if (g_unsupported or !modelSupports(model)) return false;
-    return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "openai");
+    return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "openai") or
+        std.mem.eql(u8, provider_id, "chatgpt-new");
 }
 
 /// The root's own turn request on a steering route: the requests a typed
@@ -70,9 +72,12 @@ pub fn steers(self: anytype) bool {
 
 /// Who actually serves a Responses WebSocket. Platform OpenAI only for GPT-6
 /// (mid-turn `response.steer`); GPT-5.6 stays HTTP SSE. Codex/xAI/gateway
-/// keep their existing sockets. 426 still latches SSE.
+/// keep their existing sockets. The ChatGPT plan route (ADR 0221) serves one
+/// for every model it lists; its HTTP path refuses previous_response_id, so
+/// the socket is what chains. 426 still latches SSE.
 pub fn providerHasWs(id: []const u8, model: []const u8) bool {
     if (std.mem.eql(u8, id, "codex") or std.mem.eql(u8, id, "xai") or std.mem.eql(u8, id, "codegraff")) return true;
+    if (std.mem.eql(u8, id, "chatgpt-new")) return true;
     return std.mem.eql(u8, id, "openai") and modelSupports(model);
 }
 
@@ -356,6 +361,9 @@ test "providerHasWs: Platform OpenAI GPT-6 only; Codex always" {
     try std.testing.expect(providerHasWs("codex", "gpt-6-astra"));
     try std.testing.expect(providerHasWs("xai", "grok-4.6"));
     try std.testing.expect(providerHasWs("codegraff", "gpt-6-astra"));
+    try std.testing.expect(providerHasWs("chatgpt-new", "gpt-6.1-sol"));
+    try std.testing.expect(providerHasWs("chatgpt-new", "gpt-5.5"));
+    try std.testing.expect(modelSupports("gpt-6.1-sol")); // steering rides the same socket
 }
 
 test "buildSteerFrame is type + previous_response_id + input" {

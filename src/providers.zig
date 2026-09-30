@@ -429,8 +429,8 @@ test "nextFallbackProvider: rotates after the failed provider and skips missing 
         for (provider_specs, 0..) |spec, i| ids[i] = spec.id;
         break :blk ids;
     };
-    const wrapped = nextFallbackProvider(all, "codex", &tried_codex, &allow_all).?;
-    try std.testing.expectEqualStrings("anthropic", wrapped.id);
+    const last = [_][]const u8{provider_specs[provider_specs.len - 1].id}; // rotation wraps past the table end
+    try std.testing.expectEqualStrings(provider_specs[0].id, nextFallbackProvider(all, last[0], &last, &allow_all).?.id);
 
     var values: [provider_specs.len]?[]const u8 = @splat(null);
     for (provider_specs, 0..) |spec, i| {

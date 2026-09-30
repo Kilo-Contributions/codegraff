@@ -44,6 +44,7 @@ pub const Flags = struct {
     kimi_login: bool = false,
     xai_login: bool = false,
     zai_login: bool = false,
+    chatgpt_login: bool = false,
     help_flag: bool = false,
     version_flag: bool = false,
     print_flag: bool = false,
@@ -264,18 +265,19 @@ pub fn parse(init: std.process.Init) !Flags {
         if (flags.login_flag and flags.positionals.items.len > 1) {
             const name = flags.positionals.items[1];
             const target = loginTarget(name) orelse
-                std.process.fatal("unknown login '{s}' — graff login [codegraff|chatgpt|kimi|xai|zai]", .{name});
+                std.process.fatal("unknown login '{s}' — graff login [codegraff|chatgpt|chatgpt-new|kimi|xai|zai]", .{name});
             flags.codex_login = std.mem.eql(u8, target, "codex");
             flags.kimi_login = std.mem.eql(u8, target, "kimi");
             flags.xai_login = std.mem.eql(u8, target, "xai");
             flags.zai_login = std.mem.eql(u8, target, "zai");
+            flags.chatgpt_login = std.mem.eql(u8, target, "chatgpt-new");
         }
     }
 
     // One-shot print mode: `harness -p "prompt"` or a bare positional prompt
     // (`harness "say hi"`). Subcommands (login/key) are not prompts.
     flags.is_subcommand = flags.positionals.items.len > 0 and
-        (std.mem.eql(u8, flags.positionals.items[0], "login") or std.mem.eql(u8, flags.positionals.items[0], "key") or std.mem.eql(u8, flags.positionals.items[0], "mcp") or std.mem.eql(u8, flags.positionals.items[0], "learn") or
+        (std.mem.eql(u8, flags.positionals.items[0], "login") or std.mem.eql(u8, flags.positionals.items[0], "logout") or std.mem.eql(u8, flags.positionals.items[0], "key") or std.mem.eql(u8, flags.positionals.items[0], "mcp") or std.mem.eql(u8, flags.positionals.items[0], "learn") or
             std.mem.eql(u8, flags.positionals.items[0], "serve") or std.mem.eql(u8, flags.positionals.items[0], "update") or std.mem.eql(u8, flags.positionals.items[0], "title") or std.mem.eql(u8, flags.positionals.items[0], "repl") or std.mem.eql(u8, flags.positionals.items[0], "tui") or
             std.mem.eql(u8, flags.positionals.items[0], "worktree") or std.mem.eql(u8, flags.positionals.items[0], "sandboxes") or std.mem.eql(u8, flags.positionals.items[0], "cube") or std.mem.eql(u8, flags.positionals.items[0], "models") or
             std.mem.eql(u8, flags.positionals.items[0], "remote-control") or std.mem.eql(u8, flags.positionals.items[0], "remote") or @import("acp.zig").isAcpSubcommand(flags.positionals.items[0])); // `acp` also arms ACP's stdout discipline (json_mode) — see acp.isAcpSubcommand
@@ -327,6 +329,7 @@ pub fn loginTarget(name: []const u8) ?[]const u8 {
     };
     for (aliases) |pair| if (std.ascii.eqlIgnoreCase(name, pair[0])) return pair[1];
     if (@import("oauth_zai.zig").isLoginName(name)) return "zai";
+    if (@import("oauth_chatgpt.zig").isLoginName(name)) return "chatgpt-new"; // opt-in (ADR 0221)
     return null;
 }
 
@@ -337,6 +340,7 @@ test "loginTarget: chatgpt and codex are one login; unknown names are not logins
     try std.testing.expectEqualStrings("xai", loginTarget("grok").?);
     try std.testing.expectEqualStrings("kimi", loginTarget("kimi").?);
     try std.testing.expectEqualStrings("zai", loginTarget("zai").?);
+    try std.testing.expectEqualStrings("chatgpt-new", loginTarget("chatgpt-new").?);
     try std.testing.expect(loginTarget("chatgptt") == null);
     try std.testing.expect(loginTarget("") == null);
 }
