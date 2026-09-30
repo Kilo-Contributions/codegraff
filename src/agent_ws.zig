@@ -475,6 +475,7 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
     var sig: TokenSignal = .{};
     var text_seen = false;
     var steer_st: @import("agent_ws_steer.zig").Session = .{};
+    defer steer_st.settle(gpa); // a steer the returned body does not carry goes back on the queue
 
     stream: while (true) {
         // Race the frame read against a stall watchdog so a dead ws can't hang
@@ -578,13 +579,13 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
             if (self.tracer) |tr| tr.note("ws", "terminal API error frame");
             break :stream;
         }
-        if (try @import("agent_ws_steer.zig").tick(self, client, fbuf.items, orig_tio != null, &steer_st)) {
+        if (try @import("agent_ws_steer.zig").tick(self, client, fbuf.items, &steer_st, &full.writer, &text_seen)) {
             if (self.tracer) |tr| tr.note("ws", "completed");
             break :stream;
         }
         if (orig_tio != null and escPressed(true)) return error.Interrupted;
-        // GPT-6 steers server-side (tick above); other models supersede the reply.
-        if (!@import("agent_ws_steer.zig").modelSupports(self.provider.model) and @import("steer_now.zig").pending(self)) {
+        // GPT-6 on Codex/OpenAI steers server-side (tick above); anything else supersedes the reply.
+        if (!@import("agent_ws_steer.zig").steers(self) and @import("steer_now.zig").pending(self)) {
             engine_sink.forAgent(self).emit(self.io, .{ .stream_aborted = .steered });
             return error.Steered;
         }

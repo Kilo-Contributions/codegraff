@@ -229,6 +229,9 @@ jobs:
       - name: TUI a follow-up typed mid-reply joins the running turn
         run: python3 scripts/test-tui-steer-mid-reply.py zig-out/bin/graff
 
+      - name: TUI GPT-6 follow-ups steer the running reply (ADR 0222)
+        run: python3 scripts/test-tui-steer-gpt6.py zig-out/bin/graff
+
       - name: PTY peer-channel delivery smoke test (#469)
         run: python3 scripts/test-pty-peer-channel.py zig-out/bin/graff
 

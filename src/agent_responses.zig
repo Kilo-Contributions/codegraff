@@ -38,6 +38,9 @@ pub fn parseResponses(self: *Agent, body: []const u8) !ResponsesResult {
     const result_arena = self.messageMutationAlloc();
     var items = std.json.Array.init(result_arena);
     var usage: ?Value = null;
+    // A steered WS stream (agent_ws_steer) ends a response per steer before the
+    // last; their usage is billed there, while the meter keeps the last one.
+    var steered_usage = std.json.Array.init(result_arena);
     var resp_id: ?[]const u8 = null; // response.id, for previous_response_id delta continuation (#codex-ws)
     var saw_completed = false;
     var saw_incomplete = false;
@@ -60,11 +63,18 @@ pub fn parseResponses(self: *Agent, body: []const u8) !ResponsesResult {
             saw_completed = std.mem.eql(u8, t.string, "response.completed");
             saw_incomplete = std.mem.eql(u8, t.string, "response.incomplete");
             if (v.object.get("response")) |r| if (r == .object) {
-                if (r.object.get("usage")) |u| usage = try util.dupeJsonValue(result_arena, u);
+                if (r.object.get("usage")) |u| {
+                    if (usage) |earlier| try steered_usage.append(earlier);
+                    usage = try util.dupeJsonValue(result_arena, u);
+                }
                 if (r.object.get("id")) |idv| if (idv == .string) {
                     resp_id = try result_arena.dupe(u8, idv.string);
                 };
             };
+        } else if (std.mem.eql(u8, t.string, @import("agent_ws_steer.zig").applied_type)) {
+            // A steer the server applied here: the user's words where the model read them.
+            if (v.object.get("text")) |txt| if (txt == .string)
+                try items.append(try @import("session_wake.zig").message(result_arena, txt.string));
         } else if (std.mem.eql(u8, t.string, "response.failed") or std.mem.eql(u8, t.string, "error")) {
             err_msg = if (errorMessage(v.object)) |m|
                 result_arena.dupe(u8, m) catch "codex stream reported a failure"
@@ -83,6 +93,7 @@ pub fn parseResponses(self: *Agent, body: []const u8) !ResponsesResult {
         var resp: std.json.ObjectMap = .empty;
         try resp.put(result_arena, "output", .{ .array = items });
         if (usage) |u| try resp.put(result_arena, "usage", u);
+        if (steered_usage.items.len > 0) try resp.put(result_arena, "steered_usage", .{ .array = steered_usage });
         if (resp_id) |rid| try resp.put(result_arena, "id", .{ .string = rid });
         // Item-only streams are tolerated for ordinary turns, but are not a
         // safe sole source for a compaction handoff: no terminal completed event

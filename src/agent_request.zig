@@ -416,6 +416,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                 .ok => |obj| {
                     if (!self.compaction_request) self.compact_transport_failures = 0;
                     usage_attempts.completed();
+                    @import("agent_ws_steer.zig").billEnded(self, obj); // the responses a steer ended, before the last
                     self.recordUsageResponses(obj, body.len);
                     try @import("agent_async_tools.zig").join(self);
                     // #414: an empty output whose usage already fills the window
