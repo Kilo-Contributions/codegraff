@@ -41,7 +41,7 @@ pub fn propsFor(self: *const Agent) u64 {
 fn wireTools(self: *const Agent, arena: std.mem.Allocator) []const u8 {
     const additional_tools = @import("additional_tools.zig");
     const tools = self.toolsJson();
-    if (!additional_tools.active(self.provider)) return tools;
+    if (self.sub or !additional_tools.active(self.provider)) return tools;
     return additional_tools.stripTail(self, arena, tools);
 }
 

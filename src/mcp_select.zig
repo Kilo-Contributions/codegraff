@@ -111,6 +111,55 @@ pub fn dispatch(agent: anytype, call: tools_mod.ToolCall) tools_mod.ExecResult {
     return withShapes(agent, mcp_schema_gate.handleLoad(agent, call.input));
 }
 
+/// The load arm: the folded-native half, then the MCP half of the same
+/// request. One call may name folded natives and an MCP server together;
+/// the native answer used to end it, so the server never loaded.
+pub fn loadBoth(agent: anytype, call: tools_mod.ToolCall) tools_mod.ExecResult {
+    const native = (@import("native_fold.zig").handleLoadNative(agent, call.input) catch null) orelse return dispatch(agent, call);
+    const rest = mcpRemainder(agent.arena, call.input) orelse return native;
+    var mcp_call = call;
+    mcp_call.input = rest;
+    const more = dispatch(agent, mcp_call);
+    return .{
+        .text = std.fmt.allocPrint(agent.arena, "{s}\n{s}", .{ native.text, more.text }) catch native.text,
+        .is_error = native.is_error and more.is_error,
+    };
+}
+
+/// What the MCP half still has to do once the folded natives answered:
+/// `server` and `query` as given, and `tools` without the folded names.
+/// Null when nothing is left.
+pub fn mcpRemainder(arena: Allocator, input: Value) ?Value {
+    if (input != .object) return null;
+    var obj: std.json.ObjectMap = .empty;
+    if (input.object.get("server")) |v| obj.put(arena, "server", v) catch return null;
+    if (input.object.get("query")) |v| obj.put(arena, "query", v) catch return null;
+    if (input.object.get("tools")) |list| if (list == .array) {
+        var keep = std.json.Array.init(arena);
+        for (list.array.items) |item| {
+            if (item == .string and @import("native_fold.zig").isFolded(item.string)) continue;
+            keep.append(item) catch return null;
+        }
+        if (keep.items.len > 0) obj.put(arena, "tools", .{ .array = keep }) catch return null;
+    };
+    if (obj.count() == 0) return null;
+    return .{ .object = obj };
+}
+
+test "a load naming folded natives and an MCP server leaves the server for the MCP half" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const mixed = try std.json.parseFromSliceLeaky(Value, a, "{\"tools\":[\"subagent\",\"mcp__linear__list_issues\"],\"server\":\"linear\"}", .{ .allocate = .alloc_always });
+    const rest = mcpRemainder(a, mixed) orelse return error.TestExpectedRemainder;
+    try std.testing.expectEqualStrings("linear", rest.object.get("server").?.string);
+    const left = rest.object.get("tools").?.array.items;
+    try std.testing.expectEqual(@as(usize, 1), left.len);
+    try std.testing.expectEqualStrings("mcp__linear__list_issues", left[0].string);
+    const natives_only = try std.json.parseFromSliceLeaky(Value, a, "{\"tools\":[\"subagent\",\"workflow\"]}", .{ .allocate = .alloc_always });
+    try std.testing.expect(mcpRemainder(a, natives_only) == null);
+}
+
 test "search lists matches and does not enable them" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();

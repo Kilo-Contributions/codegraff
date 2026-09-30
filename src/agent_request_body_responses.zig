@@ -64,7 +64,9 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
             // ADR 0221: loaded tools ride additional_tools items here, so the tail
             // never reaches `tools`. Strip it before the hosted splices below: a
             // hosted tool_search with nothing deferred left is a 400 (#746).
-            var next = if (additional_tools.active(self.provider)) additional_tools.stripTail(self, self.scratchAlloc(), t) else t;
+            // Only the root: a child gets no announcement (additional_tools.sync),
+            // so its own catalog must keep every tool it lists.
+            var next = if (additional_tools.active(self.provider) and !self.sub) additional_tools.stripTail(self, self.scratchAlloc(), t) else t;
             if (xai_hosted.active(self.provider.id, self.provider.kind)) {
                 const login = self.provider.source == .login;
                 next = xai_hosted.splice(self.scratchAlloc(), next, login) catch next;
