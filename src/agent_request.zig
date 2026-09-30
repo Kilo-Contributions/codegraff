@@ -157,6 +157,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     // #95: scrub any malformed function_call_output before it hits the wire.
     const message_arena = self.messageMutationAlloc();
     @import("history_wire.zig").prepare(message_arena, self.provider.kind, &self.messages);
+    // ADR 0221: on the ChatGPT plan route loaded tools ride additional_tools items, so `tools` never changes.
+    if (!self.compaction_request and !self.server_compaction_request) @import("additional_tools.zig").sync(self);
     // #193 follow-up: bound any single oversized tool output (an uncapped MCP
     // result, a huge fetch on a small-window model) before send. The responses
     // path already hard-caps output above (normalizeResponsesHistory); this is the

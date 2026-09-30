@@ -258,7 +258,8 @@ pub fn renderRootTools(
     for (mcp_tools) |m| if (!mcp_schema_gate.omitMcp(m.qualified_name) and !mcp_schema_gate.isDeferred(mcp_tools, m) and !(mcp_schema_gate.g_stable_catalog and mcp_schema_gate.policyDeferred(mcp_tools, m)))
         try writeToolEntry(&s, kind, m.qualified_name, m.description, .{ .value = m.input_schema });
     // GRAFF_STABLE_CATALOG (#476): loaded tools append in LOAD ORDER after the
-    // stable head — loads change only tail bytes, the prefix cache survives.
+    // stable head, so loads change only tail bytes (see renderLoadedTail for
+    // why that alone does not keep an OpenAI cache hit).
     if (mcp_schema_gate.g_stable_catalog) try native_fold.renderLoadedTail(&s, kind, out, mcp_tools);
     try s.endArray();
     return aw.toOwnedSlice();

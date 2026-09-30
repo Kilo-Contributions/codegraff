@@ -12,6 +12,7 @@ const codex_chain = @import("codex_chain.zig");
 const server_compact = @import("agent_server_compact.zig");
 const xai_hosted = @import("xai_hosted.zig");
 const codex_tool_search = @import("codex_tool_search.zig");
+const additional_tools = @import("additional_tools.zig");
 
 pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_tool: bool) !void {
     // Responses API (codex / ChatGPT, xAI, and native Codegraff aliases).
@@ -69,6 +70,8 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
                 next = codex_tool_search.splice(self.scratchAlloc(), next) catch next;
                 next = codex_tool_search.spliceWebSearch(self.scratchAlloc(), next) catch next;
             }
+            // ADR 0221: no hosted tool search here; the loaded tail rides additional_tools items instead.
+            if (additional_tools.active(self.provider.id, self.provider.kind)) next = additional_tools.stripTail(self, self.scratchAlloc(), next);
             break :blk next;
         };
         const async_payload = try @import("async_tool_policy.zig").decorate(self.scratchAlloc(), self.provider, payload, self.async_tools_armed and !self.sub and !self.compaction_request and !self.server_compaction_request);

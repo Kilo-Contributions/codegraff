@@ -133,6 +133,18 @@ process rather than restarting anything.
   reads its SSE text. The tool catalog goes flat, as it does to the metered
   API; if the route starts enforcing namespaces, the fix is to wrap it in
   one.
+- **Deferred tools keep `tools` frozen.** The stable catalog appends each
+  loaded tool to the end of `tools`, but OpenAI renders tools ahead of every
+  message and checks cache breakpoints only at message ends, so each load
+  made the next request miss the cache for the whole conversation. Codex
+  hides that tail behind hosted tool search; this route refuses it. So here
+  the tail never reaches `tools`: before each request, every loaded tool that
+  the history does not carry yet is announced in one developer-role
+  `additional_tools` input item, the mechanism OpenAI's prompt-caching guide
+  recommends (`additional_tools.zig`). An item that compaction prunes is
+  announced again; on any other route the items are removed and the tail
+  carries the tools as before. Before this, the MCP suite hit the cache on
+  12 to 29% of its input on this route against 60 to 65% on Codex.
 - **Transport**: live turns use the Responses WebSocket like codex, chaining
   `previous_response_id` on the held socket, steering GPT-6 turns, and
   prewarming when `GRAFF_WS_PREWARM` is set. One-shot and quiet turns stay on
