@@ -58,7 +58,9 @@ live on 2026-09-30, and all 45 checks behaved as documented:
   with bounded backoff), `…_user_not_eligible` and `…_route_not_supported`
   (403), `…_unsupported_capability` (400), and `…_invalid_user` (401; sign in
   again). Any of them can also arrive mid-stream as `response.failed`, and
-  OpenAI never moves the request to another billing path. An expired access
+  OpenAI never moves the request to another billing path. Some responses
+  still carry older names for the same codes (`subscription_sharing_v2_…`),
+  and a grant that does not cover the request fails with `chatpass_v2_…`. An expired access
   token is a 401 with `{"detail":{"error_code":"invalid_token"}}`. A rejected
   field is a 400 whose `detail` names it.
 - **Tokens.** The access token is a one-hour RS256 JWT (`aud`
@@ -126,9 +128,9 @@ process rather than restarting anything.
 - **Errors** follow that table. A spent allowance fails fast, on a 429 or
   mid-stream, with a link to ChatGPT's usage settings, and never falls back
   to another credential. The two 503s take the overload ladder (three
-  retries, 1·2·4 s) and keep the credentials. Every other plan code, including
-  one graff does not know yet, stops the turn; no plan code is retried as a
-  gateway flake. `invalid_token` and `subscription_sharing_invalid_user` are
+  retries, 1·2·4 s) and keep the credentials. Every other plan code, under
+  either name, a `chatpass_` grant error, or one graff does not know yet,
+  stops the turn; no plan code is retried as a gateway flake. `invalid_token` and `subscription_sharing_invalid_user` are
   auth errors: one refresh and retry (never before `earliest_refresh_at`),
   then the error says to sign in again.
 - **Compaction**: the in-stream blob carries the prompts it pruned, so a

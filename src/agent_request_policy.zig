@@ -19,7 +19,8 @@ pub fn isAuthError(msg: []const u8) bool {
         util.indexOfIgnoreCase(msg, "authentication") != null or
         util.indexOfIgnoreCase(msg, "invalid_api_key") != null or
         util.indexOfIgnoreCase(msg, "invalid_token") != null or // OAuth bearer error (RFC 6750), the ChatGPT plan route's 401
-        util.indexOfIgnoreCase(msg, "subscription_sharing_invalid_user") != null; // the plan route's other 401: sign in again
+        util.indexOfIgnoreCase(msg, "subscription_sharing_invalid_user") != null or // the plan route's other 401: sign in again
+        util.indexOfIgnoreCase(msg, "subscription_sharing_v2_invalid_user") != null; // its older name
 }
 
 test "isAuthError (#148): auth failures only, not credits/rate/other" {
@@ -30,6 +31,7 @@ test "isAuthError (#148): auth failures only, not credits/rate/other" {
     try std.testing.expect(isAuthError("invalid_api_key"));
     try std.testing.expect(isAuthError("invalid_token"));
     try std.testing.expect(isAuthError("subscription_sharing_invalid_user"));
+    try std.testing.expect(isAuthError("subscription_sharing_v2_invalid_user"));
     // NOT auth — must never trigger a refresh loop
     try std.testing.expect(!isAuthError("You have run out of credits or need a Grok subscription."));
     try std.testing.expect(!isAuthError("rate limit exceeded"));
