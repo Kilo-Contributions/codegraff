@@ -66,7 +66,7 @@ def main():
                        GRAFF_VERCEL_URL=f"http://127.0.0.1:{port}/v1/chat/completions",
                        GRAFF_NO_TELEMETRY="1", GRAFF_NO_SMOLIFY="1", GRAFF_BEHAVIOR_UPLOAD="off", NO_COLOR="1")
             proc = subprocess.run([str(binary), "repl", "--yolo", "--old", "--model", "vercel"],
-                                  input=PROMPT + "\n", text=True, capture_output=True,
+                                  input=PROMPT + "\n", text=True, encoding="utf-8", errors="replace", capture_output=True,
                                   cwd=work, env=env, timeout=90)
     finally:
         model.stop()
