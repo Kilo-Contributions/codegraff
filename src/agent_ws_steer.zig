@@ -47,11 +47,13 @@ pub fn modelSupports(model: []const u8) bool {
 /// supersedes the reply instead (steer_now), as for models without steering.
 pub var g_unsupported = false;
 
-/// GPT-6 on the routes that implement steering (Platform OpenAI and Codex).
-/// Other sockets serving GPT-6 names supersede the reply instead.
+/// GPT-6 on the routes that implement steering (Platform OpenAI, Codex and
+/// the ChatGPT plan route, ADR 0221). Other sockets serving GPT-6 names
+/// supersede the reply instead.
 pub fn active(provider_id: []const u8, model: []const u8) bool {
     if (g_unsupported or !modelSupports(model)) return false;
-    return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "openai");
+    return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "openai") or
+        std.mem.eql(u8, provider_id, "chatgpt-new");
 }
 
 /// The root's own turn request on a steering route: the requests a typed

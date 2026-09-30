@@ -304,9 +304,10 @@ test "a stream that dies hands every steer back, in order, ahead of later follow
     try expectQueue(&.{ "first", "second", "typed later" });
 }
 
-test "steering is Codex and Platform OpenAI GPT-6 only; everything else ends on the terminal event" {
+test "steering is GPT-6 on Codex, Platform OpenAI and the ChatGPT plan route; everything else ends on the terminal event" {
     try expect(steer.active("codex", "gpt-6-sol"));
     try expect(steer.active("openai", "gpt-6-astra"));
+    try expect(steer.active("chatgpt-new", "gpt-6.1-sol"));
     try expect(!steer.active("codegraff", "gpt-6-sol"));
     try expect(!steer.active("codex", "gpt-5.6-sol"));
 
