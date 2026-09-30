@@ -55,6 +55,15 @@ pub const folded = [_][]const u8{
     "agent_output",
     "skill",
     "webfetch",
+    // ADR 0224: rare on the root turn loop, measured as a cost win against a
+    // reference harness with pass rate held. A confident call auto-loads, and
+    // the spill marker spells out read_tool_result's arguments.
+    "render_html",
+    "agent_message",
+    "install_agent_tool",
+    "read_tool_result",
+    "subagent_resume",
+    "schedule_task",
     // ADR 0022 / 0140: isFolded is false under --old so the structured-only
     // catalog stays byte-stable. While available, rlm is on the catalog
     // from turn one — no batch-size or compactAt gate.
