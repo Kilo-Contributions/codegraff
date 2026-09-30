@@ -17,6 +17,10 @@ window with refresh tokens that had never been used, one of them 60 seconds
 before the access token expired. So a sign-in lasts one hour, and a task
 still running when the access token expires fails with `invalid_token`.
 
+The three other open-source clients of this flow we found send the same
+request ([Other clients](#other-clients)), so their sign-ins should end after
+an hour too.
+
 ## Request
 
 The request in "Refreshing tokens", field for field:
@@ -74,10 +78,22 @@ Attempts 5 to 7 show the optional fields do not rescue a refused token. They
 reused attempt 4's token, so a first request carrying `ext_agent_host_id` or
 `scope` is still untested.
 
-## Ruled out
+## What we tried
 
-- **Request shape.** It matches the documented request. Two other
-  open-source clients of this flow send the same fields.
+None of these changed the answer.
+
+- **Timing.** Before `earliest_refresh_at` (attempt 1), a minute after it
+  (3), 60 seconds before expiry (4) and after expiry (2 and 8).
+- **Fresh tokens.** Never-used refresh tokens from three separate sign-ins
+  (attempts 1, 3 and 4).
+- **Optional fields.** `ext_agent_host_id`, `scope`, and no `resource`
+  (attempts 5 to 7, with the caveat above).
+- **Two HTTP clients.** graff's own renewal (attempt 3, and again just after
+  attempt 8) and a standalone script (attempts 4 to 8, in
+  [Reproducing it](#reproducing-it)).
+- **Request shape.** It matches the documented request, and the three other
+  open-source clients of this flow send the same fields
+  ([Other clients](#other-clients)).
 - **Endpoint.** It is the `token_endpoint` from
   `https://auth.openai.com/.well-known/openid-configuration`, whose
   `grant_types_supported` lists `refresh_token`. The same endpoint accepts
@@ -92,6 +108,180 @@ reused attempt 4's token, so a first request carrying `ext_agent_host_id` or
 - **Grant.** The granted scopes include `offline_access` and
   `chatgpt.tokens.use.direct`, and the token response included
   `refresh_token` and `earliest_refresh_at`.
+
+## Reproducing it
+
+What we used, in order:
+
+1. **Sign in** with any client below. graff: `graff login chatgpt-new`, which
+   saves the token set with the issued `client_id`, `expires_at` and
+   `earliest_refresh_at` ([ADR 0221](../adr/0221-chatgpt-new-sign-in.md)).
+2. **Stop that client**, so nothing else renews or replays the refresh token.
+3. **Wait for the renewal window**, then send the [curl above](#request) or
+   run the script below. It sends the documented request and, only if that
+   is refused, the three variants with the same token. It prints each status,
+   OpenAI's JSON answer, `x-request-id` and `cf-ray`, and the refresh token
+   only as a fingerprint. A renewal that works is saved back to the record.
+
+```sh
+python3 refresh_repro.py chatgpt-new.json expiry-60   # or window, after-expiry, now
+```
+
+```python
+#!/usr/bin/env python3
+"""Renew a Sign in with ChatGPT token set the documented way, then with variants.
+
+usage: python3 refresh_repro.py RECORD.json [expiry-60 | window | after-expiry | now]
+
+RECORD.json holds client_id, refresh_token, expires_at and earliest_refresh_at
+(Unix seconds), plus ext_agent_host_id and scopes if you have them; graff's
+chatgpt-new.json has all of them. Stop the client that owns the sign-in first.
+The variants go out only if the documented request is refused, with the same
+token. Prints statuses, OpenAI's answers and request ids, and the refresh token
+only as a fingerprint. A renewal that works is saved back to RECORD.json.
+"""
+import hashlib, json, os, sys, time, urllib.error, urllib.parse, urllib.request
+
+URL = "https://auth.openai.com/api/accounts/oauth/token"
+RESOURCE = "https://api.openai.com/v1"
+path, when = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "expiry-60")
+r = json.load(open(path))
+
+
+def fp(s):
+    return hashlib.sha256(s.encode()).hexdigest()[:10] if s else "(empty)"
+
+
+def post(fields):
+    req = urllib.request.Request(URL, data=urllib.parse.urlencode(fields).encode(), headers={
+        "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            return res.status, json.loads(res.read() or b"{}"), res.headers
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        try:
+            return e.code, json.loads(raw), e.headers
+        except ValueError:
+            return e.code, {"unparsed": raw[:200].decode("utf8", "replace")}, e.headers
+
+
+at = {"expiry-60": r["expires_at"] - 60, "window": r["earliest_refresh_at"] + 60,
+      "after-expiry": r["expires_at"] + 30, "now": 0}[when]
+if at > time.time():
+    print(f"waiting {int(at - time.time())}s ({when})", flush=True)
+    time.sleep(at - time.time())
+
+documented = {"grant_type": "refresh_token", "client_id": r["client_id"],
+              "refresh_token": r["refresh_token"], "resource": RESOURCE}
+attempts = [("documented", documented)]
+if r.get("ext_agent_host_id"):
+    attempts.append(("+ ext_agent_host_id", {**documented, "ext_agent_host_id": r["ext_agent_host_id"]}))
+attempts.append(("without resource", {k: v for k, v in documented.items() if k != "resource"}))
+if r.get("scopes"):
+    attempts.append(("+ scope", {**documented, "scope": " ".join(r["scopes"])}))
+
+for label, fields in attempts:
+    now = int(time.time())
+    status, body, headers = post(fields)
+    answer = {k: v for k, v in body.items() if k in ("error", "error_description", "unparsed")}
+    print(f"{label}: {status} {json.dumps(answer)} request_id={headers.get('x-request-id', '')} "
+          f"cf_ray={headers.get('cf-ray', '')} expires_in={r['expires_at'] - now}s "
+          f"since_earliest={now - r['earliest_refresh_at']}s refresh={fp(r['refresh_token'])}", flush=True)
+    if status == 200 and body.get("access_token"):
+        r.update(access_token=body["access_token"], refresh_token=body.get("refresh_token") or r["refresh_token"],
+                 expires_at=now + int(body.get("expires_in", 3600)))
+        if isinstance(body.get("earliest_refresh_at"), (int, float)):
+            r["earliest_refresh_at"] = int(body["earliest_refresh_at"])
+        tmp = path + ".tmp"
+        with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            json.dump(r, f)
+        os.replace(tmp, path)
+        print(f"renewed: refresh {fp(documented['refresh_token'])} -> {fp(r['refresh_token'])}, saved to {path}")
+        break
+```
+
+To watch graff's own renewal instead, keep graff signed in past
+`earliest_refresh_at` and send any request. graff renews 5 minutes before
+expiry, and when OpenAI refuses it keeps the answer in the record as
+`last_refresh_error`.
+
+## Other clients
+
+Four open-source clients ship this flow, graff included. All four send the
+same four fields to the same endpoint and differ only in when they renew. We
+have not run the other three; the snippets are their source at the linked
+commits.
+
+| Client | Renews | When the renewal is refused |
+|---|---|---|
+| graff | 5 minutes before expiry, never before `earliest_refresh_at` | Keeps OpenAI's answer and asks for a new sign-in once the access token expires |
+| T3 Code | 60 seconds before expiry, never before `earliest_refresh_at` | Deletes the connection: "Your ChatGPT connection expired or was disconnected. Sign in again." |
+| pi | 3 minutes before expiry | Throws `OpenAI OAuth token request failed (400): ...` |
+| nolune | 5 minutes before expiry, never before `earliest_refresh_at` while the token works | Ends the sign-in and asks for a new one |
+
+**graff**, [`src/oauth_chatgpt.zig`](../../src/oauth_chatgpt.zig#L474):
+
+```zig
+const body = form(arena, &.{ .{ "grant_type", "refresh_token" }, .{ "client_id", r.client_id }, .{ "refresh_token", r.refresh }, .{ "resource", resource } }) catch return null;
+```
+
+**T3 Code** (pingdotgg/t3code, merged in #14290),
+[`apps/server/src/provider/CodexChatGptAuth.ts`](https://github.com/pingdotgg/t3code/blob/0fcd5f90611451cca842689faea53b5450c022da/apps/server/src/provider/CodexChatGptAuth.ts#L729-L748). On
+`invalid_grant` it removes the connection ([L391-L406](https://github.com/pingdotgg/t3code/blob/0fcd5f90611451cca842689faea53b5450c022da/apps/server/src/provider/CodexChatGptAuth.ts#L391-L406)).
+
+```ts
+const now = yield* Clock.currentTimeMillis;
+if (record.expiresAt - now > 60_000) return record;
+if (record.earliestRefreshAt !== null && record.earliestRefreshAt > now) {
+  if (record.expiresAt > now) return record;
+  // ...
+}
+// ...
+const tokens = yield* exchange(
+  new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: record.clientId,
+    refresh_token: record.refreshToken,
+    resource,
+  }),
+)
+```
+
+**pi** (earendil-works/pi),
+[`packages/ai/src/auth/oauth/openai-chatgpt.ts`](https://github.com/earendil-works/pi/blob/1b347794e2a630e4359f2584f4eea388145d0ddf/packages/ai/src/auth/oauth/openai-chatgpt.ts#L208-L223), with
+`TOKEN_URL` and `RESOURCE` at [L20-L21](https://github.com/earendil-works/pi/blob/1b347794e2a630e4359f2584f4eea388145d0ddf/packages/ai/src/auth/oauth/openai-chatgpt.ts#L20-L21):
+
+```ts
+const token = await requestToken(
+  new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: clientId,
+    refresh_token: credential.refresh,
+    resource: RESOURCE,
+  }),
+  signal,
+);
+```
+
+**nolune** (triangle-int/nolune, merged in #81),
+[`packages/core/src/chatgpt-sign-in.ts`](https://github.com/triangle-int/nolune/blob/d901ecb94a13cd8a623c087ca239f54cb4318ded/packages/core/src/chatgpt-sign-in.ts#L760-L781). Its own test pins
+the same four fields.
+
+```ts
+// OpenAI says when refreshing is useful; until then the token in hand still works.
+if (usable && r.earliestRefreshAt && now < r.earliestRefreshAt) return r.accessToken!;
+// ...
+response = await postForm(endpoints().token, {
+  grant_type: 'refresh_token',
+  client_id: r.clientId,
+  refresh_token: r.refreshToken,
+  resource: API_RESOURCE
+});
+```
+
+opencode's ChatGPT sign-in uses the Codex CLI's client and `/oauth/token`
+without `resource`, so it does not go through this flow.
 
 ## Questions
 
