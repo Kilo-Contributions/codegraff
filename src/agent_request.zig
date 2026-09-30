@@ -100,18 +100,17 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     http.waitForClientReady(self.io);
     if (http.takeCaWarmFailure()) if (self.tracer) |tr| tr.note("ca_prewarm_failed", "CA bundle rescan failed; request will use lazy TLS initialization");
     var tools_now = tools_in;
-    if (self.registry) |reg| {
-        const stale = self.toolsJson();
-        if (@import("mcp_pages.zig").beforeRequest(reg)) { // joins deferred starts, re-lists changed servers
-            self.invalidateRootTools();
-            try self.ensureRootTools(self.provider.kind);
-            // The caller's snapshot is the catalog that just went stale. Send the
-            // rebuilt one, or servers that joined miss this request and change
-            // `tools` on the next, throwing away the prompt cache (ADR 0221).
-            if (tools_now) |t| if (stale.len > 0 and t.ptr == stale.ptr) {
-                tools_now = self.toolsJson();
-            };
-        }
+    const stale = self.toolsJson();
+    const joined = if (self.registry) |reg| @import("mcp_pages.zig").beforeRequest(reg) else false; // joins deferred starts, re-lists changed servers
+    if (joined or @import("additional_tools.zig").staleCatalog(self)) {
+        self.invalidateRootTools();
+        try self.ensureRootTools(self.provider.kind);
+        // The caller's snapshot is the catalog that just went stale. Send the
+        // rebuilt one, or servers that joined miss this request and change
+        // `tools` on the next, throwing away the prompt cache (ADR 0221).
+        if (tools_now) |t| if (stale.len > 0 and t.ptr == stale.ptr) {
+            tools_now = self.toolsJson();
+        };
     }
     var budget_permit: ?run_budget_mod.Permit = null;
     if (self.run_budget) |budget| {

@@ -25,6 +25,12 @@
 //! (session_wake.isNotice). The model calls announced tools with typed
 //! arguments, as it does declared ones.
 //!
+//! Claude through Codegraff loses the whole prompt to a changed `tools` (a
+//! probe that appended one tool went from a full hit to none), and a system
+//! message there re-bills the conversation, so its announcement is user-role
+//! too. It calls announced tools but, like MiMo, returns their values as
+//! strings, so retypeArgs runs on every chat route here.
+//!
 //! So on these routes the tail never reaches `tools`, and before each request
 //! `sync` announces every loaded tool that no announcement in the history
 //! carries yet: once per tool, and again only if compaction pruned it.
@@ -49,16 +55,25 @@ pub fn active(p: Provider) bool {
     if (!mcp_schema_gate.g_stable_catalog) return false;
     return switch (p.kind) {
         .responses => std.mem.eql(u8, p.id, "chatgpt-new"),
-        .openai => @import("effort_route.zig").mimoRoute(p.id, p.model) or deepseekRoute(p),
+        .openai => @import("effort_route.zig").mimoRoute(p.id, p.model) or deepseekRoute(p) or claudeRoute(p),
         .anthropic, .interactions => false,
     };
 }
 
+/// The model id without a family prefix (`vendor/model`).
+fn modelName(model: []const u8) []const u8 {
+    return if (std.mem.lastIndexOfScalar(u8, model, '/')) |slash| model[slash + 1 ..] else model;
+}
+
 /// DeepSeek models, direct or through Codegraff.
 fn deepseekRoute(p: Provider) bool {
-    const name = if (std.mem.lastIndexOfScalar(u8, p.model, '/')) |slash| p.model[slash + 1 ..] else p.model;
     return (std.mem.eql(u8, p.id, "deepseek") or std.mem.eql(u8, p.id, "codegraff")) and
-        std.ascii.startsWithIgnoreCase(name, "deepseek-");
+        std.ascii.startsWithIgnoreCase(modelName(p.model), "deepseek-");
+}
+
+/// Claude models through Codegraff's chat wire.
+fn claudeRoute(p: Provider) bool {
+    return std.mem.eql(u8, p.id, "codegraff") and std.ascii.startsWithIgnoreCase(modelName(p.model), "claude-");
 }
 
 /// The loaded tail as tool entries for the agent's wire: exactly what the
@@ -108,6 +123,21 @@ fn announced(arena: Allocator, messages: []const Value, name: []const u8) bool {
     return false;
 }
 
+/// A direct call to a deferred tool loads it without a catalog rebuild
+/// (native_fold.gateExec, mcp_schema_gate.autoLoad). The announcement renders
+/// the tail itself, but retypeArgs reads the catalog, so the root rebuilds it
+/// when a loaded tool is missing. `tools` on the wire stays the same.
+pub fn staleCatalog(self: *Agent) bool {
+    if (self.sub or !active(self.provider)) return false;
+    const arena = self.scratchAlloc();
+    const catalog = self.toolsJson();
+    for (tailEntries(self, arena) catch return false) |t| {
+        const needle = std.fmt.allocPrint(arena, "\"name\":\"{s}\"", .{toolName(t)}) catch return false;
+        if (std.mem.indexOf(u8, catalog, needle) == null) return true;
+    }
+    return false;
+}
+
 fn inTail(tail: []const Value, name: []const u8) bool {
     for (tail) |t| if (std.mem.eql(u8, toolName(t), name)) return true;
     return false;
@@ -130,7 +160,7 @@ pub fn sync(self: *Agent) void {
 
 /// A developer-role `additional_tools` item on Responses. The chat wire has no
 /// such item, so there it is a message with one definition per line: system
-/// on MiMo, user on DeepSeek.
+/// on MiMo, user elsewhere.
 fn announcement(arena: Allocator, p: Provider, tools: std.json.Array) !Value {
     var item: std.json.ObjectMap = .empty;
     if (p.kind == .responses) {
@@ -143,7 +173,7 @@ fn announcement(arena: Allocator, p: Provider, tools: std.json.Array) !Value {
     try aw.writer.writeAll(chat_header);
     for (tools.items) |t| try aw.writer.print("{s}\n", .{try std.json.Stringify.valueAlloc(arena, t, .{})});
     try aw.writer.writeAll("</tools>");
-    try item.put(arena, "role", .{ .string = if (deepseekRoute(p)) "user" else "system" });
+    try item.put(arena, "role", .{ .string = if (@import("effort_route.zig").mimoRoute(p.id, p.model)) "system" else "user" });
     try item.put(arena, "content", .{ .string = aw.writer.buffered() });
     try item.put(arena, origin_key, .{ .string = item_type });
     return .{ .object = item };

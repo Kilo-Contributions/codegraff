@@ -305,10 +305,11 @@ pub fn repairCalls(arena: Allocator, scratch: Allocator, message: *Value, tools_
     return true;
 }
 
-/// MiMo's parser types a call's arguments from the declared `tools`. A tool
-/// announced in a message instead (additional_tools.zig) comes back with every
-/// value a string: "5" for an integer, "[\"a\"]" for an array. Re-type each
-/// string whose schema in `tools_raw` does not allow one; true when a call changed.
+/// MiMo's and Claude's parsers type a call's arguments from the declared
+/// `tools`. A tool announced in a message instead (additional_tools.zig) comes
+/// back with every value a string: "5" for an integer, "[\"a\"]" for an array.
+/// Re-type each string whose schema in `tools_raw` does not allow one; true
+/// when a call changed.
 pub fn retypeArgs(arena: Allocator, scratch: Allocator, message: *Value, tools_raw: []const u8) !bool {
     if (message.* != .object) return false;
     const tool_calls = message.object.getPtr("tool_calls") orelse return false;

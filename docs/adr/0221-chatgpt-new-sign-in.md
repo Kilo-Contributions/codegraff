@@ -169,6 +169,19 @@ process rather than restarting anything.
   transcript leaves it out. A wire change drops it (`history_translate`).
   Hot-context updates still ride a system message on chat wires, so on
   DeepSeek each project-instructions change costs one miss.
+- **Claude on the Codegraff route announces loaded tools in a user message
+  too.** There a changed `tools` cost the whole cached prompt: a probe that
+  appended one tool read nothing back, and a system message re-billed the
+  conversation. Claude calls an announced tool, but like MiMo it returns the
+  values as strings, so `retypeArgs` now runs on every announcing chat route.
+  It reads the root catalog, and a direct call to a deferred tool loads it
+  without a rebuild (`native_fold.gateExec`, `mcp_schema_gate.autoLoad`):
+  before a request the root now rebuilds the catalog when a loaded tool is
+  missing from it (`additional_tools.staleCatalog`), which leaves the wire
+  unchanged. Claude on Anthropic's own API still appends to `tools`. Its fix
+  is a `tool_addition` block in a mid-conversation system message (beta
+  `inline-tools-2026-09-15`), which declares the tool, so its arguments
+  come back typed, and it needs a live check first.
 - **The first request carries every MCP server that is ready.** `-p` starts
   MCP in the background and never waits out a handshake (ADR 0035). A server
   restored from cache was ready before the first request, but that request

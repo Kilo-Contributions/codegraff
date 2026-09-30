@@ -172,7 +172,7 @@ test "MiMo chat: a tool load leaves tools byte-identical and adds one system ann
     try std.testing.expectEqual(@as(usize, 0), items(agent.messages.items));
 }
 
-test "DeepSeek chat: a tool load leaves tools byte-identical and adds one user announcement that is not a prompt" {
+test "DeepSeek and Claude chat: a tool load leaves tools byte-identical and adds one user announcement that is not a prompt" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
@@ -186,8 +186,12 @@ test "DeepSeek chat: a tool load leaves tools byte-identical and adds one user a
     native_fold.enabled = true;
     mcp_schema_gate.g_stable_catalog = true;
 
-    // DeepSeek's own API and the gateway, Pro and Flash.
-    for ([_][2][]const u8{ .{ "deepseek", "deepseek-v4-pro" }, .{ "codegraff", "deepseek-v4-flash" } }) |route| {
+    // Claude keeps its tail in `tools` on its own API and elsewhere until each is checked.
+    try std.testing.expect(!additional_tools.active((try testAgentFor(a, "anthropic", .anthropic, "claude-sonnet-5-5")).provider));
+    try std.testing.expect(!additional_tools.active((try testAgentFor(a, "openrouter", .openai, "anthropic/claude-sonnet-5.5")).provider));
+
+    // DeepSeek's own API and the gateway, Pro and Flash, and Claude on the gateway.
+    for ([_][2][]const u8{ .{ "deepseek", "deepseek-v4-pro" }, .{ "codegraff", "deepseek-v4-flash" }, .{ "codegraff", "claude-sonnet-5-5" } }) |route| {
         native_fold.clearLoadedSession();
         var agent = try testAgentFor(a, route[0], .openai, route[1]);
         try std.testing.expect(additional_tools.active(agent.provider));
@@ -202,7 +206,7 @@ test "DeepSeek chat: a tool load leaves tools byte-identical and adds one user a
         additional_tools.sync(&agent);
         try std.testing.expectEqual(@as(usize, 1), items(agent.messages.items));
         const note = agent.messages.items[agent.messages.items.len - 1];
-        // User-role: DeepSeek moves system messages up into the system prompt.
+        // User-role: on V4 Pro and the Claude route a system message would re-bill the conversation.
         try std.testing.expectEqualStrings("user", note.object.get("role").?.string);
         try std.testing.expect(std.mem.indexOf(u8, note.object.get("content").?.string, "\"name\":\"workflow\"") != null);
         // Harness text, not something the human typed.
@@ -221,4 +225,42 @@ test "DeepSeek chat: a tool load leaves tools byte-identical and adds one user a
         try std.testing.expectEqual(@as(usize, 0), items(msgs.items));
         for (msgs.items) |m| try std.testing.expect(std.mem.indexOf(u8, try std.json.Stringify.valueAlloc(a, m, .{}), "workflow") == null);
     }
+}
+
+test "Claude chat: a direct call's load reaches the catalog, so its string arguments get their types" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const saved_fold = native_fold.enabled;
+    const saved_stable = mcp_schema_gate.g_stable_catalog;
+    defer {
+        native_fold.enabled = saved_fold;
+        mcp_schema_gate.g_stable_catalog = saved_stable;
+        native_fold.clearLoadedSession();
+    }
+    native_fold.enabled = true;
+    mcp_schema_gate.g_stable_catalog = true;
+    native_fold.clearLoadedSession();
+
+    var agent = try testAgentFor(a, "codegraff", .openai, "claude-sonnet-5-5");
+    agent.invalidateRootTools();
+    try agent.ensureRootTools(.openai);
+    try std.testing.expect(!additional_tools.staleCatalog(&agent));
+
+    // The model calls agent_output without loading it: the call loads it, the catalog is not rebuilt.
+    try std.testing.expect(native_fold.gateExec(a, "agent_output", false) == null);
+    try std.testing.expect(additional_tools.staleCatalog(&agent));
+    agent.invalidateRootTools();
+    try agent.ensureRootTools(.openai);
+    try std.testing.expect(!additional_tools.staleCatalog(&agent));
+
+    // Claude sent an undeclared tool's values as strings; the rebuilt catalog types them.
+    var message = try std.json.parseFromSliceLeaky(std.json.Value, a,
+        \\{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"agent_output","arguments":"{\"id\": \"1\", \"wait_ms\": \"300000\"}"}}]}
+    , .{});
+    try std.testing.expect(try @import("tool_call_repair.zig").retypeArgs(a, a, &message, agent.toolsJson()));
+    const text = message.object.get("tool_calls").?.array.items[0].object.get("function").?.object.get("arguments").?.string;
+    const args = try std.json.parseFromSliceLeaky(std.json.Value, a, text, .{});
+    try std.testing.expectEqual(@as(i64, 1), args.object.get("id").?.integer);
+    try std.testing.expectEqual(@as(i64, 300000), args.object.get("wait_ms").?.integer);
 }
