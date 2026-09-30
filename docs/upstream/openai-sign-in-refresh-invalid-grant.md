@@ -12,10 +12,10 @@
 Registration, sign-in, the authorization-code exchange and Responses
 requests all work. Refreshing does not: every `grant_type=refresh_token`
 request so far has returned HTTP 400 `{"error": "invalid_grant"}` with no
-`error_description`. That includes a request sent after
-`earliest_refresh_at` with a refresh token that had never been used. So a
-sign-in lasts one hour, and a task still running when the access token
-expires fails with `invalid_token`.
+`error_description`. That includes two requests sent inside the renewal
+window with refresh tokens that had never been used, one of them 60 seconds
+before the access token expired. So a sign-in lasts one hour, and a task
+still running when the access token expires fails with `invalid_token`.
 
 ## Request
 
@@ -56,14 +56,23 @@ HTTP/1.1 400 Bad Request
 
 ## Attempts
 
-| # | Sent | Refresh token | Result |
-|---|---|---|---|
-| 1 | About 50 minutes before `earliest_refresh_at` | Unused | 400 `invalid_grant` (expected, too early) |
-| 2 | About 8 minutes after `earliest_refresh_at`, just after the access token expired | The token from attempt 1 | 400 `invalid_grant` |
-| 3 | 63 seconds after `earliest_refresh_at`, 5 minutes before the access token expired | Unused, from a sign-in 55 minutes earlier | 400 `invalid_grant` |
+| # | Sent | Request | Refresh token | Result |
+|---|---|---|---|---|
+| 1 | About 50 minutes before `earliest_refresh_at` | Documented | Unused | 400 `invalid_grant` (expected, too early) |
+| 2 | About 8 minutes after `earliest_refresh_at`, just after the access token expired | Documented | The token from attempt 1 | 400 `invalid_grant` |
+| 3 | 63 seconds after `earliest_refresh_at`, 5 minutes before the access token expired | Documented | Unused, from a sign-in 55 minutes earlier | 400 `invalid_grant` |
+| 4 | 60 seconds before the access token expired, 5 minutes after `earliest_refresh_at` | Documented | Unused, from a sign-in 59 minutes earlier | 400 `invalid_grant` |
+| 5 | Within a second of attempt 4 | Documented, plus `ext_agent_host_id` | The token from attempt 4 | 400 `invalid_grant` |
+| 6 | Within a second of attempt 4 | Documented, without `resource` | The token from attempt 4 | 400 `invalid_grant` |
+| 7 | Within a second of attempt 4 | Documented, plus `scope` set to the granted scopes | The token from attempt 4 | 400 `invalid_grant` |
+| 8 | 30 seconds after the access token expired | Documented | The token from attempt 4 | 400 `invalid_grant` |
 
-Attempt 3 rules out timing and reuse: the token was fresh and the request
-fell inside the renewal window.
+Attempts 3 and 4 rule out timing and reuse: each token had never been sent,
+and each request fell inside the renewal window. Attempt 4 copies the timing
+of another open-source client of this flow, 60 seconds before expiry.
+Attempts 5 to 7 show the optional fields do not rescue a refused token. They
+reused attempt 4's token, so a first request carrying `ext_agent_host_id` or
+`scope` is still untested.
 
 ## Ruled out
 
@@ -87,7 +96,8 @@ fell inside the renewal window.
 ## Questions
 
 1. Does a refresh need anything beyond the documented fields, for example
-   `ext_agent_host_id`?
+   `ext_agent_host_id`? Attempts 5 to 7 tried it, `scope`, and no
+   `resource`, but only after attempt 4 had been refused.
 2. Could `invalid_grant` on refresh carry an `error_description` saying why?
 3. The issued client id and the exact UTC time of each attempt are
    available privately.
