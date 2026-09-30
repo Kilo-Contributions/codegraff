@@ -47,6 +47,17 @@ pub fn projectIdForCwd(io: Io, cwd_abs: []const u8, out: *[36]u8) []const u8 {
     return projectIdFromSeed(affinitySeed(io, cwd_abs, &seed_buf), out);
 }
 
+/// ADR 0223: the ChatGPT backend's root partition is the signed-in account,
+/// not the repo. The system+tools prefix carries no cwd, so every repo sends
+/// the same bytes; a per-repo key made turn 1 in each new repo a cold read of
+/// them. Null (keep the project key) for other providers or no account id.
+pub fn accountRootId(provider_id: []const u8, account: []const u8, out: *[36]u8) ?[]const u8 {
+    if (!std.mem.eql(u8, provider_id, "codex") or account.len == 0) return null;
+    var seed_buf: [256]u8 = undefined;
+    const seed = std.fmt.bufPrint(&seed_buf, "chatgpt-account:{s}", .{account}) catch return null;
+    return projectIdFromSeed(seed, out);
+}
+
 /// Directory that owns `.git` (file or dir), walking parents of `cwd_abs`.
 /// `buf` holds the returned path. Null if the walk hits the filesystem root.
 pub fn gitRootOf(io: Io, cwd_abs: []const u8, buf: []u8) ?[]const u8 {

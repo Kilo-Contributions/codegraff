@@ -153,7 +153,7 @@ test "prompt cache: xAI Responses header and body agree; OpenAI Responses has a 
     defer std.testing.allocator.free(cb);
     const body_key = cacheKeyIn(cb) orelse return error.MissingPromptCacheKey;
     var ckbuf: [96]u8 = undefined;
-    try std.testing.expectEqualStrings(http_headers.requestCacheKey(ca.io, ca.label, &ca, "codex", &ckbuf), body_key);
+    try std.testing.expectEqualStrings(http_headers.requestCacheKey(ca.io, ca.label, &ca, ca.provider, &ckbuf), body_key);
     var cbuf: [12]std.http.Header = undefined;
     const ch = http_headers.providerHeadersWithConv(ca.io, ca.provider, "Bearer k", &cbuf, body_key);
     try std.testing.expectEqualStrings(body_key, headerNamed(ch, "session_id") orelse return error.SessionIdHeaderMissing);
