@@ -376,6 +376,56 @@
     "default_model": "gpt-6.1-sol",
     "note": "hill-climb arm vs the Codex app server; GRAFF_HC names the switches"
   },
+  "graff-hc-r4-effort": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "{prompt}\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_HC": "user-key,fold-more,effort-low"},
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol",
+    "note": "hill-climb arm vs the Codex app server; GRAFF_HC names the switches"
+  },
+  "graff-hc-r4-verb": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "{prompt}\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_HC": "user-key,fold-more,verbosity-low"},
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol",
+    "note": "hill-climb arm vs the Codex app server; GRAFF_HC names the switches"
+  },
+  "graff-hc-r4-both": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "{prompt}\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_HC": "user-key,fold-more,effort-low,verbosity-low"},
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol",
+    "note": "hill-climb arm vs the Codex app server; GRAFF_HC names the switches"
+  },
+  "graff-hc-r5-slimnote": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "{prompt}\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_HC": "user-key,fold-more,slim-note"},
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol",
+    "note": "hill-climb arm vs the Codex app server; GRAFF_HC names the switches"
+  },
+  "graff-hc-r5-ids": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "{prompt}\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_HC": "user-key,fold-more,codex-ids"},
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol",
+    "note": "hill-climb arm vs the Codex app server; GRAFF_HC names the switches"
+  },
   "codex-app-server": {
     "cmd": ["python3", "{repo}/graff-evals/codex_app_server.py", "{model}", "{prompt}"],
     "answer": "stdout",
