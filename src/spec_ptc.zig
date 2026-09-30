@@ -73,7 +73,17 @@ pub const Segmenter = struct {
 /// Pull a speculatable `name(...)` / `var = name(...)` from one statement.
 /// Only literal args (string / int / bool). Returns null for print, comments,
 /// or anything that still depends on a runtime value.
+/// A value an rlm script bound earlier (rlm_spec.Binding is this type).
+pub const Bound = struct { name: []const u8, text: []const u8 };
+
 pub fn extractCall(arena: Allocator, stmt: []const u8) !?Call {
+    return extractCallBound(arena, stmt, &.{});
+}
+
+/// extractCall where a bare name in the arguments passes that bind's text
+/// (the latest binding wins). Speculation has no binds, so it never
+/// pre-runs a call that needs one.
+pub fn extractCallBound(arena: Allocator, stmt: []const u8, binds: []const Bound) !?Call {
     const line = stripComment(stmt);
     const trimmed = std.mem.trim(u8, line, " \t");
     if (trimmed.len == 0) return null;
@@ -84,7 +94,7 @@ pub fn extractCall(arena: Allocator, stmt: []const u8) !?Call {
     if (std.mem.eql(u8, name, "print")) return null;
     const close = lastParen(call_src) orelse return null;
     const inner = call_src[open + 1 .. close];
-    const args_json = parseArgs(arena, name, inner) catch |err| switch (err) {
+    const args_json = parseArgs(arena, name, inner, binds) catch |err| switch (err) {
         error.NeedKeywords => return null,
         else => return err,
     } orelse return null;
@@ -195,7 +205,7 @@ const Value = union(enum) {
     bool: bool,
 };
 
-fn parseArgs(arena: Allocator, tool: []const u8, inner: []const u8) !?[]const u8 {
+fn parseArgs(arena: Allocator, tool: []const u8, inner: []const u8, binds: []const Bound) !?[]const u8 {
     var args: std.ArrayList(Arg) = .empty;
     var i: usize = 0;
     const src = inner;
@@ -219,7 +229,7 @@ fn parseArgs(arena: Allocator, tool: []const u8, inner: []const u8) !?[]const u8
                 i = start;
             }
         }
-        const val = (try parseValue(arena, src, &i)) orelse return null;
+        const val = (try parseValue(arena, src, &i, binds)) orelse return null;
         try args.append(arena, .{ .key = key, .value = val });
         skipWs(src, &i);
         if (i >= src.len) break;
@@ -229,13 +239,25 @@ fn parseArgs(arena: Allocator, tool: []const u8, inner: []const u8) !?[]const u8
     return try canonicalize(arena, tool, args.items);
 }
 
-fn parseValue(arena: Allocator, src: []const u8, i: *usize) !?Value {
+fn parseValue(arena: Allocator, src: []const u8, i: *usize, binds: []const Bound) !?Value {
     if (i.* >= src.len) return null;
     const c = src[i.*];
     if (c == '"' or c == '\'') return .{ .string = (try parseString(arena, src, i)) orelse return null };
     if (c == '-' or (c >= '0' and c <= '9')) return parseInt(src, i);
     if (takeWord(src, i, "true")) return .{ .bool = true };
     if (takeWord(src, i, "false")) return .{ .bool = false };
+    if (!identStart(c)) return null;
+    var end = i.* + 1;
+    while (end < src.len and identCont(src[end])) end += 1;
+    const name = src[i.*..end];
+    var n = binds.len;
+    while (n > 0) {
+        n -= 1;
+        if (std.mem.eql(u8, binds[n].name, name)) {
+            i.* = end;
+            return .{ .string = binds[n].text };
+        }
+    }
     return null;
 }
 
@@ -302,7 +324,15 @@ fn skipWs(src: []const u8, i: *usize) void {
 fn canonicalize(arena: Allocator, tool: []const u8, args: []const Arg) ![]const u8 {
     var obj: std.json.ObjectMap = .empty;
     const field = hostField(tool);
-    if (args.len == 1 and args[0].key == null) {
+    const positional = for (args) |a| {
+        if (a.key != null) break false;
+    } else true;
+    // write_file(path, content) is the one two-argument positional call:
+    // how a script saves a bound result for the shell to compute over.
+    if (positional and args.len == 2 and std.mem.eql(u8, tool, "write_file")) {
+        try putValue(arena, &obj, field, args[0].value);
+        try putValue(arena, &obj, "content", args[1].value);
+    } else if (args.len == 1 and args[0].key == null) {
         try putValue(arena, &obj, field, args[0].value);
     } else {
         for (args) |a| {
@@ -519,4 +549,23 @@ test "extractCall maps subagent(\"task\") onto prompt; two calls stay independen
     try std.testing.expectEqual(@as(usize, 2), calls.len);
     try std.testing.expectEqualStrings("{\"prompt\":\"read a.txt\"}", calls[0].args_json);
     try std.testing.expectEqualStrings("{\"prompt\":\"read b.txt\"}", calls[1].args_json);
+}
+
+test "extractCallBound: a bare bound name passes its text; write_file takes path then content" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const binds = [_]Bound{ .{ .name = "notes", .text = "old" }, .{ .name = "notes", .text = "a \"quoted\" line" } };
+    const w = (try extractCallBound(a, "write_file(\"out.json\", notes)", &binds)).?;
+    try std.testing.expectEqualStrings("write_file", w.name);
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a, w.args_json, .{});
+    try std.testing.expectEqualStrings("out.json", parsed.object.get("path").?.string);
+    try std.testing.expectEqualStrings("a \"quoted\" line", parsed.object.get("content").?.string); // latest bind
+    const kw = (try extractCallBound(a, "w = write_file(path=\"o.txt\", content=notes)", &binds)).?;
+    try std.testing.expect(std.mem.indexOf(u8, kw.args_json, "quoted") != null);
+    // Without binds (speculation) the call is not pre-run; an unknown name is not a call.
+    try std.testing.expect((try extractCall(a, "write_file(\"out.json\", notes)")) == null);
+    try std.testing.expect((try extractCallBound(a, "write_file(\"out.json\", missing)", &binds)) == null);
+    // Other tools keep one positional argument.
+    try std.testing.expect((try extractCallBound(a, "read_file(\"a\", notes)", &binds)) == null);
 }
