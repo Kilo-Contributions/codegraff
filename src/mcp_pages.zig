@@ -87,7 +87,33 @@ pub fn appendTools(a: Allocator, tools: *std.ArrayList(Tool), server_index: usiz
             .description = try a.dupe(u8, desc),
             .input_schema = schema,
             .ui_resource_uri = if (@import("mcp_apps.zig").resourceUri(t)) |uri| try a.dupe(u8, uri) else null,
+            .read_only = declaresReadOnly(t),
         });
+    }
+}
+
+/// MCP tool annotations: `readOnlyHint: true` says the tool does not modify
+/// its environment. Absent or false means it may (the spec's default).
+pub fn declaresReadOnly(t: Value) bool {
+    if (t != .object) return false;
+    const annotations = t.object.get("annotations") orelse return false;
+    if (annotations != .object) return false;
+    const hint = annotations.object.get("readOnlyHint") orelse return false;
+    return hint == .bool and hint.bool;
+}
+
+test "a tool is read-only only when its annotations say readOnlyHint: true (ADR 0228)" {
+    const a = std.testing.allocator;
+    for ([_]struct { json: []const u8, want: bool }{
+        .{ .json = "{\"name\":\"list\",\"annotations\":{\"readOnlyHint\":true}}", .want = true },
+        .{ .json = "{\"name\":\"save\",\"annotations\":{\"readOnlyHint\":false}}", .want = false },
+        .{ .json = "{\"name\":\"save\",\"annotations\":{\"destructiveHint\":false}}", .want = false },
+        .{ .json = "{\"name\":\"plain\"}", .want = false },
+        .{ .json = "{\"name\":\"odd\",\"annotations\":{\"readOnlyHint\":\"true\"}}", .want = false },
+    }) |case| {
+        const parsed = try std.json.parseFromSlice(Value, a, case.json, .{});
+        defer parsed.deinit();
+        try std.testing.expectEqual(case.want, declaresReadOnly(parsed.value));
     }
 }
 

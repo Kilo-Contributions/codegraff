@@ -87,6 +87,7 @@ TOOLS = [
         "name": "list_issues",
         "description": "List issues in the fixture workspace. Returns fat issue objects (many unused fields).",
         "inputSchema": {"type": "object", "properties": {}},
+        "annotations": {"readOnlyHint": True},
     },
     {
         "name": "list_comments",
@@ -96,6 +97,7 @@ TOOLS = [
             "properties": {"id": {"type": "string", "description": "Issue id, e.g. ISS-1"}},
             "required": ["id"],
         },
+        "annotations": {"readOnlyHint": True},
     },
 ]
 
