@@ -246,7 +246,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
             var retry_limit: ?usize = null;
             while (true) : (attempt += 1) {
                 var conv_buf: [96]u8 = undefined;
-                const conv = http_headers.promptCacheKey(self.io, self.label, self, &conv_buf);
+                const conv = http_headers.requestCacheKey(self.io, self.label, self, self.provider, &conv_buf);
                 usage_attempts.begin();
                 const attempt_body = if (live)
                     self.postLive(body)

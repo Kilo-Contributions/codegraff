@@ -351,7 +351,7 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
     // pair: x-grok-session-id (durable project) + x-grok-conv-id (root/sub
     // partition, same value as the Responses body's prompt_cache_key).
     var conv_buf: [96]u8 = undefined;
-    const conv = http_headers.requestCacheKey(self.io, self.label, self, provider.id, &conv_buf);
+    const conv = http_headers.requestCacheKey(self.io, self.label, self, provider, &conv_buf);
     var hdrs: [7]ws.Header = undefined;
     var hn: usize = 1;
     hdrs[0] = .{ .name = "Authorization", .value = bearer };

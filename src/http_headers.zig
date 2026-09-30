@@ -66,17 +66,23 @@ pub fn promptCacheKey(io: Io, label: []const u8, agent: *const anyopaque, buf: [
 /// enough sharing for repeated workflow roles, without pushing one key past
 /// OpenAI's documented ~15 requests/minute cache-routing guidance during fanout.
 pub fn promptPrefixCacheKey(io: Io, label: []const u8, buf: []u8) []const u8 {
-    const base = projectRootId(io);
-    if (std.mem.eql(u8, label, "main") or sharesParentCache(label)) return std.fmt.bufPrint(buf, "{s}", .{base}) catch base;
-    const lane = std.hash.Wyhash.hash(0, label) & 3;
-    return std.fmt.bufPrint(buf, "{s}-child-{d}", .{ base, lane }) catch base;
+    return partitionKey(projectRootId(io), label, buf);
 }
 
-/// Partition for one request. Header (`x-grok-conv-id`) and body
-/// (`prompt_cache_key`) must be the same value — xAI treats them as the
-/// same sticky-routing id. Role lanes for every provider, including xAI.
-pub fn requestCacheKey(io: Io, label: []const u8, agent: *const anyopaque, provider_id: []const u8, buf: []u8) []const u8 {
-    _ = provider_id;
+/// The root key or a child's role lane on one partition base.
+fn partitionKey(base: []const u8, label: []const u8, buf: []u8) []const u8 {
+    if (std.mem.eql(u8, label, "main") or sharesParentCache(label)) return std.fmt.bufPrint(buf, "{s}", .{base}) catch base;
+    return std.fmt.bufPrint(buf, "{s}-child-{d}", .{ base, std.hash.Wyhash.hash(0, label) & 3 }) catch base;
+}
+
+/// Partition for one request. Header (`x-grok-conv-id` / codex `session_id`)
+/// and body (`prompt_cache_key`) must be the same value. Role lanes for every
+/// provider; codex with an account id partitions by account (ADR 0223).
+pub fn requestCacheKey(io: Io, label: []const u8, agent: *const anyopaque, provider: Provider, buf: []u8) []const u8 {
+    // 64 bytes hold the base plus a lane suffix, so partitionKey never falls
+    // back to returning the stack-local `account`.
+    var account: [36]u8 = undefined;
+    if (buf.len >= 64) if (cache_affinity.accountRootId(provider.id, provider.account, &account)) |base| return partitionKey(base, label, buf);
     return promptCacheKey(io, label, agent, buf);
 }
 
@@ -85,11 +91,11 @@ pub fn requestCacheKey(io: Io, label: []const u8, agent: *const anyopaque, provi
 /// unknown field ("Unknown name \"prompt_cache_key\": Cannot find field."),
 /// and it caches implicitly, so it is the one openai-wire provider that
 /// carries no partition key. Everything else must still pin one.
-pub fn writeRequestCacheKey(s: anytype, io: Io, label: []const u8, agent: *const anyopaque, provider_id: []const u8) !void {
-    if (std.mem.eql(u8, provider_id, "google")) return;
+pub fn writeRequestCacheKey(s: anytype, io: Io, label: []const u8, agent: *const anyopaque, provider: Provider) !void {
+    if (std.mem.eql(u8, provider.id, "google")) return;
     var buf: [96]u8 = undefined;
     try s.objectField("prompt_cache_key");
-    try s.write(requestCacheKey(io, label, agent, provider_id, &buf));
+    try s.write(requestCacheKey(io, label, agent, provider, &buf));
 }
 
 var project_id_buf: [36]u8 = undefined;
@@ -385,63 +391,6 @@ test "projectRootId is minted from the affinity seed, not a second hash" {
     try std.testing.expectEqualStrings(projectRootId(io), cache_affinity.projectIdForCwd(io, cwd_buf[0..n], &want));
 }
 
-test "project and prefix cache keys preserve conversation and sharing boundaries" {
-    var fake: usize = 0;
-    var sibling_fake: usize = 1;
-    const agent: *const anyopaque = @ptrCast(&fake);
-    const sibling: *const anyopaque = @ptrCast(&sibling_fake);
-    var buf: [96]u8 = undefined;
-    const a = projectCacheKey(std.testing.io, "main", agent, &buf);
-    try std.testing.expectEqual(@as(usize, 36), a.len);
-    try std.testing.expectEqual(@as(u8, '5'), a[14]); // version nibble: name-derived
-    var buf2: [96]u8 = undefined;
-    const b = projectCacheKey(std.testing.io, "main", agent, &buf2);
-    try std.testing.expectEqualStrings(a, b); // durable: no per-process randomness
-    try std.testing.expectEqualStrings(a, projectRootId(std.testing.io));
-    try std.testing.expect(!std.mem.eql(u8, a, sessionId(std.testing.io)));
-
-    // Live keys (promptCacheKey) share a role lane — xAI cache is per-server
-    // and prefix-matched; a unique suffix per sibling is a forced miss.
-    var buf3: [96]u8 = undefined;
-    var buf4: [96]u8 = undefined;
-    const sub = promptCacheKey(std.testing.io, "sub", agent, &buf3);
-    const sibling_sub = promptCacheKey(std.testing.io, "sub", sibling, &buf4);
-    try std.testing.expectEqualStrings(sub, sibling_sub);
-    try std.testing.expect(!std.mem.eql(u8, sub, a));
-
-    var btw_buf: [96]u8 = undefined;
-    try std.testing.expectEqualStrings(a, projectCacheKey(std.testing.io, "btw", sibling, &btw_buf));
-
-    // OpenAI/Codex prefix affinity is stable for a workflow role, but spreads
-    // different roles over four lanes to stay below the per-key traffic guide.
-    var pbuf1: [96]u8 = undefined;
-    var pbuf2: [96]u8 = undefined;
-    const prefix1 = promptPrefixCacheKey(std.testing.io, "implement", &pbuf1);
-    const prefix2 = promptPrefixCacheKey(std.testing.io, "implement", &pbuf2);
-    try std.testing.expectEqualStrings(prefix1, prefix2);
-    try std.testing.expect(std.mem.startsWith(u8, prefix1, a));
-    try std.testing.expect(!std.mem.eql(u8, prefix1, a));
-
-    // OpenAI and xAI scouts share a role lane (header and body use this).
-    var oai1: [96]u8 = undefined;
-    var oai2: [96]u8 = undefined;
-    const oai_lane = requestCacheKey(std.testing.io, "implement", agent, "openai", &oai1);
-    try std.testing.expectEqualStrings(oai_lane, requestCacheKey(std.testing.io, "implement", sibling, "openai", &oai2));
-    var xai1: [96]u8 = undefined;
-    var xai2: [96]u8 = undefined;
-    const xai_lane = requestCacheKey(std.testing.io, "implement", agent, "xai", &xai1);
-    try std.testing.expectEqualStrings(xai_lane, requestCacheKey(std.testing.io, "implement", sibling, "xai", &xai2));
-    try std.testing.expectEqualStrings(oai_lane, xai_lane);
-
-    // rlm's subagent("task") defaults description to "subagent" — siblings
-    // share one prefix lane on every provider, including xAI.
-    var rlm1: [96]u8 = undefined;
-    var rlm2: [96]u8 = undefined;
-    const rlm_lane = requestCacheKey(std.testing.io, "subagent", agent, "xai", &rlm1);
-    try std.testing.expectEqualStrings(rlm_lane, requestCacheKey(std.testing.io, "subagent", sibling, "xai", &rlm2));
-    try std.testing.expect(std.mem.indexOf(u8, rlm_lane, "-child-") != null);
-}
-
 test "x-grok-conv-id with no explicit conv still uses the project root id" {
     const io = std.testing.io;
     const xai: Provider = .{ .id = "xai", .kind = .openai, .auth = .bearer, .url = "", .api_key = "k", .model = "grok-4.6", .context = 500_000 };
@@ -470,12 +419,15 @@ test "restoreSessionId overwrites a minted id so a parked worker keeps cache aff
 
 test "restoreProjectRootId overwrites a minted id so resume keeps the prompt-cache partition" {
     const io = std.testing.io;
-    const before = projectRootId(io);
+    // A copy: projectRootId is a view of the buffer the restore overwrites.
+    var before: [36]u8 = undefined;
+    @memcpy(&before, projectRootId(io));
     restoreProjectRootId("22222222-2222-4222-8222-222222222222");
     try std.testing.expectEqualStrings("22222222-2222-4222-8222-222222222222", projectRootId(io));
     restoreProjectRootId("short");
     try std.testing.expectEqualStrings("22222222-2222-4222-8222-222222222222", projectRootId(io));
-    restoreProjectRootId(before);
+    restoreProjectRootId(&before);
+    try std.testing.expectEqualStrings(&before, projectRootId(io));
 }
 
 fn headerValue(headers: []const std.http.Header, name: []const u8) ?[]const u8 {

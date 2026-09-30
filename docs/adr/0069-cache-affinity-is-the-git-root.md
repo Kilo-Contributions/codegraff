@@ -44,3 +44,6 @@ Request serialization is byte-identical across those sibling keys for the
 supported root and child lanes. This establishes cache eligibility, not a
 provider cache-hit or latency guarantee; automatic-cache providers may ignore
 the routing key and live comparisons must measure their returned usage.
+
+Codex with a ChatGPT account id (2026-09-30, ADR 0223): the root base is the
+account, not the git root, because that prefix carries no cwd.

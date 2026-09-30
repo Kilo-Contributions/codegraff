@@ -27,7 +27,7 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     // prefix lanes so repeated workflow roles can reuse the stable prompt.
     var ckbuf: [96]u8 = undefined;
     try s.objectField("prompt_cache_key");
-    try s.write(http_headers.requestCacheKey(self.io, self.label, self, self.provider.id, &ckbuf));
+    try s.write(http_headers.requestCacheKey(self.io, self.label, self, self.provider, &ckbuf));
     const explicit_cache = supportsExplicitPromptCache(self);
     if (explicit_cache) {
         try s.objectField("prompt_cache_options");
