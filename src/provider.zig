@@ -134,7 +134,7 @@ pub const provider_specs = [_]ProviderSpec{
     // open-source apps (ADR 0221). The key is the OAuth access token saved by
     // `graff login chatgpt-new`, sent to the public Responses endpoint. After
     // codex on purpose: Codex stays the primary ChatGPT route (spec order).
-    .{ .id = "chatgpt-new", .display_name = "ChatGPT plan (new sign-in)", .kind = .responses, .auth = .bearer, .url = "https://api.openai.com/v1/responses", .env_key = "CHATGPT_NEW_DISABLED", .default_model = "gpt-6.1-sol", .login = .chatgpt_browser, .sub_login = true },
+    .{ .id = "chatgpt-new", .display_name = "ChatGPT plan (new sign-in)", .kind = .responses, .auth = .bearer, .url = "https://api.openai.com/v1/responses", .env_key = "CHATGPT_NEW_DISABLED", .default_model = "gpt-6.1-sol", .login = .chatgpt_browser, .sub_login = true, .catalog = .openai, .models_url = "https://api.openai.com/v1/models?client_version=0.159.0" },
 };
 
 /// Optional workspace-local router loaded from `.graff/.config.router`.

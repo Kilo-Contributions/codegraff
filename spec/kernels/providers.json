@@ -214,7 +214,7 @@
       "kind": "responses",
       "auth": "bearer",
       "login": "chatgpt_browser",
-      "catalog": "baked",
+      "catalog": "openai",
       "sub_login": true,
       "takes_effort": false
     }

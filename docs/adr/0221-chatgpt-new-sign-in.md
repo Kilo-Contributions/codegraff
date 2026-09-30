@@ -159,8 +159,9 @@ process rather than restarting anything.
 Tokens are per machine: another machine signs in again and reuses the
 registration. Two ChatGPT routes coexist until the switch, so the picker
 lists both. Hosted use (the gateway, hosted sandboxes) is out of scope;
-OpenAI requires a separate agreement for it. The live account catalog is a
-follow-up, so the offline model rows can lag a rollout. HTTP requests re-send
+OpenAI requires a separate agreement for it. The model list comes live from
+the route's `/v1/models` (with `client_version`, like Codex's), cached for six
+hours; the baked rows are only the offline fallback. HTTP requests re-send
 the whole input and caching is intermittent, so one-shot runs pay the most;
 live turns chain on the socket instead. While OpenAI refuses refreshes, a
 sign-in lasts an hour and a longer task stops at the hour with a sign-in
