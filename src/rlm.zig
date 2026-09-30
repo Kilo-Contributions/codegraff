@@ -252,7 +252,9 @@ fn runHostRaw(ctx: ToolCtx, call: spec_ptc.Call) ToolOutput {
     // A denial is an error result, so the script stops here.
     const host_call: tools.ToolCall = .{ .id = if (ctx.host_gate) |gate| gate.call_id else "rlm", .name = ready.name, .input = parsed.value };
     if (ctx.host_gate) |gate| if (gate.check(gate.context, host_call)) |denied| return denied;
-    return exec_mod.execTool(ctx, host_call);
+    var host_ctx = ctx;
+    host_ctx.rlm_host = true;
+    return exec_mod.execTool(host_ctx, host_call);
 }
 
 fn runSleep(ctx: ToolCtx, args_json: []const u8) ToolOutput {

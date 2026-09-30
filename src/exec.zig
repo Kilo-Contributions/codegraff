@@ -189,7 +189,8 @@ fn execToolInner(ctx: ToolCtx, call: ToolCall) !ToolOutput {
         if (!r.is_error) {
             const shapes = @import("mcp_shapes.zig");
             shapes.remember(ctx, call.name, r.text);
-            return .{ .text = shapes.takeSlim(gpa, r.text), .is_error = false };
+            const keep_in: ?@import("tool_handle.zig").Target = if (ctx.rlm_host) null else .{ .io = io, .dir = .cwd() };
+            return .{ .text = shapes.takeSlimKept(gpa, keep_in, r.text), .is_error = false };
         }
         return .{ .text = r.text, .is_error = r.is_error };
     }
