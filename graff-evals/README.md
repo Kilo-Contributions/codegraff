@@ -52,6 +52,7 @@ CODEGRAFF_API_KEY=cg_sk_… ./run.py --suite swe --harness graff-dev,opencode-co
 # login without its refresh token). Keep --output-root outside any repo so neither
 # harness reads repo docs; the mcp suite then needs scripts/linear_fixture_mcp.py
 # copied next to that root (the setup looks for it in a parent directory).
+# Results: evals/graff-vs-codex-app-server/RESULTS.md
 ./run.py --suite core,mcp --harness graff-codex-repl,codex-app-server --model gpt-6.1-sol -j 6
 ```
 

@@ -12,6 +12,10 @@ grok-4.6 SuperGrok) is
 [graff-live-12-report.html](graff-live-12-report.html) plus
 [artifacts/graff-evals-live/RECEIPT.md](../artifacts/graff-evals-live/RECEIPT.md).
 
+graff against the Codex app server on the same model and ChatGPT account (21
+coding and MCP tasks, every run's data) is
+[evals/graff-vs-codex-app-server/RESULTS.md](../evals/graff-vs-codex-app-server/RESULTS.md).
+
 ## Prerequisites
 
 - `graff`, `claude`, and `codex` on your PATH, each authenticated.
