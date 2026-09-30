@@ -419,10 +419,12 @@ test "mixed native MCP loads preserve earlier emitted tool entries" {
     const loaded = try gate.loadInto(a, fat, load);
     try testing.expectEqual(@as(usize, 1), loaded.loaded);
     const routes = [_]struct { id: []const u8, kind: @import("provider.zig").Provider.Kind, model: []const u8 }{
-        // MiMo and DeepSeek send the loaded tail as a message instead (additional_tools_tests.zig).
+        // Routes that announce loaded tools instead (MiMo, DeepSeek, Claude on
+        // Codegraff, Codex and the OpenAI API on hosted-search models) are
+        // covered in additional_tools_tests.zig.
         .{ .id = "zai", .kind = .openai, .model = "glm-5.3" },
         .{ .id = "xai", .kind = .responses, .model = "grok-4.6" },
-        .{ .id = "codex", .kind = .responses, .model = "gpt-6-sol" },
+        .{ .id = "codex", .kind = .responses, .model = "gpt-5.3-codex" },
     };
     var before: [routes.len][]const u8 = undefined;
     var catalogs: [routes.len][]const u8 = undefined;
@@ -455,4 +457,26 @@ test "mixed native MCP loads preserve earlier emitted tool entries" {
         }
         try testing.expect(std.mem.indexOf(u8, body, "todo_read") != null);
     }
+}
+
+test "loaded schemas outlive the arena that loaded them (the scripted REPL's final save)" {
+    gate.reset();
+    defer gate.reset();
+    const saved = gate.g_policy;
+    defer gate.g_policy = saved;
+    gate.g_policy = .{};
+    var turn = std.heap.ArenaAllocator.init(testing.allocator);
+    const tools = try fixture(turn.allocator(), "gone", 2, 100);
+    const load = try std.json.parseFromSliceLeaky(Value, turn.allocator(), "{\"server\":\"gone\"}", .{});
+    try testing.expectEqual(@as(usize, 2), (try gate.loadInto(turn.allocator(), tools, load)).loaded);
+    turn.deinit(); // the turn's arena is gone; the loaded list is not
+    try testing.expect(gate.loadSeq("mcp__gone__t0") != null);
+
+    var later = std.heap.ArenaAllocator.init(testing.allocator);
+    defer later.deinit();
+    const again = try fixture(later.allocator(), "gone", 2, 100);
+    const reload = try std.json.parseFromSliceLeaky(Value, later.allocator(), "{\"server\":\"gone\"}", .{});
+    const r = try gate.loadInto(later.allocator(), again, reload);
+    try testing.expectEqual(@as(usize, 0), r.loaded); // already loaded: the kept render is reused
+    try testing.expect(std.mem.indexOf(u8, r.text, "mcp__gone__t0") != null);
 }

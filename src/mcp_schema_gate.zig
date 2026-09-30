@@ -31,10 +31,9 @@
 //!    reliable. `GRAFF_MCP_SCHEMA_BUDGET` restores the old size-based
 //!    threshold; `GRAFF_MCP_EAGER` pins specific servers either way.
 //!
-//! Session state (which schemas have been loaded) is a lock-free append-only
-//! list: the only writer is the orchestrator thread — `load_tool_schemas` is a
-//! meta tool, handled inline — and pool threads only ever read it, always
-//! after the spawn that publishes the write.
+//! Session state (which schemas have been loaded) is an append-only list in
+//! its own process arena: writers lock (a direct MCP call auto-loads from a
+//! pool thread), and readers follow the atomically published head.
 
 const std = @import("std");
 const Io = std.Io;
@@ -161,14 +160,21 @@ pub fn isLoaded(name: []const u8) bool {
     return find(name) != null;
 }
 
-/// Publish one loaded schema. Single-writer (the orchestrator thread); the
-/// release store is what makes the new node visible to a pool thread that
-/// later acquires the head.
-fn publish(arena: Allocator, name: []const u8, rendered: []const u8) !*Node {
-    const node = try arena.create(Node);
-    // The name is COPIED, not aliased: `tool.qualified_name` belongs to the
-    // registry's arena, and this list has to outlive any registry rebuild.
-    node.* = .{ .name = try arena.dupe(u8, name), .rendered = rendered, .seq = nextSeq(), .next = g_head.load(.acquire) };
+/// Nodes outlive every turn arena (a scripted REPL freed its conversation arena
+/// before the final save walked the list); `reset` only drops the head. The
+/// spin-lock serializes writers: exec.zig auto-loads from pool threads.
+var g_nodes: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+var g_nodes_lock: std.atomic.Value(bool) = .init(false);
+
+/// Publish a copy of one loaded schema (its name is the registry's, `rendered`
+/// the caller's); the release store makes it visible to pool threads.
+fn publish(name: []const u8, rendered: []const u8) !*Node {
+    while (g_nodes_lock.cmpxchgWeak(false, true, .acquire, .monotonic) != null) std.atomic.spinLoopHint();
+    defer g_nodes_lock.store(false, .release);
+    if (find(name)) |node| return node; // another thread got there first
+    const a = g_nodes.allocator();
+    const node = try a.create(Node);
+    node.* = .{ .name = try a.dupe(u8, name), .rendered = try a.dupe(u8, rendered), .seq = nextSeq(), .next = g_head.load(.acquire) };
     g_head.store(node, .release);
     return node;
 }
@@ -362,9 +368,7 @@ fn renderEntry(arena: Allocator, tool: mcp.Tool) ![]const u8 {
 /// Render, or reuse this session's cached render, and mark the tool enabled.
 fn enable(arena: Allocator, tool: mcp.Tool) ![]const u8 {
     if (find(tool.qualified_name)) |node| return node.rendered;
-    const rendered = try renderEntry(arena, tool);
-    const node = try publish(arena, tool.qualified_name, rendered);
-    return node.rendered;
+    return (try publish(tool.qualified_name, try renderEntry(arena, tool))).rendered;
 }
 
 /// The pure core of the `load_tool_schemas` tool: everything except touching
