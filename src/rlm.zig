@@ -25,12 +25,12 @@ const mcp_shapes = @import("mcp_shapes.zig");
 const read_miss = @import("read_miss.zig");
 
 pub const tool_name = "rlm";
-pub const tool_desc = "Tools as a call-only script, not Python: name = tool(args), args being literals or bound names (a bound name passes its text); no expressions, indexing or comprehensions. To compute over a result, write_file(\"r.json\", name), then shell. Leading read_file/codedb/sleep_ms/llm_query calls overlap; others run in order, stopping on error/cancel/pending. Binds persist. subagent(\"task\") is sidecar-only (critical-path steps stay local). Loaded MCP names are host functions after load_tool_schemas; each(arr, tool, field) maps a JSON array; len(x)/project(x, field) slim it. print() is the answer.";
+pub const tool_desc = "Tools as a call-only script, not Python: name = tool(args), args being literals or bound names (a bound name passes its text); no expressions, indexing or comprehensions. To compute over a result, write_file(\"r.json\", name), then shell. Leading read_file/codedb/sleep_ms/llm_query calls overlap; others run in order, stopping on error/cancel/pending. Binds persist. subagent(\"task\") is sidecar-only (critical-path steps stay local). Loaded MCP names are host functions after load_tool_schemas; each(arr, tool, field?) maps a JSON array; len(x)/project(x, field) slim it. print() is the answer.";
 /// --lean catalog desc: same contract, no REPL essay. maybeAppend is after
 /// compactLeanSpecs, so this is the one-shot wire text.
 pub const lean_tool_desc = "Batch independent read_file/codedb here. print(read_file(\"p\")) returns the file — do not catalog-read it again. Then edit_file/write_file/shell as catalog tools. Leading reads overlap; other calls run in order, stopping on error/cancel/pending. Binds persist. Loaded MCP names are host functions after load_tool_schemas.";
 pub const tool_schema =
-    \\{"type": "object", "properties": {"code": {"type": "string", "description": "Call-only script, not Python. One statement per line: name = read_file(\"path\") / codedb(\"command\") / bash(\"cmd\") / sleep_ms(ms) / llm_query(\"prompt\") / subagent(\"task\") / loaded mcp__server__tool() or tools.server.tool(); write_file(\"path\", name) saves a bound result; each(arr, tool, field) maps a JSON array; len(x) and project(x, field) slim it; print(name, ...) is the result. Arguments are string, number or boolean literals or bound names. Assignments persist across rlm calls."}}, "required": ["code"]}
+    \\{"type": "object", "properties": {"code": {"type": "string", "description": "Call-only script, not Python. One statement per line: name = read_file(\"path\") / codedb(\"command\") / bash(\"cmd\") / sleep_ms(ms) / llm_query(\"prompt\") / subagent(\"task\") / loaded mcp__server__tool() or tools.server.tool(); write_file(\"path\", name) saves a bound result; each(arr, tool[, field]) calls tool per item; len(x) and project(x, field) slim it; name = [..] / {..} / \"text\" binds a literal; print(name, ...) is the result. Arguments are string, number, boolean or JSON array/object literals, or bound names. Assignments persist across rlm calls."}}, "required": ["code"]}
 ;
 
 /// Process-global: on by default. `--old` / `--no-rlm` turn it off; `--rlm`
@@ -324,8 +324,16 @@ fn evalStmt(
         try printed.appendSlice(ctx.gpa, text);
         return null;
     }
-    return .{ .text = try std.fmt.allocPrint(ctx.gpa, "rlm: unsupported statement: {s}", .{stmt}), .is_error = true };
+    // ADR 0236: `name = [..]`, `{..}`, a string, a number or another name.
+    if (try @import("rlm_literal.zig").assign(arena, stmt, binds)) |b| {
+        try bind_out.append(arena, b);
+        return null;
+    }
+    return .{ .text = try std.fmt.allocPrint(ctx.gpa, "rlm: unsupported statement: {s}\n{s}", .{ stmt, statement_forms }), .is_error = true };
 }
+
+/// What an unsupported statement could have been (ADR 0236).
+const statement_forms = "A statement is one of: name = tool(args) · name = each(arr, tool[, field]) · name = len(x) or project(x, field) · name = a literal ([...], {...}, \"text\", 3) or another name · write_file(\"path\", name) · print(name, ...). Nested calls, indexing and operators are not supported: bind each value first.";
 
 fn assignName(stmt: []const u8) ?[]const u8 {
     const eq = std.mem.indexOfScalar(u8, stmt, '=') orelse return null;

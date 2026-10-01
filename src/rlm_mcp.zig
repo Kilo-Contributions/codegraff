@@ -156,6 +156,9 @@ pub const HostHit = union(enum) { miss, ok, fail: ToolOutput };
 
 /// `each(arr, tool, field)` — map a JSON array through one host tool.
 /// Smallest control flow that makes `for issue in list_issues(): list_comments(id)` honest.
+/// ADR 0236: `arr` may be a JSON literal; a plain item (a string id, a
+/// number) is passed as is; `field` picks the value out of object items and
+/// defaults to an MCP tool's first parameter.
 pub fn evalEach(
     ctx: ToolCtx,
     arena: Allocator,
@@ -165,9 +168,13 @@ pub fn evalEach(
     run: *const fn (ToolCtx, spec_ptc.Call) ToolOutput,
 ) !HostHit {
     const parsed = parseEach(arena, stmt) orelse return .miss;
-    const arr_text = resolveBind(binds, parsed.arr) orelse parsed.arr;
+    const arr_src = std.mem.trim(u8, parsed.arr, " \t");
+    const arr_text = resolveBind(binds, arr_src) orelse literal: {
+        if (arr_src.len == 0 or (arr_src[0] != '[' and arr_src[0] != '{')) break :literal arr_src;
+        break :literal @import("rlm_literal.zig").render(arena, arr_src, binds) catch arr_src;
+    };
     const tool = stripQuotes(parsed.tool);
-    const field = stripQuotes(parsed.field);
+    const field: ?[]const u8 = if (parsed.field) |f| stripQuotes(f) else if (ctx.registry) |reg| firstField(reg, tool) else null;
     const items = jsonArray(arena, arr_text) catch {
         return .{ .fail = .{ .text = try std.fmt.allocPrint(ctx.gpa, "rlm: each() needs a JSON array (got {s})", .{arr_text}), .is_error = true } };
     };
@@ -176,7 +183,7 @@ pub fn evalEach(
     for (items, 0..) |item, i| {
         if (i > 0) try out.append(arena, ',');
         const val = fieldValue(arena, item, field) catch {
-            return .{ .fail = .{ .text = try std.fmt.allocPrint(ctx.gpa, "rlm: each() item missing field {s}", .{field}), .is_error = true } };
+            return .{ .fail = .{ .text = try missingField(ctx.gpa, arena, item, field), .is_error = true } };
         };
         const args = try std.fmt.allocPrint(arena, "{{\"arg\":{s}}}", .{val});
         const call: spec_ptc.Call = .{ .name = tool, .args_json = args };
@@ -196,7 +203,7 @@ pub fn evalEach(
     return .ok;
 }
 
-const Each = struct { assign: ?[]const u8, arr: []const u8, tool: []const u8, field: []const u8 };
+const Each = struct { assign: ?[]const u8, arr: []const u8, tool: []const u8, field: ?[]const u8 };
 
 fn parseEach(arena: Allocator, stmt: []const u8) ?Each {
     const trimmed = std.mem.trim(u8, stmt, " \t");
@@ -212,8 +219,8 @@ fn parseEach(arena: Allocator, stmt: []const u8) ?Each {
     if (!std.mem.startsWith(u8, rest, "each(") or rest[rest.len - 1] != ')') return null;
     const inner = rest["each(".len .. rest.len - 1];
     const parts = spec_ptc.splitTopLevel(arena, inner, ',') catch return null;
-    if (parts.len != 3) return null;
-    return .{ .assign = assign, .arr = parts[0], .tool = parts[1], .field = parts[2] };
+    if (parts.len != 2 and parts.len != 3) return null;
+    return .{ .assign = assign, .arr = parts[0], .tool = parts[1], .field = if (parts.len == 3) parts[2] else null };
 }
 
 fn resolveBind(binds: []const rlm_spec.Binding, name: []const u8) ?[]const u8 {
@@ -245,13 +252,27 @@ fn jsonArray(arena: Allocator, text: []const u8) ![]const Value {
     return error.NotArray;
 }
 
-fn fieldValue(arena: Allocator, item: Value, field: []const u8) ![]const u8 {
-    if (item != .object) return error.NotObject;
-    const v = item.object.get(field) orelse return error.Missing;
+/// A plain item is the value itself; an object item gives up `field`.
+fn fieldValue(arena: Allocator, item: Value, field: ?[]const u8) ![]const u8 {
+    const v = if (item == .object) item.object.get(field orelse return error.NoField) orelse return error.Missing else item;
     var aw: std.Io.Writer.Allocating = .init(arena);
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     try s.write(v);
     return aw.toOwnedSlice();
+}
+
+/// Name the fields an object item does have, so the next try can pick one.
+fn missingField(gpa: Allocator, arena: Allocator, item: Value, field: ?[]const u8) ![]u8 {
+    var keys: std.ArrayList(u8) = .empty;
+    if (item == .object) {
+        var it = item.object.iterator();
+        while (it.next()) |e| {
+            if (keys.items.len > 0) try keys.appendSlice(arena, ", ");
+            try keys.appendSlice(arena, e.key_ptr.*);
+        }
+    }
+    if (field) |f| return std.fmt.allocPrint(gpa, "rlm: each() item has no field {s} (its fields: {s}); pass the one that holds the value, e.g. each(arr, tool, \"id\")", .{ f, keys.items });
+    return std.fmt.allocPrint(gpa, "rlm: each() over objects needs the field to pass (its fields: {s}), e.g. each(arr, tool, \"id\")", .{keys.items});
 }
 
 fn jsonOrString(arena: Allocator, text: []const u8) []const u8 {
