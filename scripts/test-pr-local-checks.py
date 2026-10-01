@@ -78,6 +78,8 @@ def main():
                         "arguments": {
                             "path": "test_observed.py",
                             "content": failing.replace("1, 2", "2, 2"),
+                            # ADR 0231: replacing a file the session never read takes replace.
+                            "replace": True,
                         },
                     },
                     check,
