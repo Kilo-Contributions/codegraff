@@ -15,8 +15,10 @@ grok-4.6 SuperGrok) is
 graff against the Codex app server and pi on the same model and ChatGPT account
 (21 coding and MCP tasks, every run's data) is
 [evals/graff-vs-codex-app-server/RESULTS.md](../evals/graff-vs-codex-app-server/RESULTS.md),
-and graff against OpenCode 2 and pi on one model through the Codegraff gateway is
-[evals/graff-vs-opencode-and-pi/RESULTS.md](../evals/graff-vs-opencode-and-pi/RESULTS.md).
+graff against Claude Code, OpenCode 2 and pi on one model through the Codegraff
+gateway is [evals/graff-vs-claude-code/RESULTS.md](../evals/graff-vs-claude-code/RESULTS.md)
+(an earlier run without Claude Code:
+[evals/graff-vs-opencode-and-pi/RESULTS.md](../evals/graff-vs-opencode-and-pi/RESULTS.md)).
 The same 21 tasks against the Grok CLI on the same SuperGrok account are
 [evals/graff-vs-grok-cli/RESULTS.md](../evals/graff-vs-grok-cli/RESULTS.md),
 and what both mean for an engineering budget is
