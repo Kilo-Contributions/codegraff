@@ -345,7 +345,7 @@ pub fn handleMeta(self: *Agent, call: ToolCall) !ExecResult {
         // no usable items is rejected untouched (#318). goal_todo owns the rule.
         const r = try goal_todo.applyTodoWrite(self, if (tools_mod.json_args.object(call.input)) |o| o.get("todos") else null);
         if (!self.sub and !r.rejected) engine_sink.forAgent(self).emit(self.io, .{ .todo_list_updated = .{ .text = r.text } });
-        return .{ .text = r.text, .is_error = r.rejected };
+        return .{ .text = r.reply(), .is_error = r.rejected }; // ADR 0233: the UI got the full list above
     }
     if (std.mem.eql(u8, call.name, "clock_sleep")) {
         const parsed = parseClockSleepMs(call.input) catch return .{

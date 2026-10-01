@@ -2,8 +2,9 @@
 //! auto-background path (#620) has room without growing exec.zig.
 //!
 //! Root foreground: spawn a job, wait up to 120s unattended (interactive
-//! REPL/TUI/GUI: 15s, ADR 0154). A shorter `timeout` may promote earlier; a
-//! larger one cannot extend the wait. Then promote rather than kill — the
+//! REPL/TUI/GUI: 15s, ADR 0154). Unattended, a shorter `timeout` may promote
+//! earlier, not below 5s; interactive surfaces ignore it (ADR 0233). A larger
+//! one cannot extend the wait. Then promote rather than kill — the
 //! process keeps running and the model gets a job id. Interactive parked
 //! jobs yield the parent like subagents. Subagents stay on the #93
 //! kill-at-120s path (no TTY, no /jobs UI).
@@ -119,13 +120,21 @@ fn rootWaitMs(input: Value) u64 {
     return rootWaitMsFor(input, false);
 }
 
+/// ADR 0233: the shortest foreground wait a model's `timeout` may ask for.
+/// Some models send `timeout: 1000` as a read-output-after habit; honored,
+/// it parked half of those commands (git, gh, node) after one second.
+pub const min_model_wait_ms: u64 = 5 * 1000;
+
 fn rootWaitMsFor(input: Value, interactive: bool) u64 {
     const bound = defaultRootWaitMs(interactive);
+    // An interactive park ends the turn (ADR 0154), so a shorter wait only
+    // stops the agent sooner; the 15s bound stands (ADR 0233).
+    if (interactive) return bound;
     const t = intField(input, "timeout") orelse return bound;
     if (t <= 0) return bound;
     // #850: timeout may shorten the foreground wait; it must not recreate the
     // #620 hang by stretching it toward the 10h job-wait cap.
-    return @min(@as(u64, @intCast(t)), bound);
+    return std.math.clamp(@as(u64, @intCast(t)), @min(min_model_wait_ms, bound), bound);
 }
 
 test "rootWaitMs: omitted/zero use 120s; a shorter timeout may promote earlier" {
@@ -199,6 +208,17 @@ test "rootWaitMs: lean unattended oneshot defaults to 15s; shorter timeout still
     try std.testing.expectEqual(lean_oneshot_wait_ms, rootWaitMs(huge.value));
     main_mod.unattended = false;
     try std.testing.expectEqual(root_wait_ms, rootWaitMs(empty.value));
+}
+
+test "ADR 0233: a one-second timeout waits 5s unattended and the full 15s interactive" {
+    const one_second = try std.json.parseFromSlice(Value, std.testing.allocator, "{\"timeout\":1000}", .{});
+    defer one_second.deinit();
+    try std.testing.expectEqual(min_model_wait_ms, rootWaitMs(one_second.value));
+    try std.testing.expectEqual(lean_oneshot_wait_ms, rootWaitMsFor(one_second.value, true));
+    const ten_seconds = try std.json.parseFromSlice(Value, std.testing.allocator, "{\"timeout\":10000}", .{});
+    defer ten_seconds.deinit();
+    try std.testing.expectEqual(@as(u64, 10_000), rootWaitMs(ten_seconds.value));
+    try std.testing.expectEqual(lean_oneshot_wait_ms, rootWaitMsFor(ten_seconds.value, true));
 }
 
 test "rootWaitMs: interactive REPL parks at 15s (ADR 0154)" {
