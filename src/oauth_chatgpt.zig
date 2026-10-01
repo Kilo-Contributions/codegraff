@@ -367,14 +367,14 @@ fn finish(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, saved: ?Re
 fn report(out: *Io.Writer, o: Outcome) !void {
     switch (o.state) {
         .first, .ok => try out.print("✓ signed in to ChatGPT as {s}; plan usage is on. Use it with /model chatgpt-new or `graff --model chatgpt-new/gpt-6.1-sol`. Manage usage: {s}\n", .{ o.account, manage_usage_url }),
-        .noplan => try out.print("✓ signed in to ChatGPT as {s}, but plan usage was not allowed. Run `graff login chatgpt-new` again and allow it, or use an API key.\n", .{o.account}),
+        .noplan => try out.print("✓ signed in to ChatGPT as {s}, but plan usage was not allowed. Run `graff login chatgpt` again and allow it, or use an API key.\n", .{o.account}),
         .denied => try out.writeAll("✗ ChatGPT sign-in was cancelled. Nothing changed.\n"),
         .@"error" => try out.print("✗ ChatGPT sign-in failed: {s}\n", .{o.detail}),
     }
     try out.flush();
 }
 
-/// `graff login chatgpt-new`: open the browser, wait for the loopback callback,
+/// `graff login chatgpt`: open the browser, wait for the loopback callback,
 /// answer it with the branded page, and save the record.
 pub fn login(io: Io, gpa: Allocator, arena: Allocator, home: []const u8) !void {
     var obuf: [4096]u8 = undefined;

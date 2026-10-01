@@ -78,7 +78,7 @@ pub const usage_text =
     \\  graff [flags]                    start the REPL
     \\  graff [-p] "prompt"              one-shot: run the prompt, print the answer, exit
     \\  graff login                      get a codegraff key (device-code OAuth)
-    \\  graff login codex [--refresh]    ChatGPT/Codex OAuth login (PKCE)
+    \\  graff login chatgpt              ChatGPT sign-in (also: codex, openai)
     \\  graff login kimi                 Kimi Code OAuth login (device-code)
     \\  graff login xai                  Grok/SuperGrok OAuth login (device-code)
     \\  graff login zai                  Z.AI Coding Plan OAuth login

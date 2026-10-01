@@ -265,7 +265,7 @@ pub fn parse(init: std.process.Init) !Flags {
         if (flags.login_flag and flags.positionals.items.len > 1) {
             const name = flags.positionals.items[1];
             const target = loginTarget(name) orelse
-                std.process.fatal("unknown login '{s}' — graff login [codegraff|chatgpt|chatgpt-new|kimi|xai|zai]", .{name});
+                std.process.fatal("unknown login '{s}' — graff login [codegraff|chatgpt|kimi|xai|zai]", .{name});
             flags.codex_login = std.mem.eql(u8, target, "codex");
             flags.kimi_login = std.mem.eql(u8, target, "kimi");
             flags.xai_login = std.mem.eql(u8, target, "xai");
@@ -319,28 +319,28 @@ pub fn parse(init: std.process.Init) !Flags {
 }
 
 /// The provider a login name means, for `graff login <name>` and `/login
-/// <name>` alike. codex is the ChatGPT account login, so the names people
-/// reach for (chatgpt, openai, gpt, oai) land there too. Null: not a login.
+/// <name>` alike. Every ChatGPT name, codex included, is the plan's sign-in,
+/// chatgpt-new: the Codex client's login no longer works (ADR 0229). Null:
+/// not a login.
 pub fn loginTarget(name: []const u8) ?[]const u8 {
     const aliases = [_][2][]const u8{
-        .{ "codex", "codex" }, .{ "chatgpt", "codex" },       .{ "openai", "codex" },    .{ "gpt", "codex" },
-        .{ "oai", "codex" },   .{ "codegraff", "codegraff" }, .{ "graff", "codegraff" }, .{ "kimi", "kimi" },
-        .{ "xai", "xai" },     .{ "grok", "xai" },
+        .{ "codex", "chatgpt-new" }, .{ "chatgpt", "chatgpt-new" }, .{ "openai", "chatgpt-new" }, .{ "gpt", "chatgpt-new" },
+        .{ "oai", "chatgpt-new" },   .{ "codegraff", "codegraff" }, .{ "graff", "codegraff" },    .{ "kimi", "kimi" },
+        .{ "xai", "xai" },           .{ "grok", "xai" },
     };
     for (aliases) |pair| if (std.ascii.eqlIgnoreCase(name, pair[0])) return pair[1];
     if (@import("oauth_zai.zig").isLoginName(name)) return "zai";
-    if (@import("oauth_chatgpt.zig").isLoginName(name)) return "chatgpt-new"; // opt-in (ADR 0221)
+    if (@import("oauth_chatgpt.zig").isLoginName(name)) return "chatgpt-new";
     return null;
 }
 
-test "loginTarget: chatgpt and codex are one login; unknown names are not logins" {
-    for ([_][]const u8{ "codex", "chatgpt", "ChatGPT", "openai", "gpt", "oai" }) |name|
-        try std.testing.expectEqualStrings("codex", loginTarget(name).?);
+test "loginTarget: every ChatGPT name, codex included, is the plan's sign-in; unknown names are not logins" {
+    for ([_][]const u8{ "codex", "chatgpt", "ChatGPT", "openai", "gpt", "oai", "chatgpt-new", "chat-gpt-new" }) |name|
+        try std.testing.expectEqualStrings("chatgpt-new", loginTarget(name).?);
     try std.testing.expectEqualStrings("codegraff", loginTarget("graff").?);
     try std.testing.expectEqualStrings("xai", loginTarget("grok").?);
     try std.testing.expectEqualStrings("kimi", loginTarget("kimi").?);
     try std.testing.expectEqualStrings("zai", loginTarget("zai").?);
-    try std.testing.expectEqualStrings("chatgpt-new", loginTarget("chatgpt-new").?);
     try std.testing.expect(loginTarget("chatgptt") == null);
     try std.testing.expect(loginTarget("") == null);
 }
