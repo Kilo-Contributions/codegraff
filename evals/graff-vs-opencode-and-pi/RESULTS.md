@@ -4,7 +4,7 @@ Measured 2026-10-01. One model, served through the Codegraff gateway's chat-comp
 
 | Arm | What ran |
 | --- | --- |
-| graff | The ADR 0231 build as a scripted `graff repl` (the `graff-gateway-repl` harness). |
+| graff | The ADR 0231 build (#1449) as a scripted `graff repl` (the `graff-gateway-repl` harness). |
 | OpenCode 2 | `@opencode/cli` 2.0.21: `opencode run --standalone --auto --format json`, through [`graff-evals/opencode2_run.py`](../../graff-evals/opencode2_run.py). |
 | pi | pi 0.84.2 (the `pi-codegraff` harness). pi has no MCP client, so it ran the 11 coding tasks only. |
 

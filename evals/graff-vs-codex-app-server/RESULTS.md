@@ -4,7 +4,7 @@ Measured 2026-10-01. The same model (`gpt-6.1-sol`), ChatGPT account and machine
 
 | Arm | What ran |
 | --- | --- |
-| graff | The ADR 0231 build (the `perf: drop round trips the model does not need` commit on top of v0.0.302.12), as a scripted `graff repl` over the Codex Responses WebSocket. |
+| graff | The ADR 0231 build (#1449: the `perf: drop round trips the model does not need` commit on top of v0.0.302.12), as a scripted `graff repl` over the Codex Responses WebSocket. |
 | Codex app server | `codex app-server` from codex-cli 0.159.0, through [`graff-evals/codex_app_server.py`](../../graff-evals/codex_app_server.py). |
 | pi | pi 0.84.2 on the ChatGPT plan (`--provider openai-codex`). pi has no MCP client, so it ran the 11 coding tasks only. |
 
