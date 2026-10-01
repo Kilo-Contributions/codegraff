@@ -257,6 +257,7 @@ record only when you need the evidence or the edge cases.
 | [0228](0228-read-only-child-calls-declared-read-only-mcp-tools.md) | An MCP tool is a read when its server declares `readOnlyHint: true` (`mcp.Tool.read_only`). A read-only (informational) child may call those and inherits only those from its root; undeclared MCP tools stay refused. |
 | [0229](0229-every-chatgpt-login-is-chatgpt-new.md) | The Codex client's login no longer works, so every ChatGPT login name (`chatgpt`, `codex`, `openai`, `gpt`, `oai`) and the model picker run the `chatgpt-new` sign-in, and `chatgpt-new` precedes `codex` in the provider table. The `codex` provider stays for an existing Codex CLI `auth.json`. Replaces ADR 0221's "Codex first". |
 | [0231](0231-no-round-trip-the-model-does-not-need.md) | No call the task did not ask for: a named small MCP server (and subagents, when asked for) loads with the first request, with the slim-shape note; `write_file` refuses to replace an unread file unless `replace: true` and reports created/replaced and JSON validity; inherited child MCP tools are never deferred; a piped bracketed paste is one prompt; unwatched (`-p`, piped) sessions get no `ask_user` and no low-effort reasoning summaries. |
+| [0235](0235-mimo-thinks-only-at-high-effort.md) | MiMo thinks only at `high` and above: `minimal`/`low`/`medium` (graff's default) send thinking Off on the Chat and Responses wires; On, a worker pin, or Jev's `high` turn it on. Replaces ADR 0192's "positive values mean On" below high. |
 
 ## When to write one
 

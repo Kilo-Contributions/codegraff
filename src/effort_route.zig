@@ -66,6 +66,8 @@ pub fn grokFamily(model: []const u8) bool {
 
 /// MiMo's current APIs expose thinking as a binary switch. Gateway catalog
 /// rows may include a family prefix; inspect the final model component.
+/// ADR 0235: the switch is On only at high and above. graff's default
+/// (medium) leaves it Off: MiMo thinks at length on every call when it is on.
 pub fn mimoFamily(model: []const u8) bool {
     const name = if (std.mem.lastIndexOfScalar(u8, model, '/')) |slash| model[slash + 1 ..] else model;
     return std.ascii.startsWithIgnoreCase(name, "mimo-");
@@ -98,8 +100,9 @@ pub fn levels(provider_id: []const u8, model: []const u8) []const []const u8 {
 /// Ultra keeps its existing wire mapping to `max` and delegation guidance.
 pub fn normalize(provider_id: []const u8, model: []const u8, requested: []const u8) []const u8 {
     if (mimoRoute(provider_id, model)) {
-        if (std.mem.eql(u8, requested, "none") or std.mem.eql(u8, requested, "off")) return "none";
-        for ([_][]const u8{ "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "on" }) |positive|
+        for ([_][]const u8{ "none", "off", "minimal", "low", "medium" }) |below|
+            if (std.mem.eql(u8, requested, below)) return "none";
+        for ([_][]const u8{ "high", "xhigh", "max", "ultra", "on" }) |positive|
             if (std.mem.eql(u8, requested, positive)) return "high";
         return requested;
     }
@@ -142,7 +145,7 @@ pub fn allows(provider_id: []const u8, model: []const u8, tag: []const u8) bool 
 /// default `medium` becomes `low`. grok maps max/ultra → high (xAI rejects
 /// `max`). Other seats still send ultra as `max` (including OpenAI).
 pub fn wireEffort(provider_id: []const u8, model: []const u8, requested: []const u8) []const u8 {
-    if (mimoRoute(provider_id, model)) return if (std.mem.eql(u8, requested, "none")) "none" else "high";
+    if (mimoRoute(provider_id, model)) return normalize(provider_id, model, requested);
     if (std.mem.eql(u8, requested, "medium")) if (codexCatalog(provider_id, model)) |info| if (info.default_effort) |d| return d;
     if (std.mem.eql(u8, requested, "medium") and omitsDefaultFlashEffort(model)) return "low";
     if (grokFamily(model)) {
@@ -221,7 +224,7 @@ test "GPT-5.6 family: max is accepted (as Ultra) and wired as max; grok still fo
     try std.testing.expect(!allows("xai", "grok-4.6", "ultra"));
 }
 
-test "MiMo exposes only Off and On while legacy positive settings remain On" {
+test "ADR 0235: MiMo exposes Off and On, and thinks only at high and above" {
     for ([_][]const u8{ "mimo-v2.6-flash", "MiMo-V2.6-Pro", "xiaomi/mimo-v2.6-pro" }) |model| {
         try std.testing.expect(mimoFamily(model));
         const offered = levels("codegraff", model);
@@ -230,9 +233,13 @@ test "MiMo exposes only Off and On while legacy positive settings remain On" {
         try std.testing.expectEqualStrings("high", offered[1]);
         try std.testing.expectEqualStrings("none", normalize("xiaomi", model, "off"));
         try std.testing.expectEqualStrings("none", wireEffort("codegraff", model, "none"));
-        for ([_][]const u8{ "low", "medium", "high", "xhigh", "max", "ultra" }) |legacy| {
-            try std.testing.expectEqualStrings("high", normalize("xiaomi", model, legacy));
-            try std.testing.expectEqualStrings("high", wireEffort("codegraff", model, legacy));
+        for ([_][]const u8{ "minimal", "low", "medium" }) |below| { // medium is graff's default
+            try std.testing.expectEqualStrings("none", normalize("xiaomi", model, below));
+            try std.testing.expectEqualStrings("none", wireEffort("codegraff", model, below));
+        }
+        for ([_][]const u8{ "high", "xhigh", "max", "ultra", "on" }) |positive| {
+            try std.testing.expectEqualStrings("high", normalize("xiaomi", model, positive));
+            try std.testing.expectEqualStrings("high", wireEffort("codegraff", model, positive));
         }
     }
     try std.testing.expectEqualStrings("", normalize("openai", "gpt-6-astra", "none"));
