@@ -497,22 +497,12 @@ pub fn initRegistryConsent(io: Io, gpa: Allocator, arena: Allocator, out: *Io.Wr
             sink.emit(io, dimNotice(try std.fmt.allocPrint(arena, "ignoring ~/" ++ mcp_config.unsupported_rel_path ++ ": unsupported path — use ~/" ++ mcp_config.global_rel_path ++ " (global) or {s} (project)", .{mcp_config_path})));
     }
     const mcp_count = mcp_cli.countMcpServers(merged);
-    const defer_join = mcp_boot.deferMcpJoin(flags.effectiveYolo(), json_mode, mcp_boot.isAcp(flags.positionals.items));
+    const defer_join = mcp_boot.deferMcpJoin(json_mode, mcp_boot.isAcp(flags.positionals.items)); // ADR 0230
     const skip_imported = mcp_boot.oneshotSkipsImportedMcp(
         flags.oneshot_prompt != null,
         leanMode(flags.effectiveLean(), environ_map),
         merged.project.count(),
     );
-    // Name the next phase the way `plugins:` already does. Without this, a
-    // handshake that still runs on this thread looks like a hung boot.
-    if (!json_mode and flags.oneshot_prompt == null and mcp_count > 0) {
-        const mcp_line = if (defer_join)
-            try std.fmt.allocPrint(arena, "mcp: {d} server(s) in background", .{mcp_count})
-        else
-            try std.fmt.allocPrint(arena, "mcp: connecting {d} server(s)...", .{mcp_count});
-        sink.emit(io, dimNotice(mcp_line));
-    }
-    const mcp_t0 = Io.Timestamp.now(io, .awake);
     // Lean folds schemas (deferAllRuntime); it does not skip connect.
     // --yolo / -p still connect so `.mcp.json` works on the default one-shot
     // (ADR 0029). Interactive without --yolo still asks.
@@ -524,6 +514,17 @@ pub fn initRegistryConsent(io: Io, gpa: Allocator, arena: Allocator, out: *Io.Wr
         const ans = in.takeDelimiter('\n') catch null;
         connect_mcp = ans != null and ans.?.len > 0 and (ans.?[0] == 'y' or ans.?[0] == 'Y');
     }
+    // Name the next phase the way `plugins:` already does, once the servers
+    // are actually connecting. Without this, a handshake that still runs on
+    // this thread looks like a hung boot.
+    if (!json_mode and flags.oneshot_prompt == null and mcp_count > 0 and connect_mcp and !skip_imported) {
+        const mcp_line = if (defer_join)
+            try std.fmt.allocPrint(arena, "mcp: connecting {d} server(s) in the background", .{mcp_count})
+        else
+            try std.fmt.allocPrint(arena, "mcp: connecting {d} server(s)...", .{mcp_count});
+        sink.emit(io, dimNotice(mcp_line));
+    }
+    const mcp_t0 = Io.Timestamp.now(io, .awake);
     var registry: mcp.Registry = if (connect_mcp and !skip_imported) ((mcp.Registry.init(gpa, io, mcp_config_path, global_path, home, json_mode or flags.oneshot_prompt != null or environ_map.get("GRAFF_REPL_DEBUG") != null, environ_map, defer_join) catch |err| inner: {
         sink.emit(io, .{ .session_notice = .{ .text = try std.fmt.allocPrint(arena, "[mcp] init failed: {t} — continuing without MCP", .{err}) } });
         if (telemetry.g_telem) |t| t.errorEvent("mcp", @errorName(err));

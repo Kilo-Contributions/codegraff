@@ -221,7 +221,11 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
             try out.flush();
             return true;
         }
-        if (@import("mcp_boot.zig").joinPending(reg)) {
+        // Plain /mcp lists without waiting on servers still connecting (ADR
+        // 0230); add and trust change the registry, so they join them first.
+        const boot = @import("mcp_boot.zig");
+        const listing = !std.mem.startsWith(u8, arg, "add") and !std.mem.eql(u8, arg, "trust");
+        if (if (listing) boot.joinReady(reg) else boot.joinPending(reg)) {
             root.invalidateRootTools();
             try root.ensureRootTools(root.provider.kind);
         }
@@ -318,6 +322,8 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
             for (reg.tools) |t| try out.print("    {s}{s}{s}{s}\n", .{ style.dim, t.qualified_name, if (mcp_schema_gate.isDeferred(reg.tools, t)) "  schema deferred (#416); the model loads it on demand" else "", style.reset });
             try out.writeAll("  add more: /mcp add <name> <command> [args...]\n");
         }
+        const still = @import("mcp_connect_notice.zig").connecting(reg, arena);
+        if (still.len > 0) try out.print("  {s}still connecting: {s}{s}\n", .{ style.dim, try std.mem.join(arena, ", ", still), style.reset });
         if (pending > 0) try out.print("  {s}{d} configured server(s) not connected — /mcp trust to connect them{s}\n", .{ style.dim, pending, style.reset });
         try out.flush();
         return true;

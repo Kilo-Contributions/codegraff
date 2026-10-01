@@ -119,6 +119,8 @@ pub const Registry = struct {
     pending_names: []const []const u8 = &.{},
     /// First model call already declined to wait on `pending_starts` (ADR 0035).
     first_request_join_skipped: bool = false,
+    /// Background connects to report on the next root request (ADR 0230).
+    connect_notices: @import("mcp_connect_notice.zig").Joined = .{},
 
     pub fn arena(self: *Registry) Allocator {
         return self.arena_state.allocator();
@@ -253,7 +255,8 @@ pub const Registry = struct {
                 present = true;
                 break;
             };
-            if (!present) n += 1;
+            // Still connecting in the background is not "not connected" (ADR 0230).
+            if (!present and !mcp_boot.alreadyStarting(reg, entry.key_ptr.*)) n += 1;
         }
         return n;
     }

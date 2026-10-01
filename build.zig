@@ -172,6 +172,9 @@ pub fn build(b: *std.Build) void {
     const mcp_lazy_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-lazy.py" });
     mcp_lazy_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_lazy_test.step);
+    const mcp_async_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-async-start.py" });
+    mcp_async_test.addArtifactArg(exe);
+    test_step.dependOn(&mcp_async_test.step);
     const mcp_add_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-add.py" });
     mcp_add_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_add_test.step);
