@@ -54,9 +54,9 @@ Against the Codex app server graff was slower, 28.2s against 25.0s per task
 
 ## Enterprise
 
-graff is open source under a modified AGPL-3.0 ([LICENSE](../LICENSE)).
-Companies that have raised more than US$500k, or that have meaningful
-revenue or valuation, should contact
-[rach@standardharness.com](mailto:rach@standardharness.com) about enterprise
-offerings: commercial licensing under the Licensors' reserved rights,
+graff is licensed under a modified AGPL-3.0 ([LICENSE](../LICENSE)). From
+the release after v0.0.302.12, a company that has raised more than US$500k
+(at any valuation, counting its affiliates) needs a commercial license for any
+use, including on its own machines, CI and network. Contact
+[rach@standardharness.com](mailto:rach@standardharness.com) for a license,
 support, and deployment help.
