@@ -23,6 +23,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.13
+    \\  • fewer round trips: named MCP servers and subagents load up front
+    \\  • write_file won't replace an unread file and says what it did
+    \\  • sub-agents call inherited MCP tools from their first request
+    \\  • piped repl: a bracketed paste is one prompt
+    \\
     \\0.0.302.12
     \\  • every ChatGPT login (chatgpt, codex) is the new ChatGPT sign-in
     \\  • browser sign-ins survive stray connections and old tabs

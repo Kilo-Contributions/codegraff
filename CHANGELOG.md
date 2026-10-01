@@ -10,6 +10,24 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.13
+
+### Speed
+
+- Fewer model calls per task (ADR 0231). An MCP server the message names loads with the first request when its schemas are small, and the folded `subagent` and `agent_output` tools load when the message asks for subagents, so no `load_tool_schemas` round trip comes first. The note on what loaded repeats how results are slimmed and says one `rlm` script can fetch, save and build a file in a single step. (#1449)
+- `write_file` will not replace a file the session has not read, edited or written unless the call passes `replace: true`, and its result says whether it created or replaced the file and whether a `.json` file parses. The prompt drops the existence check before a write and the read-back after it. (#1449)
+- A child's inherited MCP tools are callable from its first request: they are no longer deferred behind hosted tool search on the codex route. (#1449)
+- `-p` and piped sessions skip reasoning summaries at low effort; nothing displays them there. (#1449)
+
+### Scripted sessions
+
+- A piped `graff repl` reads a bracketed paste (`ESC[200~ … ESC[201~`) as one prompt, so a multi-line task is one turn. Without the frame each line is still its own prompt. (#1449)
+- `ask_user` is offered only when someone can answer: not under `-p`, and not in a piped session outside `--json` or ACP. With no git identity configured, commits use git's defaults instead of asking. (#1449)
+
+### Evals
+
+- graff, the Codex app server and pi on the same model and ChatGPT account, and graff, OpenCode 2 and pi on one gateway model, in `evals/`. The runner gives every harness an empty stdin. (#1448)
+
 ## v0.0.302.12
 
 ### Sign-in
