@@ -48,12 +48,18 @@ CODEGRAFF_API_KEY=cg_sk_… ./run.py --suite swe --harness graff-dev,opencode-co
 ./run.py --suite live --harness graff-dev --reps 3 -j 1
 # same SuperGrok seat, other harnesses (OpenCode / Pi / exo local-process):
 ./run.py --suite live --harness opencode,pi-xai,exo --reps 3 -j 1
-# ChatGPT login, 1:1 with the Codex app server (needs `codex`; the driver copies the
-# login without its refresh token). Keep --output-root outside any repo so neither
-# harness reads repo docs; the mcp suite then needs scripts/linear_fixture_mcp.py
-# copied next to that root (the setup looks for it in a parent directory).
+# ChatGPT login, 1:1 with the Codex app server and pi (needs `codex`; the driver copies
+# the login without its refresh token; pi-codex needs pi signed in on the ChatGPT plan).
+# Keep --output-root outside any repo so no harness reads repo docs; the mcp suite then
+# needs scripts/linear_fixture_mcp.py copied next to that root (the setup looks for it
+# in a parent directory). pi has no MCP client, so it runs the core suite.
 # Results: evals/graff-vs-codex-app-server/RESULTS.md
-./run.py --suite core,mcp --harness graff-codex-repl,codex-app-server --model gpt-6.1-sol -j 6
+./run.py --suite mcp --harness graff-repl,codex-app-server -j 8 --interleave
+./run.py --suite core --harness graff-repl,codex-app-server,pi-codex -j 8 --interleave
+# one gateway model in graff, OpenCode 2 and pi (set CODEGRAFF_API_KEY; OPENCODE2_BIN
+# when `opencode` on PATH is 1.x). Results: evals/graff-vs-opencode-and-pi/RESULTS.md
+./run.py --suite core,mcp --harness graff-gateway-repl,opencode2 --model <gateway model> -j 6 --interleave
+./run.py --suite core --harness pi-codegraff --model <gateway model> -j 6
 ```
 
 ## Run it

@@ -33,6 +33,9 @@ import time
 from datetime import datetime, timezone
 
 
+T0 = time.monotonic()
+
+
 def trace(ev: dict) -> None:
     """EVAL_TRACE_DIR: one JSONL per sandbox of per-call usage and item sizes
     (what each output token went to), for output and cache analysis."""
@@ -40,6 +43,7 @@ def trace(ev: dict) -> None:
     if not root:
         return
     os.makedirs(root, exist_ok=True)
+    ev = dict(ev, t=round((time.monotonic() - T0) * 1000))  # ms since the driver started
     with open(os.path.join(root, os.path.basename(os.getcwd()) + ".jsonl"), "a") as fh:
         fh.write(json.dumps(ev) + "\n")
 

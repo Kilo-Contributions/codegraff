@@ -32,7 +32,7 @@ RESULTS_DIR = os.path.join(ROOT, "results")
 SANDBOX_DIR = os.path.join(ROOT, ".sandboxes")
 
 GRAFF_USAGE_RE = re.compile(
-    r"\[usage\] (\d+) api call\(s\) · (\d+) in \((\d+) cached(?:, (\d+) cache writes)?\) \+ (\d+) out tokens")
+    r"\[usage\] (?:known subtotal: )?(\d+) api call\(s\) · (\d+) in \((\d+) cached(?:, (\d+) cache writes)?\) \+ (\d+) out tokens")
 
 
 def load_tasks():
@@ -371,7 +371,7 @@ def one_run(hname, harness, task, model, rep, live=False):
         request_capture.configure(env, sandbox)
     try:
         p = subprocess.Popen(cmd, cwd=sandbox, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, stdin=subprocess.PIPE if stdin_body is not None else None,
+                             stderr=subprocess.PIPE, stdin=subprocess.PIPE if stdin_body is not None else subprocess.DEVNULL,
                              text=True, start_new_session=True,
                              env=env)
         if stdin_body is not None and p.stdin is not None:

@@ -12,9 +12,11 @@ grok-4.6 SuperGrok) is
 [graff-live-12-report.html](graff-live-12-report.html) plus
 [artifacts/graff-evals-live/RECEIPT.md](../artifacts/graff-evals-live/RECEIPT.md).
 
-graff against the Codex app server on the same model and ChatGPT account (21
-coding and MCP tasks, every run's data) is
-[evals/graff-vs-codex-app-server/RESULTS.md](../evals/graff-vs-codex-app-server/RESULTS.md).
+graff against the Codex app server and pi on the same model and ChatGPT account
+(21 coding and MCP tasks, every run's data) is
+[evals/graff-vs-codex-app-server/RESULTS.md](../evals/graff-vs-codex-app-server/RESULTS.md),
+and graff against OpenCode 2 and pi on one model through the Codegraff gateway is
+[evals/graff-vs-opencode-and-pi/RESULTS.md](../evals/graff-vs-opencode-and-pi/RESULTS.md).
 The same 21 tasks against the Grok CLI on the same SuperGrok account are
 [evals/graff-vs-grok-cli/RESULTS.md](../evals/graff-vs-grok-cli/RESULTS.md),
 and what both mean for an engineering budget is
