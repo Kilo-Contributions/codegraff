@@ -129,8 +129,9 @@ test "seatFor: family-alias spelling seats the sub, exact names hold, unknown mi
     try std.testing.expectEqualStrings("kimi", kk.seat.pid);
     try std.testing.expectEqualStrings("k3", kk.seat.model);
     try std.testing.expectEqual(pricing.Billing.sub, kk.seat.billing);
+    // ADR 0229: with both ChatGPT routes signed in, the plan's sign-in wins.
     const sol = seatFor(all, "gpt-5.6-sol");
-    try std.testing.expectEqualStrings("codex", sol.seat.pid);
+    try std.testing.expectEqualStrings("chatgpt-new", sol.seat.pid);
     try std.testing.expectEqual(pricing.Billing.sub, sol.seat.billing);
     try std.testing.expect(seatFor(all, "totally-unknown-zzz") == .unknown);
 

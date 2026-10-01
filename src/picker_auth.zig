@@ -293,18 +293,15 @@ pub fn offerProviderAuth(
         return;
     }
 
+    // The Codex client's login no longer works (ADR 0229): a codex seat signs
+    // in through the ChatGPT sign-in and continues on chatgpt-new.
+    const seat_pid = if (std.mem.eql(u8, pid, "codex") and std.mem.eql(u8, picked, "log in (OAuth)")) "chatgpt-new" else pid;
     if (std.mem.eql(u8, picked, "log in (OAuth)")) {
         const home = root.home;
         try out.flush(); // hand stdout to the login flow's own writer
         if (std.mem.eql(u8, pid, "codegraff")) {
             oauth.codegraffLogin(root.io, root.gpa, arena, home) catch |err| {
                 try out.print("\xe2\x9c\x97 codegraff login failed: {t}\n", .{err});
-                try out.flush();
-                return;
-            };
-        } else if (std.mem.eql(u8, pid, "codex")) {
-            oauth.codexLogin(root.io, root.gpa, arena, home, false) catch |err| {
-                try out.print("\xe2\x9c\x97 codex login failed: {t}\n", .{err});
                 try out.flush();
                 return;
             };
@@ -326,14 +323,14 @@ pub fn offerProviderAuth(
                 try out.flush();
                 return;
             };
-        } else if (std.mem.eql(u8, pid, "chatgpt-new")) {
+        } else if (std.mem.eql(u8, seat_pid, "chatgpt-new")) {
             @import("oauth_chatgpt.zig").login(root.io, root.gpa, arena, home) catch |err| {
                 try out.print("\xe2\x9c\x97 chatgpt login failed: {t}\n", .{err});
                 try out.flush();
                 return;
             };
         }
-        reloadLoginKey(root, keys, arena, pid);
+        reloadLoginKey(root, keys, arena, seat_pid);
     } else {
         try out.print("paste your {s} API key, then Enter (input is hidden; blank cancels): ", .{pid});
         try out.flush();
@@ -351,12 +348,17 @@ pub fn offerProviderAuth(
     }
 
     // Auth done — switch now if the key/login took, else keep the current model.
+    // A codex seat moved to chatgpt-new keeps its model when that route serves it.
+    const seat_spec = provider_mod.specFor(seat_pid) orelse spec;
+    const seat_default = pricing.providerDefaultModel(seat_pid, seat_spec.default_model);
     const selected_model = if (default_selection and std.mem.eql(u8, pid, "codex"))
-        pricing.providerDefaultModel(pid, spec.default_model)
+        seat_default
+    else if (!std.mem.eql(u8, seat_pid, pid) and !pricing.providerModelInTable(seat_pid, model))
+        seat_default
     else
         model;
-    const provider = keys.providerById(pid, selected_model) catch {
-        try out.print("still no usable key for {s} — kept {s}{s}{s}\n", .{ pid, style.accent, root.provider.model, style.reset });
+    const provider = keys.providerById(seat_pid, selected_model) catch {
+        try out.print("still no usable key for {s} — kept {s}{s}{s}\n", .{ seat_pid, style.accent, root.provider.model, style.reset });
         try out.flush();
         return;
     };

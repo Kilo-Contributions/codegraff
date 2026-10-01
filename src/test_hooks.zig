@@ -331,6 +331,7 @@ test {
     _ = agent_compact_summary_test;
     _ = side_question_tests;
     _ = @import("worker_mcp.zig"); // ADR 0227
+    _ = @import("oauth_callback.zig");
     _ = @import("cache_key_tests.zig"); // ADR 0223: moved off http_headers.zig (600-line cap)
     _ = @import("mcp_shapes_tests.zig"); // ADR 0225: moved off mcp_shapes.zig (600-line cap)
     _ = json_controls;

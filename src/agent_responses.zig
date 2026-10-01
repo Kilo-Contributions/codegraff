@@ -148,7 +148,7 @@ pub fn failureDiagnostic(allocator: std.mem.Allocator, provider: []const u8, fai
     // A spent ChatGPT plan allowance, often mid-stream (ADR 0221).
     if (policy.isPlanUsageLimit(failure.code)) try w.writeAll(" \xe2\x80\x94 " ++ @import("oauth_chatgpt.zig").usage_hint);
     // Reached only after the one refresh-and-retry could not help.
-    if (std.mem.eql(u8, provider, "chatgpt-new") and policy.isAuthError(failure.authText())) try w.writeAll(" \xe2\x80\x94 sign in again with `graff login chatgpt-new`");
+    if (std.mem.eql(u8, provider, "chatgpt-new") and policy.isAuthError(failure.authText())) try w.writeAll(" \xe2\x80\x94 sign in again with `graff login chatgpt`");
     return allocator.dupe(u8, w.buffered());
 }
 
@@ -164,7 +164,7 @@ test "failureDiagnostic points a spent ChatGPT plan at its usage page, a rejecte
     try std.testing.expectEqualStrings("subscription_sharing_invalid_user", user.authText());
     const signed_out = try failureDiagnostic(a, "chatgpt-new", user);
     defer a.free(signed_out);
-    try std.testing.expect(std.mem.endsWith(u8, signed_out, "sign in again with `graff login chatgpt-new`"));
+    try std.testing.expect(std.mem.endsWith(u8, signed_out, "sign in again with `graff login chatgpt`"));
     // A message that already reads as auth keeps it; a plan limit is no sign-in.
     try std.testing.expectEqualStrings("Unauthorized", (ResponsesFailure{ .message = "Unauthorized", .code = "server_error" }).authText());
     try std.testing.expectEqualStrings("Usage limit reached.", (ResponsesFailure{ .message = "Usage limit reached.", .code = "subscription_sharing_usage_limit_exceeded" }).authText());

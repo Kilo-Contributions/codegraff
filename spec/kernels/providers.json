@@ -201,20 +201,20 @@
       "takes_effort": false
     },
     {
-      "id": "codex",
-      "kind": "responses",
-      "auth": "bearer",
-      "login": "codex_device",
-      "catalog": "codex",
-      "sub_login": true,
-      "takes_effort": false
-    },
-    {
       "id": "chatgpt-new",
       "kind": "responses",
       "auth": "bearer",
       "login": "chatgpt_browser",
       "catalog": "openai",
+      "sub_login": true,
+      "takes_effort": false
+    },
+    {
+      "id": "codex",
+      "kind": "responses",
+      "auth": "bearer",
+      "login": "codex_device",
+      "catalog": "codex",
       "sub_login": true,
       "takes_effort": false
     }

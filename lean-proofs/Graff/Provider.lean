@@ -68,8 +68,8 @@ def specs : List Row :=
   , { id := "fireworks",  kind := .openai,    auth := .bearer,  catalog := .openai }
   , { id := "mlx",        kind := .openai,    auth := .bearer }
   , { id := "lmstudio",   kind := .openai,    auth := .bearer }
-  , { id := "codex",      kind := .responses, auth := .bearer,  login := .codexDevice, catalog := .codex, subLogin := true }
   , { id := "chatgpt-new", kind := .responses, auth := .bearer,  login := .chatgptBrowser, catalog := .openai, subLogin := true }
+  , { id := "codex",      kind := .responses, auth := .bearer,  login := .codexDevice, catalog := .codex, subLogin := true }
   ]
 
 def ids : List String := specs.map (·.id)
