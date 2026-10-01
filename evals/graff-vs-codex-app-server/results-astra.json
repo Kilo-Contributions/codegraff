@@ -1,0 +1,2379 @@
+{
+ "measured": "2026-10-01",
+ "model": "gpt-6-astra",
+ "arms": {
+  "graff": "graff (this PR: ADR 0230 + ADR 0232 on v0.0.302.13)",
+  "codex": "Codex app server (codex-cli 0.159.0)"
+ },
+ "suites": {
+  "core": {
+   "reps": 2,
+   "tasks": 11,
+   "summary": {
+    "graff": {
+     "runs": 22,
+     "passed": 22,
+     "wall_s_per_task": 15.2,
+     "list_usd_per_task": 0.0767,
+     "cached_input_share": 0.86,
+     "output_tokens_per_task": 178,
+     "model_calls_per_task": 2.9
+    },
+    "codex": {
+     "runs": 22,
+     "passed": 22,
+     "wall_s_per_task": 18.9,
+     "list_usd_per_task": 0.0912,
+     "cached_input_share": 0.918,
+     "output_tokens_per_task": 224,
+     "model_calls_per_task": 3.2
+    }
+   }
+  },
+  "mcp": {
+   "reps": 2,
+   "tasks": 10,
+   "summary": {
+    "graff": {
+     "runs": 20,
+     "passed": 20,
+     "wall_s_per_task": 27.2,
+     "list_usd_per_task": 0.1168,
+     "cached_input_share": 0.842,
+     "output_tokens_per_task": 561,
+     "model_calls_per_task": 3.2
+    },
+    "codex": {
+     "runs": 20,
+     "passed": 20,
+     "wall_s_per_task": 38.7,
+     "list_usd_per_task": 0.4364,
+     "cached_input_share": 0.845,
+     "output_tokens_per_task": 673,
+     "model_calls_per_task": 6
+    }
+   }
+  },
+  "subagents": {
+   "reps": 3,
+   "tasks": 5,
+   "summary": {
+    "graff": {
+     "runs": 15,
+     "passed": 15,
+     "wall_s_per_task": 71.0,
+     "list_usd_per_task": 0.4265,
+     "cached_input_share": 0.914,
+     "output_tokens_per_task": 2539,
+     "model_calls_per_task": 16.3
+    },
+    "codex": {
+     "runs": 15,
+     "passed": 15,
+     "wall_s_per_task": 86.1,
+     "list_usd_per_task": 1.5858,
+     "cached_input_share": 0.927,
+     "output_tokens_per_task": 2788,
+     "model_calls_per_task": 24.4
+    }
+   }
+  },
+  "subagents-solo": {
+   "reps": 2,
+   "tasks": 5,
+   "summary": {
+    "graff": {
+     "runs": 10,
+     "passed": 10,
+     "wall_s_per_task": 47.9,
+     "list_usd_per_task": 0.1437,
+     "cached_input_share": 0.916,
+     "output_tokens_per_task": 1187,
+     "model_calls_per_task": 4.1
+    },
+    "codex": {
+     "runs": 10,
+     "passed": 10,
+     "wall_s_per_task": 50.8,
+     "list_usd_per_task": 0.192,
+     "cached_input_share": 0.876,
+     "output_tokens_per_task": 1200,
+     "model_calls_per_task": 4
+    }
+   }
+  }
+ },
+ "per_task": {
+  "csv-sum": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 17.5,
+    "list_usd": 0.0859,
+    "model_calls": 3
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 26.6,
+    "list_usd": 0.1183,
+    "model_calls": 3.5
+   }
+  },
+  "dead-code": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 9.1,
+    "list_usd": 0.0617,
+    "model_calls": 2
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 18.0,
+    "list_usd": 0.1108,
+    "model_calls": 4
+   }
+  },
+  "exact-reply": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 4.0,
+    "list_usd": 0.0287,
+    "model_calls": 1
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 7.3,
+    "list_usd": 0.0314,
+    "model_calls": 1
+   }
+  },
+  "file-ops": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 12.8,
+    "list_usd": 0.0627,
+    "model_calls": 3
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 12.0,
+    "list_usd": 0.0623,
+    "model_calls": 2
+   }
+  },
+  "fix-fib": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 21.3,
+    "list_usd": 0.125,
+    "model_calls": 4
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 23.9,
+    "list_usd": 0.1203,
+    "model_calls": 4
+   }
+  },
+  "git-ops": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 21.6,
+    "list_usd": 0.0947,
+    "model_calls": 3
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 18.0,
+    "list_usd": 0.0888,
+    "model_calls": 3
+   }
+  },
+  "json-transform": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 15.0,
+    "list_usd": 0.0645,
+    "model_calls": 3
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 19.3,
+    "list_usd": 0.0958,
+    "model_calls": 4
+   }
+  },
+  "recall-noise": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 8.8,
+    "list_usd": 0.0436,
+    "model_calls": 2
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 11.8,
+    "list_usd": 0.0607,
+    "model_calls": 2
+   }
+  },
+  "refactor-rename": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 23.1,
+    "list_usd": 0.1193,
+    "model_calls": 4
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 26.5,
+    "list_usd": 0.1197,
+    "model_calls": 4
+   }
+  },
+  "regex-count": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 13.6,
+    "list_usd": 0.0574,
+    "model_calls": 2.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 18.3,
+    "list_usd": 0.0828,
+    "model_calls": 3.5
+   }
+  },
+  "write-tests": {
+   "suite": "core",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 20.1,
+    "list_usd": 0.0998,
+    "model_calls": 4
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 26.6,
+    "list_usd": 0.1125,
+    "model_calls": 4
+   }
+  },
+  "linear-issues": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 19.4,
+    "list_usd": 0.0926,
+    "model_calls": 2
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 31.8,
+    "list_usd": 0.2447,
+    "model_calls": 4.5
+   }
+  },
+  "linear-nohint": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 26.4,
+    "list_usd": 0.1052,
+    "model_calls": 3.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 29.0,
+    "list_usd": 0.2821,
+    "model_calls": 4
+   }
+  },
+  "linear-nohint-warm": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 24.2,
+    "list_usd": 0.0846,
+    "model_calls": 2.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 42.4,
+    "list_usd": 0.3946,
+    "model_calls": 6.5
+   }
+  },
+  "linear-quiet": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 20.3,
+    "list_usd": 0.0651,
+    "model_calls": 2
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 36.3,
+    "list_usd": 0.2398,
+    "model_calls": 5
+   }
+  },
+  "linear-quiet-warm": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 25.9,
+    "list_usd": 0.0786,
+    "model_calls": 2.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 35.1,
+    "list_usd": 0.2471,
+    "model_calls": 4
+   }
+  },
+  "linear-reduce": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 23.0,
+    "list_usd": 0.0811,
+    "model_calls": 2.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 42.4,
+    "list_usd": 0.3101,
+    "model_calls": 6
+   }
+  },
+  "linear-reduce-warm": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 33.5,
+    "list_usd": 0.1268,
+    "model_calls": 3.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 36.7,
+    "list_usd": 0.2201,
+    "model_calls": 5
+   }
+  },
+  "linear-sidecar": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 27.1,
+    "list_usd": 0.1339,
+    "model_calls": 3
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 34.1,
+    "list_usd": 0.281,
+    "model_calls": 5
+   }
+  },
+  "linear-split": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 47.3,
+    "list_usd": 0.2842,
+    "model_calls": 8
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 64.5,
+    "list_usd": 1.8366,
+    "model_calls": 16
+   }
+  },
+  "linear-warm": {
+   "suite": "mcp",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 25.3,
+    "list_usd": 0.1155,
+    "model_calls": 2.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 35.1,
+    "list_usd": 0.3079,
+    "model_calls": 4
+   }
+  },
+  "sa-census": {
+   "suite": "subagents",
+   "graff": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 60.9,
+    "list_usd": 0.3775,
+    "model_calls": 15
+   },
+   "codex": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 83.1,
+    "list_usd": 1.6704,
+    "model_calls": 24.7
+   }
+  },
+  "sa-coverage": {
+   "suite": "subagents",
+   "graff": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 57.4,
+    "list_usd": 0.2819,
+    "model_calls": 12
+   },
+   "codex": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 72.5,
+    "list_usd": 1.2064,
+    "model_calls": 18.3
+   }
+  },
+  "sa-fix-three": {
+   "suite": "subagents",
+   "graff": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 61.9,
+    "list_usd": 0.4618,
+    "model_calls": 19
+   },
+   "codex": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 68.8,
+    "list_usd": 1.5096,
+    "model_calls": 23.7
+   }
+  },
+  "sa-rename-api": {
+   "suite": "subagents",
+   "graff": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 79.4,
+    "list_usd": 0.631,
+    "model_calls": 23.7
+   },
+   "codex": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 92.5,
+    "list_usd": 1.9411,
+    "model_calls": 31.3
+   }
+  },
+  "sa-sidecar": {
+   "suite": "subagents",
+   "graff": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 95.2,
+    "list_usd": 0.3802,
+    "model_calls": 12
+   },
+   "codex": {
+    "passed": 3,
+    "runs": 3,
+    "wall_s": 113.4,
+    "list_usd": 1.6014,
+    "model_calls": 24
+   }
+  },
+  "solo-census": {
+   "suite": "subagents-solo",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 32.0,
+    "list_usd": 0.0957,
+    "model_calls": 3
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 24.5,
+    "list_usd": 0.1057,
+    "model_calls": 3
+   }
+  },
+  "solo-coverage": {
+   "suite": "subagents-solo",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 33.5,
+    "list_usd": 0.0966,
+    "model_calls": 3
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 39.6,
+    "list_usd": 0.1642,
+    "model_calls": 4
+   }
+  },
+  "solo-fix-three": {
+   "suite": "subagents-solo",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 42.1,
+    "list_usd": 0.1422,
+    "model_calls": 4
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 47.6,
+    "list_usd": 0.2228,
+    "model_calls": 4.5
+   }
+  },
+  "solo-rename-api": {
+   "suite": "subagents-solo",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 62.7,
+    "list_usd": 0.1874,
+    "model_calls": 5.5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 59.6,
+    "list_usd": 0.2188,
+    "model_calls": 4
+   }
+  },
+  "solo-sidecar": {
+   "suite": "subagents-solo",
+   "graff": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 69.2,
+    "list_usd": 0.1967,
+    "model_calls": 5
+   },
+   "codex": {
+    "passed": 2,
+    "runs": 2,
+    "wall_s": 82.7,
+    "list_usd": 0.2484,
+    "model_calls": 4.5
+   }
+  }
+ },
+ "runs": [
+  {
+   "arm": "codex",
+   "task": "csv-sum",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 20.48,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.101418
+  },
+  {
+   "arm": "codex",
+   "task": "csv-sum",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 32.76,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.13514
+  },
+  {
+   "arm": "codex",
+   "task": "dead-code",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 17.44,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.112574
+  },
+  {
+   "arm": "codex",
+   "task": "dead-code",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 18.47,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.109052
+  },
+  {
+   "arm": "codex",
+   "task": "exact-reply",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 7.72,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.031358
+  },
+  {
+   "arm": "codex",
+   "task": "exact-reply",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 6.92,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.031358
+  },
+  {
+   "arm": "codex",
+   "task": "file-ops",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 12.8,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.0552
+  },
+  {
+   "arm": "codex",
+   "task": "file-ops",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 11.26,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.069436
+  },
+  {
+   "arm": "codex",
+   "task": "fix-fib",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 22.57,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.120582
+  },
+  {
+   "arm": "codex",
+   "task": "fix-fib",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 25.26,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.120112
+  },
+  {
+   "arm": "codex",
+   "task": "git-ops",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 16.53,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.079326
+  },
+  {
+   "arm": "codex",
+   "task": "git-ops",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 19.5,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.098286
+  },
+  {
+   "arm": "codex",
+   "task": "json-transform",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 19.3,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.095332
+  },
+  {
+   "arm": "codex",
+   "task": "json-transform",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 19.29,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.096332
+  },
+  {
+   "arm": "codex",
+   "task": "recall-noise",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 12.63,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.05321
+  },
+  {
+   "arm": "codex",
+   "task": "recall-noise",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 11.04,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.068186
+  },
+  {
+   "arm": "codex",
+   "task": "refactor-rename",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 25.4,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.112108
+  },
+  {
+   "arm": "codex",
+   "task": "refactor-rename",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 27.51,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.127296
+  },
+  {
+   "arm": "codex",
+   "task": "regex-count",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 19.2,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.090792
+  },
+  {
+   "arm": "codex",
+   "task": "regex-count",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 17.44,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.074886
+  },
+  {
+   "arm": "codex",
+   "task": "write-tests",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 24.96,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.102202
+  },
+  {
+   "arm": "codex",
+   "task": "write-tests",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 28.3,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.122862
+  },
+  {
+   "arm": "graff",
+   "task": "csv-sum",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 17.01,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.085944
+  },
+  {
+   "arm": "graff",
+   "task": "csv-sum",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 18.04,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.085904
+  },
+  {
+   "arm": "graff",
+   "task": "dead-code",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 8.69,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.062302
+  },
+  {
+   "arm": "graff",
+   "task": "dead-code",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 9.47,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.06115
+  },
+  {
+   "arm": "graff",
+   "task": "exact-reply",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 4.65,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.04536
+  },
+  {
+   "arm": "graff",
+   "task": "exact-reply",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 3.32,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.011952
+  },
+  {
+   "arm": "graff",
+   "task": "file-ops",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 14.02,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.080728
+  },
+  {
+   "arm": "graff",
+   "task": "file-ops",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 11.64,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.044596
+  },
+  {
+   "arm": "graff",
+   "task": "fix-fib",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 21.2,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.141274
+  },
+  {
+   "arm": "graff",
+   "task": "fix-fib",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 21.47,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.108728
+  },
+  {
+   "arm": "graff",
+   "task": "git-ops",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 25.22,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.132182
+  },
+  {
+   "arm": "graff",
+   "task": "git-ops",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 18.01,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.057288
+  },
+  {
+   "arm": "graff",
+   "task": "json-transform",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 14.42,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.081472
+  },
+  {
+   "arm": "graff",
+   "task": "json-transform",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 15.57,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.047442
+  },
+  {
+   "arm": "graff",
+   "task": "recall-noise",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 8.3,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.061432
+  },
+  {
+   "arm": "graff",
+   "task": "recall-noise",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 9.29,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.02572
+  },
+  {
+   "arm": "graff",
+   "task": "refactor-rename",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 22.52,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.101912
+  },
+  {
+   "arm": "graff",
+   "task": "refactor-rename",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 23.73,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.136692
+  },
+  {
+   "arm": "graff",
+   "task": "regex-count",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 13.85,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.080842
+  },
+  {
+   "arm": "graff",
+   "task": "regex-count",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 13.37,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.034004
+  },
+  {
+   "arm": "graff",
+   "task": "write-tests",
+   "suite": "core",
+   "rep": 1,
+   "wall_s": 20.98,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.099982
+  },
+  {
+   "arm": "graff",
+   "task": "write-tests",
+   "suite": "core",
+   "rep": 2,
+   "wall_s": 19.16,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.099676
+  },
+  {
+   "arm": "codex",
+   "task": "linear-issues",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 30.13,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.245844
+  },
+  {
+   "arm": "codex",
+   "task": "linear-issues",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 33.37,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.243532
+  },
+  {
+   "arm": "codex",
+   "task": "linear-nohint",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 30.78,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.242624
+  },
+  {
+   "arm": "codex",
+   "task": "linear-nohint",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 27.29,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.321548
+  },
+  {
+   "arm": "codex",
+   "task": "linear-nohint-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 40.9,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.34047
+  },
+  {
+   "arm": "codex",
+   "task": "linear-nohint-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 43.93,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.44878
+  },
+  {
+   "arm": "codex",
+   "task": "linear-quiet",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 33.86,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.15112
+  },
+  {
+   "arm": "codex",
+   "task": "linear-quiet",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 38.73,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.328526
+  },
+  {
+   "arm": "codex",
+   "task": "linear-quiet-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 36.97,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.239926
+  },
+  {
+   "arm": "codex",
+   "task": "linear-quiet-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 33.25,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.254226
+  },
+  {
+   "arm": "codex",
+   "task": "linear-reduce",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 40.3,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.177872
+  },
+  {
+   "arm": "codex",
+   "task": "linear-reduce",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 44.44,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.442334
+  },
+  {
+   "arm": "codex",
+   "task": "linear-reduce-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 32.58,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.148088
+  },
+  {
+   "arm": "codex",
+   "task": "linear-reduce-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 40.77,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.292126
+  },
+  {
+   "arm": "codex",
+   "task": "linear-sidecar",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 35.11,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.284694
+  },
+  {
+   "arm": "codex",
+   "task": "linear-sidecar",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 33.14,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.277336
+  },
+  {
+   "arm": "codex",
+   "task": "linear-split",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 65.18,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.871251
+  },
+  {
+   "arm": "codex",
+   "task": "linear-split",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 63.8,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.801867
+  },
+  {
+   "arm": "codex",
+   "task": "linear-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 36.74,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.350268
+  },
+  {
+   "arm": "codex",
+   "task": "linear-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 33.51,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.265518
+  },
+  {
+   "arm": "graff",
+   "task": "linear-issues",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 20.3,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.119484
+  },
+  {
+   "arm": "graff",
+   "task": "linear-issues",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 18.5,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.065644
+  },
+  {
+   "arm": "graff",
+   "task": "linear-nohint",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 25.28,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.097686
+  },
+  {
+   "arm": "graff",
+   "task": "linear-nohint",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 27.45,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.11265
+  },
+  {
+   "arm": "graff",
+   "task": "linear-nohint-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 22.96,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.075644
+  },
+  {
+   "arm": "graff",
+   "task": "linear-nohint-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 25.54,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.093596
+  },
+  {
+   "arm": "graff",
+   "task": "linear-quiet",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 19.61,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.065464
+  },
+  {
+   "arm": "graff",
+   "task": "linear-quiet",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 20.92,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.064736
+  },
+  {
+   "arm": "graff",
+   "task": "linear-quiet-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 28.84,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.091352
+  },
+  {
+   "arm": "graff",
+   "task": "linear-quiet-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 22.91,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.065872
+  },
+  {
+   "arm": "graff",
+   "task": "linear-reduce",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 22.61,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.070524
+  },
+  {
+   "arm": "graff",
+   "task": "linear-reduce",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 23.44,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.091716
+  },
+  {
+   "arm": "graff",
+   "task": "linear-reduce-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 36.65,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.139448
+  },
+  {
+   "arm": "graff",
+   "task": "linear-reduce-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 30.29,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.114196
+  },
+  {
+   "arm": "graff",
+   "task": "linear-sidecar",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 27.91,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.167028
+  },
+  {
+   "arm": "graff",
+   "task": "linear-sidecar",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 26.33,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.100852
+  },
+  {
+   "arm": "graff",
+   "task": "linear-split",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 48.9,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.32965
+  },
+  {
+   "arm": "graff",
+   "task": "linear-split",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 45.71,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.238804
+  },
+  {
+   "arm": "graff",
+   "task": "linear-warm",
+   "suite": "mcp",
+   "rep": 1,
+   "wall_s": 23.42,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.128654
+  },
+  {
+   "arm": "graff",
+   "task": "linear-warm",
+   "suite": "mcp",
+   "rep": 2,
+   "wall_s": 27.26,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.102316
+  },
+  {
+   "arm": "codex",
+   "task": "sa-census",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 78.53,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.583248
+  },
+  {
+   "arm": "codex",
+   "task": "sa-census",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 91.1,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 2.009003
+  },
+  {
+   "arm": "codex",
+   "task": "sa-census",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 79.64,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.418813
+  },
+  {
+   "arm": "codex",
+   "task": "sa-coverage",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 72.84,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.166416
+  },
+  {
+   "arm": "codex",
+   "task": "sa-coverage",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 69.51,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.240408
+  },
+  {
+   "arm": "codex",
+   "task": "sa-coverage",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 75.27,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.212459
+  },
+  {
+   "arm": "codex",
+   "task": "sa-fix-three",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 66.16,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.527472
+  },
+  {
+   "arm": "codex",
+   "task": "sa-fix-three",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 73.49,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.669447
+  },
+  {
+   "arm": "codex",
+   "task": "sa-fix-three",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 66.76,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.331797
+  },
+  {
+   "arm": "codex",
+   "task": "sa-rename-api",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 79.28,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.709732
+  },
+  {
+   "arm": "codex",
+   "task": "sa-rename-api",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 95.87,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 2.103197
+  },
+  {
+   "arm": "codex",
+   "task": "sa-rename-api",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 102.25,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 2.010445
+  },
+  {
+   "arm": "codex",
+   "task": "sa-sidecar",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 117.93,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.57212
+  },
+  {
+   "arm": "codex",
+   "task": "sa-sidecar",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 119.55,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.871558
+  },
+  {
+   "arm": "codex",
+   "task": "sa-sidecar",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 102.86,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 1.360411
+  },
+  {
+   "arm": "graff",
+   "task": "sa-census",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 59.98,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.366188
+  },
+  {
+   "arm": "graff",
+   "task": "sa-census",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 60.41,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.386332
+  },
+  {
+   "arm": "graff",
+   "task": "sa-census",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 62.4,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.379838
+  },
+  {
+   "arm": "graff",
+   "task": "sa-coverage",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 59.71,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.296528
+  },
+  {
+   "arm": "graff",
+   "task": "sa-coverage",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 55.3,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.284584
+  },
+  {
+   "arm": "graff",
+   "task": "sa-coverage",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 57.29,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.264662
+  },
+  {
+   "arm": "graff",
+   "task": "sa-fix-three",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 67.06,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.436854
+  },
+  {
+   "arm": "graff",
+   "task": "sa-fix-three",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 60.99,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.489968
+  },
+  {
+   "arm": "graff",
+   "task": "sa-fix-three",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 57.56,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.458562
+  },
+  {
+   "arm": "graff",
+   "task": "sa-rename-api",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 88.74,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.572352
+  },
+  {
+   "arm": "graff",
+   "task": "sa-rename-api",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 72.19,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.63029
+  },
+  {
+   "arm": "graff",
+   "task": "sa-rename-api",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 77.13,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.690314
+  },
+  {
+   "arm": "graff",
+   "task": "sa-sidecar",
+   "suite": "subagents",
+   "rep": 1,
+   "wall_s": 102.72,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.397278
+  },
+  {
+   "arm": "graff",
+   "task": "sa-sidecar",
+   "suite": "subagents",
+   "rep": 2,
+   "wall_s": 78.35,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.348168
+  },
+  {
+   "arm": "graff",
+   "task": "sa-sidecar",
+   "suite": "subagents",
+   "rep": 3,
+   "wall_s": 104.55,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.395174
+  },
+  {
+   "arm": "codex",
+   "task": "solo-census",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 25.16,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.115036
+  },
+  {
+   "arm": "codex",
+   "task": "solo-census",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 23.86,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.096294
+  },
+  {
+   "arm": "codex",
+   "task": "solo-coverage",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 38.14,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.178592
+  },
+  {
+   "arm": "codex",
+   "task": "solo-coverage",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 40.99,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.149784
+  },
+  {
+   "arm": "codex",
+   "task": "solo-fix-three",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 45.83,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.170968
+  },
+  {
+   "arm": "codex",
+   "task": "solo-fix-three",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 49.33,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.274538
+  },
+  {
+   "arm": "codex",
+   "task": "solo-rename-api",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 60.79,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.231488
+  },
+  {
+   "arm": "codex",
+   "task": "solo-rename-api",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 58.51,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.206136
+  },
+  {
+   "arm": "codex",
+   "task": "solo-sidecar",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 74.44,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.21682
+  },
+  {
+   "arm": "codex",
+   "task": "solo-sidecar",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 90.9,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.279966
+  },
+  {
+   "arm": "graff",
+   "task": "solo-census",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 29.85,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.091356
+  },
+  {
+   "arm": "graff",
+   "task": "solo-census",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 34.21,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.100012
+  },
+  {
+   "arm": "graff",
+   "task": "solo-coverage",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 34.0,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.097426
+  },
+  {
+   "arm": "graff",
+   "task": "solo-coverage",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 32.94,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.095838
+  },
+  {
+   "arm": "graff",
+   "task": "solo-fix-three",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 42.0,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.142392
+  },
+  {
+   "arm": "graff",
+   "task": "solo-fix-three",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 42.21,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.14204
+  },
+  {
+   "arm": "graff",
+   "task": "solo-rename-api",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 64.4,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.19823
+  },
+  {
+   "arm": "graff",
+   "task": "solo-rename-api",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 60.94,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.17649
+  },
+  {
+   "arm": "graff",
+   "task": "solo-sidecar",
+   "suite": "subagents-solo",
+   "rep": 1,
+   "wall_s": 70.28,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.211152
+  },
+  {
+   "arm": "graff",
+   "task": "solo-sidecar",
+   "suite": "subagents-solo",
+   "rep": 2,
+   "wall_s": 68.06,
+   "outcome_ok": null,
+   "tok_calls": null,
+   "tok_in": null,
+   "tok_cached": null,
+   "tok_out": null,
+   "list_usd": 0.182304
+  }
+ ]
+}

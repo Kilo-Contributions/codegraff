@@ -72,7 +72,7 @@ child keeps its own smaller prompt and catalog, which its siblings already
 share. Nor resident-thread eviction: graff frees a child's conversation when
 the child finishes and keeps only its report, and a run with four children
 stayed an order of magnitude below the Codex app server process in resident
-memory and CPU time.
+memory.
 
 ## Consequences
 

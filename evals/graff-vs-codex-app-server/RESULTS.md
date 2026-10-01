@@ -2,6 +2,8 @@
 
 Measured 2026-10-01. The same model (`gpt-6.1-sol`), ChatGPT account and machine ran the same 21 tasks in each harness, side by side.
 
+On `gpt-6-astra`, and on tasks that ask for sub-agents: [ASTRA.md](ASTRA.md).
+
 | Arm | What ran |
 | --- | --- |
 | graff | The ADR 0231 build (#1449: the `perf: drop round trips the model does not need` commit on top of v0.0.302.12), as a scripted `graff repl` over the Codex Responses WebSocket. |
