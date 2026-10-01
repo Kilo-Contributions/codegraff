@@ -1,0 +1,13 @@
+{
+  "id": "solo-rename-api",
+  "suite": "subagents-solo",
+  "category": "subagents",
+  "files_dir": "fixtures/sa-rename-api",
+  "prompt": "Change the user API in core/users.py: replace fetch_user(uid), which returns a dict, with get_user(uid, *, include_inactive=False), which returns the User dataclass defined there, or None when the user is missing or (unless include_inactive=True) inactive. Remove fetch_user. Then update every caller in web/, jobs/ and cli/ so behavior is unchanged. Finish with `python3 test_all.py` passing; do not edit the test.",
+  "setup": [
+    "git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.com commit -qm init"
+  ],
+  "check": "python3 test_all.py && python3 \"$TASK_ROOT/hidden/sa-rename-api.py\"",
+  "timeout_s": 420,
+  "counterfactual_of": "sa-rename-api"
+}

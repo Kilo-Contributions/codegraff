@@ -1,0 +1,12 @@
+{
+  "id": "sa-fix-three",
+  "suite": "subagents",
+  "category": "subagents",
+  "files_dir": "fixtures/sa-fix-three",
+  "prompt": "geo/, textkit/ and ledger/ are independent packages, and each one's test script fails: `python3 geo/test_geo.py`, `python3 textkit/test_textkit.py`, `python3 ledger/test_ledger.py`. Hand each package to its own sub-agent and run the three in parallel; each fixes its package's source until its test passes, without editing tests. When they are done, run all three test scripts yourself and confirm they pass.",
+  "setup": [
+    "git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.com commit -qm init"
+  ],
+  "check": "python3 geo/test_geo.py && python3 textkit/test_textkit.py && python3 ledger/test_ledger.py && python3 \"$TASK_ROOT/hidden/sa-fix-three.py\"",
+  "timeout_s": 420
+}

@@ -1,0 +1,13 @@
+{
+  "id": "solo-fix-three",
+  "suite": "subagents-solo",
+  "category": "subagents",
+  "files_dir": "fixtures/sa-fix-three",
+  "prompt": "geo/, textkit/ and ledger/ are independent packages, and each one's test script fails: `python3 geo/test_geo.py`, `python3 textkit/test_textkit.py`, `python3 ledger/test_ledger.py`. Fix each package's source until its test passes, without editing tests. Then run all three test scripts and confirm they pass.",
+  "setup": [
+    "git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.com commit -qm init"
+  ],
+  "check": "python3 geo/test_geo.py && python3 textkit/test_textkit.py && python3 ledger/test_ledger.py && python3 \"$TASK_ROOT/hidden/sa-fix-three.py\"",
+  "timeout_s": 420,
+  "counterfactual_of": "sa-fix-three"
+}
