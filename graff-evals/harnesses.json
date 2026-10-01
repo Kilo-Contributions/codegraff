@@ -367,5 +367,12 @@
     "usage": "graff-stderr",
     "model_prefix": "codegraff",
     "note": "OpenCode 2 (@opencode/cli 2.x; OPENCODE2_BIN when `opencode` on PATH is 1.x) with a codegraff provider in its config; pass --model. The wrapper maps .mcp.json into opencode.json and reads usage from OpenCode's session database."
+  },
+  "claude-code": {
+    "cmd": ["python3", "{repo}/graff-evals/claude_code_run.py", "{model}", "{prompt}"],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"DISABLE_TELEMETRY": "1", "DISABLE_AUTOUPDATER": "1", "DISABLE_ERROR_REPORTING": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"},
+    "note": "Claude Code (`claude -p`, stream-json) with the task's .mcp.json as its only MCP config. Set ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN for the endpoint; a chat-completions-only endpoint needs an Anthropic-format proxy in front (evals/graff-vs-claude-code). Pass --model."
   }
 }

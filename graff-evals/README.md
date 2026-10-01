@@ -56,9 +56,10 @@ CODEGRAFF_API_KEY=cg_sk_… ./run.py --suite swe --harness graff-dev,opencode-co
 # Results: evals/graff-vs-codex-app-server/RESULTS.md
 ./run.py --suite mcp --harness graff-repl,codex-app-server -j 8 --interleave
 ./run.py --suite core --harness graff-repl,codex-app-server,pi-codex -j 8 --interleave
-# one gateway model in graff, OpenCode 2 and pi (set CODEGRAFF_API_KEY; OPENCODE2_BIN
-# when `opencode` on PATH is 1.x). Results: evals/graff-vs-opencode-and-pi/RESULTS.md
-./run.py --suite core,mcp --harness graff-gateway-repl,opencode2 --model <gateway model> -j 6 --interleave
+# one gateway model in graff, Claude Code, OpenCode 2 and pi (set CODEGRAFF_API_KEY; OPENCODE2_BIN
+# when `opencode` on PATH is 1.x; Claude Code needs an Anthropic-format proxy in front of the
+# gateway, see the write-up). Results: evals/graff-vs-claude-code/RESULTS.md
+./run.py --suite core,mcp --harness graff-gateway-repl,claude-code,opencode2 --model <gateway model> -j 6 --interleave
 ./run.py --suite core --harness pi-codegraff --model <gateway model> -j 6
 ```
 
