@@ -422,11 +422,16 @@ fn execUnchecked(ctx: ToolCtx, call: tools.ToolCall) !ToolOutput {
         };
     }
     const sh = jobs.shellArgv(cmd);
+    // ADR 0232: a read-only child's command runs under the sandbox; with none, only the allowlist runs.
+    const ro = @import("readonly_sandbox.zig");
+    var sandboxed: ro.Argv = .{};
+    const argv: []const []const u8 = if (!ctx.read_only_shell) &sh else ro.build(io, ctx.agent_cwd, cmd, &sandboxed) orelse
+        if (ro.allowlisted(cmd)) &sh else return .{ .text = try gpa.dupe(u8, ro.refusal), .is_error = true };
     var opts = jobs.toolRunOptions(ctx.agent_cwd);
     var live = exec_bash_stream.Ctx{ .io = io };
     exec_bash_stream.attach(&opts, false, &live); // subagents stay quiet (#93)
     opts.keep_tail = true; // #1271: the ending is where failures land
-    const run = try jobs.runCappedWithOptions(gpa, io, &sh, bash_stdout_cap, bash_stderr_cap, subagent_deadline_ms, opts);
+    const run = try jobs.runCappedWithOptions(gpa, io, argv, bash_stdout_cap, bash_stderr_cap, subagent_deadline_ms, opts);
     defer gpa.free(run.stdout);
     defer gpa.free(run.stderr);
     return formatCapped(gpa, cmd, run);

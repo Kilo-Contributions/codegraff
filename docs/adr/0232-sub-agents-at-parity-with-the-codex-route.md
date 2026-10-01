@@ -23,6 +23,10 @@ five, and the transcripts showed why:
   and spent several calls keeping a list no one watched.
 - **A wait per child.** `agent_output` took one id, so collecting three
   children cost three model calls.
+- **A read-only child that could not compute.** A brief that said "read-only"
+  made the child informational (#1360), and its shell then took only an
+  allowlist of simple commands: no python, awk, gzip or pipes. Four census
+  children reported partial counts, and the parent redid their work.
 - **Copying a script's output.** The prompt said to use `write_file` for new
   files, so a script that computed a report printed it, and the model typed it
   back into `write_file` in another call.
@@ -50,6 +54,13 @@ the brief alone, at the worker default effort, so an effort set with
 - A child without a spawn or persona effort pin runs at its parent's live
   effort, when the child's model accepts that level. On the codex route an
   unset effort already means the catalog default (ADR 0226).
+- On macOS a read-only child's foreground shell runs under seatbelt
+  (`/usr/bin/sandbox-exec`): any command may run and read, writes inside the
+  project and all network access are refused, and the gate admits the
+  command because the sandbox enforces it. A background command, or any
+  command where there is no sandbox, still has to clear the allowlist. If
+  the sandbox cannot be set up, a command outside the allowlist is refused,
+  never run unsandboxed.
 - Each finished child writes one `subagent` trace line with its duration,
   tool calls, context, cached tokens and effort.
 - The prompt says a script that computes a file's content writes that file
@@ -70,6 +81,11 @@ A child sees the user's request, so a brief can be shorter, and a child can
 also be tempted past its own task; its prompt and the context header both
 say to do only its part. A `-p` run that would have kept a checklist no
 longer does unless a goal asks for one.
+
+A read-only child on macOS can now run anything that does not write to the
+project or the network, so a long computation or a large read is its own
+cost, not a refusal. Writes outside the project, to temporary paths, are
+allowed.
 
 Revisit the 8 KiB context cap if long sessions crowd a child's first
 request, and the effort inheritance if children of high-effort sessions cost
