@@ -15,12 +15,18 @@ grok-4.6 SuperGrok) is
 graff against the Codex app server on the same model and ChatGPT account (21
 coding and MCP tasks, every run's data) is
 [evals/graff-vs-codex-app-server/RESULTS.md](../evals/graff-vs-codex-app-server/RESULTS.md).
+The same 21 tasks against the Grok CLI on the same SuperGrok account are
+[evals/graff-vs-grok-cli/RESULTS.md](../evals/graff-vs-grok-cli/RESULTS.md),
+and what both mean for an engineering budget is
+[evals/enterprise-cost.md](../evals/enterprise-cost.md).
 
 ## Prerequisites
 
 - `graff`, `claude`, and `codex` on your PATH, each authenticated.
-- For `latency.py`, graff must be logged into Codex (`graff login codex`) so that
-  `graff --model codex` hits the same ChatGPT endpoint as `codex exec` (no gateway).
+- For `latency.py`, graff needs the Codex CLI's sign-in (`codex login`, read from
+  `~/.codex/auth.json`) so that `graff --model codex` hits the same ChatGPT
+  endpoint as `codex exec` (no gateway). `graff login codex` now runs the
+  ChatGPT sign-in for open-source apps (ADR 0229).
 - macOS for `memory.py` (it uses BSD `/usr/bin/time -l`).
 - Python 3.
 
