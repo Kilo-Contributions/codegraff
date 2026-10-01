@@ -37,8 +37,10 @@ pub fn runScripted(
     m.setup(gpa);
     defer m.deinit();
 
+    var paste_buf: std.ArrayList(u8) = .empty; // ADR 0231: a bracketed paste is one prompt
+    defer paste_buf.deinit(gpa);
     while (true) {
-        const raw = (in.takeDelimiter('\n') catch null) orelse break; // EOF ends the script
+        const raw = (@import("piped_paste.zig").next(in, gpa, &paste_buf) catch null) orelse break; // EOF ends the script
         const line = std.mem.trim(u8, raw, " \t\r\n");
         if (line.len == 0) continue;
 

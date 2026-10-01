@@ -38,7 +38,9 @@ pub fn withLoaded(arena: Allocator, kind: Provider.Kind, base: []const u8, tools
     for (tools) |t| {
         if (mcp_schema_gate.omitMcp(t.qualified_name) or !mcp_schema_gate.isLoaded(t.qualified_name)) continue;
         if (read_only and !t.read_only) continue;
-        schema.writeToolEntry(&s, kind, t.qualified_name, t.description, .{ .value = t.input_schema }) catch return base;
+        if (kind == .responses) {
+            schema.writeEagerResponsesEntry(&s, t.qualified_name, t.description, .{ .value = t.input_schema }) catch return base;
+        } else schema.writeToolEntry(&s, kind, t.qualified_name, t.description, .{ .value = t.input_schema }) catch return base;
         n += 1;
     }
     s.endArray() catch return base;
@@ -68,6 +70,10 @@ test "a child's catalog gains the MCP tools the root loaded, and only those" {
     try std.testing.expectEqual(@as(usize, 2), parsed.array.items.len);
     try std.testing.expect(std.mem.indexOf(u8, out, all[1].qualified_name) != null);
     try std.testing.expect(std.mem.indexOf(u8, out, all[0].qualified_name) == null);
+    // ADR 0231: eager, so hosted tool search (codex_tool_search.splice) leaves it callable.
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"defer_loading\":false") != null);
+    const spliced = try @import("codex_tool_search.zig").splice(a, out);
+    try std.testing.expect(std.mem.indexOf(u8, spliced, "\"defer_loading\":true") == null);
     const alone = withLoaded(a, .responses, "[]", all, false);
     try std.testing.expectEqual(@as(usize, 1), (try std.json.parseFromSliceLeaky(std.json.Value, a, alone, .{})).array.items.len);
 }

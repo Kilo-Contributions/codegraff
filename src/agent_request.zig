@@ -102,7 +102,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     var tools_now = tools_in;
     const stale = self.toolsJson();
     const joined = if (self.registry) |reg| @import("mcp_pages.zig").beforeRequest(reg) else false; // joins deferred starts, re-lists changed servers
-    if (joined or @import("additional_tools.zig").staleCatalog(self)) {
+    const preloaded = @import("mcp_preload.zig").namedServers(self); // ADR 0231: a named server's schemas ride this request
+    if (joined or preloaded or @import("additional_tools.zig").staleCatalog(self)) {
         self.invalidateRootTools();
         try self.ensureRootTools(self.provider.kind);
         // The caller's snapshot is the catalog that just went stale. Send the

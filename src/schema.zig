@@ -69,9 +69,9 @@ pub const base_specs = [_]ToolSpec{
     },
     .{
         .name = "write_file",
-        .desc = "Create or overwrite a file with the given contents.",
+        .desc = "Create a file, or replace one you have read, edited or written in this session. It will not replace any other existing file unless replace is true, so there is no need to check whether a path exists first. The result says whether it created or replaced the file and, for a .json path, whether the content parses.",
         .schema =
-        \\{"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}
+        \\{"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}, "replace": {"type": "boolean", "description": "Overwrite an existing file you have not read in this session"}}, "required": ["path", "content"]}
         ,
     },
     .{
@@ -345,6 +345,26 @@ pub fn writeToolEntry(s: *std.json.Stringify, kind: Provider.Kind, name: []const
             try s.endObject();
         },
     }
+}
+
+/// A Responses entry hosted tool search must leave eager (ADR 0231): the MCP
+/// tools a child inherits were already chosen by its root, and deferring them
+/// made every child spend its first call on a tool search.
+pub fn writeEagerResponsesEntry(s: *std.json.Stringify, name: []const u8, desc: []const u8, schema: Schema) !void {
+    try s.beginObject();
+    try s.objectField("type");
+    try s.write("function");
+    try s.objectField("name");
+    try s.write(name);
+    try s.objectField("description");
+    try s.write(desc);
+    try s.objectField("parameters");
+    try writeSchema(s, schema);
+    try s.objectField("strict");
+    try s.write(false);
+    try s.objectField("defer_loading");
+    try s.write(false);
+    try s.endObject();
 }
 
 /// Version of the `--schema`/`--json` *interface contract*, embedded in
