@@ -26,6 +26,15 @@ fn withExtras(arena: Allocator, base: []const schema.ToolSpec, provider: Provide
     return out;
 }
 
+/// ADR 0231: with no human to answer (`-p`, a piped session outside
+/// --json/ACP) the root does not offer ask_user.
+fn withoutAskUser(self: *const Agent, specs: []const schema.ToolSpec) ![]const schema.ToolSpec {
+    if (!@import("ask_user.zig").g_no_human) return specs;
+    var kept: std.ArrayList(schema.ToolSpec) = .empty;
+    for (specs) |spec| if (!std.mem.eql(u8, spec.name, "ask_user")) try kept.append(self.arena, spec);
+    return kept.items;
+}
+
 pub fn toolsJson(self: *const Agent) []const u8 {
     if (self.sub) {
         if (self.worker_tools.len != 0) return self.worker_tools; // ADR 0227
@@ -67,7 +76,7 @@ pub fn ensureRootTools(self: *Agent, kind: Provider.Kind) !void {
     const specs = if (self.sub)
         try surface.filterSpecs(@TypeOf(schema.base_specs[0]), self.arena, schema.base_specs[0..])
     else
-        try withExtras(self.arena, try schema.effectiveRootSpecs(self.arena), self.provider);
+        try withExtras(self.arena, try withoutAskUser(self, try schema.effectiveRootSpecs(self.arena)), self.provider);
     const connected: []const mcp.Tool = if (self.registry) |registry| blk: {
         const snapshot = try registry.snapshotTools(self.arena);
         break :blk if (self.sub) try surface.filterWorkerMcp(self.arena, snapshot) else snapshot;
@@ -105,4 +114,26 @@ test "invalidate without ensure leaves toolsJson empty; rebuild is a JSON array"
     defer parsed.deinit();
     try std.testing.expect(parsed.value == .array);
     try std.testing.expect(parsed.value.array.items.len > 0);
+}
+
+test "ask_user is offered only when a human can answer (ADR 0231)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const ask = @import("ask_user.zig");
+    const saved = ask.g_no_human;
+    defer ask.g_no_human = saved;
+    var agent: Agent = undefined;
+    agent.arena = arena;
+    agent.sub = false;
+    agent.registry = null;
+    agent.tools_responses = "";
+    agent.provider = .{ .id = "xai", .kind = .responses, .auth = .bearer, .url = "", .api_key = "k", .model = "grok-4.6", .context = 100_000 };
+    ask.g_no_human = true;
+    try agent.ensureRootTools(.responses);
+    try std.testing.expect(std.mem.indexOf(u8, agent.tools_responses, "\"ask_user\"") == null);
+    ask.g_no_human = false;
+    agent.tools_responses = "";
+    try agent.ensureRootTools(.responses);
+    try std.testing.expect(std.mem.indexOf(u8, agent.tools_responses, "\"ask_user\"") != null);
 }

@@ -40,6 +40,7 @@ fn writeFile(snaps: *snapshots.Snapshots, a: std.mem.Allocator, path: []const u8
     var obj: std.json.ObjectMap = .empty;
     try obj.put(a, "path", .{ .string = path });
     try obj.put(a, "content", .{ .string = content });
+    try obj.put(a, "replace", .{ .bool = true }); // these tests clobber files they never read (ADR 0231)
     var client: std.http.Client = undefined;
     const out = exec.execTool(testCtx(&client, snaps), .{ .id = "call_1", .name = "write_file", .input = .{ .object = obj } });
     defer std.testing.allocator.free(out.text);

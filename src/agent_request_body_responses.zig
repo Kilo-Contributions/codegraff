@@ -96,9 +96,12 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     try s.objectField("effort");
     // #379: compaction summaries run at low — a high-effort reasoner can
     // complete with only reasoning items and zero output text.
-    try s.write(if ((self.compaction_request or self.server_compaction_request) and !@import("effort_route.zig").mimoRoute(self.provider.id, self.provider.model)) "low" else @import("effort_route.zig").wireEffort(self.provider.id, self.provider.model, @tagName(self.reasoning)));
+    const effort = if ((self.compaction_request or self.server_compaction_request) and !@import("effort_route.zig").mimoRoute(self.provider.id, self.provider.model)) "low" else @import("effort_route.zig").wireEffort(self.provider.id, self.provider.model, @tagName(self.reasoning));
+    try s.write(effort);
     // summary:auto streams reasoning_summary_text.delta (reasoningDelta already parses it); without it silent reasoning emits NO frames — the stall watchdog cannot tell thinking from a dead socket.
-    if (is_codex or std.mem.eql(u8, self.provider.id, "chatgpt-new")) {
+    // ADR 0231: nobody watches a -p or piped session's reasoning, and at low effort it stays short, so it goes without.
+    const unwatched = @import("ask_user.zig").g_no_human and std.mem.eql(u8, effort, "low");
+    if ((is_codex or std.mem.eql(u8, self.provider.id, "chatgpt-new")) and !unwatched) {
         try s.objectField("summary");
         try s.write("auto");
     }

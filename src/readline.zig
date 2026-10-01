@@ -74,7 +74,7 @@ pub fn readLine(
     buf: *std.ArrayList(u8),
     prompt_text: ?[]const u8,
 ) !?[]const u8 {
-    const raw_state = tty.enterRaw(true) orelse return in.takeDelimiter('\n');
+    const raw_state = tty.enterRaw(true) orelse return @import("piped_paste.zig").next(in, gpa, buf); // ADR 0231
     defer tty.restore(raw_state);
     buf.clearRetainingCapacity();
     var cur: usize = 0; // cursor index within buf

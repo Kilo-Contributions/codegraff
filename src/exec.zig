@@ -26,7 +26,6 @@ const strField = tools.strField;
 const intField = tools.intField;
 const missingArg = tools.missingArg;
 const outsideCwd = tools.outsideCwd;
-const beforeFromRead = tools.beforeFromRead; // /rewind snapshot classifier (snapshots.zig)
 const rawFetch = tools.rawFetch;
 
 const subagent = @import("subagent.zig");
@@ -67,6 +66,7 @@ const input_util = @import("input_util.zig");
 const imagegen = @import("imagegen.zig"); // #352: the codex-gated image tool (advertising lives in schema.zig/tool_gates.zig)
 const html_view = @import("html_view.zig"); // the model's own drawing surface: one HTML page, rendered inline in the desktop transcript
 const local_tools = @import("local_tools.zig");
+const write_file = @import("write_file.zig"); // ADR 0231: no-clobber writes that say what they did
 
 fn learningArgv(argv: *[10][]const u8, exe_path: []const u8, contribute: bool) usize {
     var argc: usize = 0;
@@ -278,6 +278,10 @@ fn execToolInner(ctx: ToolCtx, call: ToolCall) !ToolOutput {
             if (fsErrorText(gpa, .read, path, err)) |t| return .{ .text = t, .is_error = true };
             return err;
         };
+        switch (outcome) { // ADR 0231: write_file may now replace what the model has seen
+            .text, .truncated, .no_match => write_file.noteKnown(resolved),
+            else => {},
+        }
         return switch (outcome) {
             .text => |text| .{ .text = text },
             .truncated => |value| blk: {
@@ -314,38 +318,12 @@ fn execToolInner(ctx: ToolCtx, call: ToolCall) !ToolOutput {
     // #337: the read/splice/write/VERIFY path lives in edit_verify.zig, where
     // the post-edit check sits ON the success path — a write that did not land
     // can no longer be reported as `replaced N occurrence(s)`.
-    if (std.mem.eql(u8, call.name, "edit_file")) return if (input == .object and input.object.get("edits") != null) edit_batch.execBatch(ctx, input) else edit_verify.execEdit(ctx, input);
-    if (std.mem.eql(u8, call.name, "write_file")) {
-        const path = strField(input, "path") orelse return missingArg(gpa, "path");
-        const content = strField(input, "content") orelse return missingArg(gpa, "content");
-        if (!confinedPath(path) or !noSymlinkEscape(io, path, ctx.agent_cwd)) return outsideCwd(gpa, path);
-        // #747: share sessionAbs with edit_file so a write cannot land in
-        // posix cwd while the next edit looks at a stale display cwd.
-        const resolved = try codedbpro_paths.sessionAbs(gpa, io, ctx.agent_cwd, path);
-        defer gpa.free(resolved);
-        // #337: a write_file racing an edit_file on the same path in the same
-        // assistant turn (agent_tools.zig runs them concurrently) would drop
-        // one of the two. Same stripe as edit_file, so they take turns.
-        const lock = edit_verify.lockPath(io, resolved);
-        defer lock.unlock(io);
-        if (ctx.snapshots) |snaps| if (!ctx.from_sub) {
-            // capture the prior content (or absence) before overwriting, for /rewind.
-            // beforeFromRead keeps a merely UNREADABLE file (over the cap, permissions)
-            // distinct from a missing one — only the latter is a rewind-deletes-it.
-            const before = beforeFromRead(Io.Dir.cwd().readFileAlloc(io, resolved, gpa, .limited(4 * 1024 * 1024)));
-            defer if (before == .content) gpa.free(before.content);
-            snaps.record(path, before);
-        };
-        // #179: an existing file keeps its mode (e.g. 0755) across the overwrite;
-        // a brand-new file (prev_stat == null) keeps the default.
-        const prev_stat = Io.Dir.cwd().statFile(io, resolved, .{}) catch null;
-        Io.Dir.cwd().writeFile(io, .{ .sub_path = resolved, .data = content }) catch |err| {
-            if (fsErrorText(gpa, .write, path, err)) |t| return .{ .text = t, .is_error = true };
-            return err;
-        };
-        preserveMode(io, resolved, prev_stat);
-        return .{ .text = try std.fmt.allocPrint(gpa, "wrote {d} bytes to {s}", .{ content.len, path }) };
+    if (std.mem.eql(u8, call.name, "edit_file")) {
+        const out = try if (input == .object and input.object.get("edits") != null) edit_batch.execBatch(ctx, input) else edit_verify.execEdit(ctx, input);
+        if (!out.is_error) write_file.noteInput(ctx, input); // ADR 0231: an edited file may be rewritten
+        return out;
     }
+    if (std.mem.eql(u8, call.name, "write_file")) return write_file.exec(ctx, input); // ADR 0231
     // Loads one SKILL.md body (or lists them). Rescans on every call, so a
     // skill written this session is loadable without a restart.
     if (std.mem.eql(u8, call.name, html_view.tool_name)) return html_view.exec(ctx, input);

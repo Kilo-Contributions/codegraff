@@ -26,6 +26,12 @@ const acp_elicit = @import("acp_elicit.zig");
 const ask_user_args = @import("ask_user_args.zig");
 const style = &@import("ansi.zig").style;
 
+/// Set once at startup (session_start.zig): a `-p` run, or a piped session
+/// outside --json/ACP, has nobody to answer, so the root catalog leaves the
+/// tool out (ADR 0231). The model used to call it and spend a round trip on
+/// "no human is attached".
+pub var g_no_human: bool = false;
+
 /// Block the root agent for an ask_user reply; subagents have no stdin.
 pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
     // #1308: aliases, a `questions` list, and double-encoded arguments all

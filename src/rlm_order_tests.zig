@@ -191,7 +191,7 @@ test "rlm order observes each lexical host output exactly once in execution orde
     var state: @import("pr_local_checks.zig").State = .{};
     var ctx = f.ctx();
     ctx.publication_observer = .{ .context = &observed, .state = &state, .record = Observed.record };
-    const out = try rlm.runScript(ctx, "items = read_file(\"items.json\")\nmapped = each(items, \"sleep_ms\", \"id\")\ne = write_file(path=\"target.txt\", content=\"new\")\nr = read_file(\"target.txt\")\nprint(r)");
+    const out = try rlm.runScript(ctx, "items = read_file(\"items.json\")\nmapped = each(items, \"sleep_ms\", \"id\")\ne = write_file(path=\"target.txt\", content=\"new\", replace=true)\nr = read_file(\"target.txt\")\nprint(r)");
     defer gpa.free(out.text);
     try std.testing.expect(!out.is_error);
     try std.testing.expectEqualStrings("new", out.text);

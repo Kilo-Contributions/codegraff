@@ -110,6 +110,13 @@ pub fn setupWorktreeAndBanner(
         main_mod.use_color = true;
         engine_sink.enableColor();
     }
+    // ADR 0231: nobody answers ask_user in `-p` or in a session with no
+    // terminal on either end (piped in and out) outside --json/ACP, so the root
+    // catalog leaves it out. The TUI takes stdin over before this, so its
+    // terminal shows on stdout.
+    const terminal = (Io.File.stdin().isTty(io) catch false) or (Io.File.stdout().isTty(io) catch false);
+    @import("ask_user.zig").g_no_human = flags.oneshot_prompt != null or
+        (!main_mod.json_mode and !@import("mcp_boot.zig").isAcp(flags.positionals.items) and !terminal);
     const sink = engine_sink.writerSink(out);
     // --add-dir before --worktree chdir so a relative extra root is resolved
     // against the launch cwd, not the scratch tree.
