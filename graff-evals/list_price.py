@@ -21,6 +21,16 @@ RATES = {
         "high_cache": 1.0,
         "high_out": 12.0,
     },
+    # src/pricing_table.zig: grok-4.7 lists at the grok-4.6 rates.
+    "grok-4.7": {
+        "high_at": 200_000,
+        "in": 2.0,
+        "cache": 0.50,
+        "out": 6.0,
+        "high_in": 4.0,
+        "high_cache": 1.0,
+        "high_out": 12.0,
+    },
     "grok-4.5": {
         "high_at": 200_000,
         "in": 2.0,
@@ -109,6 +119,8 @@ def rates_for(model: str) -> dict | None:
         return RATES[model]
     # OpenCode / gateway ids look like xai/grok-4.6
     leaf = model.rsplit("/", 1)[-1]
+    if model.startswith("grok-4.7") or leaf.startswith("grok-4.7"):
+        return RATES["grok-4.7"]
     if model.startswith("grok-4.6") or leaf.startswith("grok-4.6"):
         return RATES["grok-4.6"]
     if model.startswith("grok-build") or leaf.startswith("grok-build"):
