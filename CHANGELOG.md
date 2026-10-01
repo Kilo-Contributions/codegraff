@@ -26,7 +26,7 @@ current is part of cutting a release.
 
 ### Evals
 
-- graff, the Codex app server and pi on the same model and ChatGPT account, and graff, OpenCode 2 and pi on one gateway model, in `evals/`. The runner gives every harness an empty stdin. (#1448)
+- graff, the Codex app server and pi on the same model and ChatGPT account, and graff, Claude Code, OpenCode 2 and pi on one gateway model, in `evals/`. The runner gives every harness an empty stdin. (#1448, #1450)
 
 ## v0.0.302.12
 
