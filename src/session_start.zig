@@ -114,9 +114,8 @@ pub fn setupWorktreeAndBanner(
     // terminal on either end (piped in and out) outside --json/ACP, so the root
     // catalog leaves it out. The TUI takes stdin over before this, so its
     // terminal shows on stdout.
-    const terminal = (Io.File.stdin().isTty(io) catch false) or (Io.File.stdout().isTty(io) catch false);
-    @import("ask_user.zig").g_no_human = flags.oneshot_prompt != null or
-        (!main_mod.json_mode and !@import("mcp_boot.zig").isAcp(flags.positionals.items) and !terminal);
+    const ask_user = @import("ask_user.zig");
+    ask_user.g_no_human = ask_user.detectNoHuman(io, flags.oneshot_prompt != null, main_mod.json_mode, @import("mcp_boot.zig").isAcp(flags.positionals.items));
     const sink = engine_sink.writerSink(out);
     // --add-dir before --worktree chdir so a relative extra root is resolved
     // against the launch cwd, not the scratch tree.

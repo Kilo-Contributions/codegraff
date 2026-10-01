@@ -391,7 +391,9 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
     const task_prompt = playbook.rideBrief(ctx.io, arena, try goal_pacing.childTaskPrompt(arena, tasked, ctx.loop_deadline_ms, util.unixMs(ctx.io)));
     try @import("subagent_retained.zig").restore(&agent, ctx);
     @import("worker_mcp.zig").inherit(&agent); // ADR 0227
-    try agent.messages.append(try textMessage(arena, "user", task_prompt));
+    // ADR 0232: a fresh child starts from the user's request; a resumed one already has it.
+    const first = if (agent.messages.items.len == 0) try @import("subagent_fork.zig").firstMessage(arena, ctx.parent_task, task_prompt) else task_prompt;
+    try agent.messages.append(try textMessage(arena, "user", first));
     defer agent.tools_used.deinit(gpa);
     // Retry transient failures against the same child history.
     var attempts: u8 = 0;
@@ -432,6 +434,8 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
         .cache_read_tokens = agent.last_cache_read,
     };
     guiEmit(ctx.io, agentUsageEvent(sub_id, run_ok, usage));
+    // ADR 0232: one line per child, so a trace splits a run into the parent's time and each child's.
+    if (ctx.tracer) |tr| tr.note("subagent", std.fmt.allocPrint(arena, "{s} {s} label={s} ms={d} tools={d} context={d} cached={d} effort={t}", .{ sub_id, if (run_ok) "ok" else "failed", label, run_ms, usage.tool_calls, usage.context_tokens, usage.cache_read_tokens, agent.reasoning }) catch "");
     const fp = promptFingerprint(agent.systemPrompt());
     if (trace.g_traj) |tj| {
         tj.capturePrompt(fp, agent.systemPrompt());

@@ -103,6 +103,34 @@ pub fn output(ctx: tools.ToolCtx, id: u32, wait_ms: u64) !tools.ToolOutput {
     return result;
 }
 
+/// agent_output with ids: one call returns every listed agent's report,
+/// waiting for all of them when wait_ms>0, where a call per id cost the
+/// parent a model round trip each (ADR 0232). The agents run concurrently,
+/// so the wait is the slowest one's. An error only when every agent failed:
+/// each report already says which one did.
+pub fn outputMany(ctx: tools.ToolCtx, ids: []const std.json.Value, wait_ms: u64) !tools.ToolOutput {
+    if (ids.len == 0) return invalidIds(ctx.gpa);
+    var out: std.Io.Writer.Allocating = .init(ctx.gpa);
+    defer out.deinit();
+    var failed: usize = 0;
+    for (ids, 0..) |value, i| {
+        const id: u32 = switch (value) {
+            .integer => |n| if (n >= 0 and n <= std.math.maxInt(u32)) @intCast(n) else return invalidIds(ctx.gpa),
+            else => return invalidIds(ctx.gpa),
+        };
+        const one = try output(ctx, id, wait_ms);
+        defer ctx.gpa.free(one.text);
+        if (one.is_error) failed += 1;
+        if (i > 0) try out.writer.writeAll("\n\n");
+        try out.writer.writeAll(one.text);
+    }
+    return .{ .text = try out.toOwnedSlice(), .is_error = failed == ids.len };
+}
+
+fn invalidIds(gpa: std.mem.Allocator) !tools.ToolOutput {
+    return .{ .text = try gpa.dupe(u8, "agent_output: ids must be a non-empty list of agent ids"), .is_error = true };
+}
+
 test "beforeRequest yields so parked shell jobs free the prompt" {
     configure(true);
     defer configure(false);

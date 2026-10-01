@@ -144,7 +144,7 @@ pub fn detectCaps() Caps {
     return .{
         .local_tools = toolAdvertised("edit_file") and toolAdvertised("bash"),
         .subagents = toolAdvertised("subagent") and !no_local_tools.lean, // lean: no fan-out essay
-        .todos = toolAdvertised("todo_write") and !no_local_tools.lean,
+        .todos = toolAdvertised("todo_write") and !no_local_tools.lean and !@import("ask_user.zig").g_no_human, // ADR 0232: a checklist nobody watches costs round trips
         .constraints = toolAdvertised("note_constraint") and !no_local_tools.lean,
         .git_repo = g_git_repo and !no_local_tools.lean, // -p: no commit/PR essay
     };

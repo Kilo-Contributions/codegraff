@@ -51,11 +51,13 @@ pub fn spawnSubBackground(ctx: ToolCtx, label: []const u8, prompt: []const u8, s
     subagent.g_agent_jobs.mutex.lockUncancelable(ctx.io);
     job.id = subagent.g_agent_jobs.next_id;
     subagent.g_agent_jobs.next_id += 1;
+    var hint_buf: [256]u8 = undefined;
+    const hint = waitHint(&hint_buf, job.id, owner);
     const receipt = (if (state) |saved| std.fmt.allocPrint(
         gpa,
-        "[agent {d} started: {s}] [task_id {s}]\nIt runs in the background and its report reaches you when it finishes: continue with independent work, or end your reply to wait for it. Do not poll; agent_output(id {d}, wait_ms>0) blocks until it finishes. agent_message queues feedback; subagent_resume continues the retained conversation after completion.",
-        .{ job.id, job.label, saved.record.id, job.id },
-    ) else std.fmt.allocPrint(gpa, "[agent {d} started: {s}]\nIt runs in the background and its report reaches you when it finishes: continue with independent work, or end your reply to wait for it. Do not poll; agent_output(id {d}, wait_ms>0) blocks until it finishes.", .{ job.id, job.label, job.id })) catch |err| {
+        "[agent {d} started: {s}] [task_id {s}]\nIt runs in the background and its report reaches you when it finishes: continue with independent work, or end your reply to wait for it. Do not poll; {s}. agent_message queues feedback; subagent_resume continues the retained conversation after completion.",
+        .{ job.id, job.label, saved.record.id, hint },
+    ) else std.fmt.allocPrint(gpa, "[agent {d} started: {s}]\nIt runs in the background and its report reaches you when it finishes: continue with independent work, or end your reply to wait for it. Do not poll; {s}.", .{ job.id, job.label, hint })) catch |err| {
         subagent.g_agent_jobs.mutex.unlock(ctx.io);
         gpa.destroy(job);
         return err;
@@ -71,4 +73,55 @@ pub fn spawnSubBackground(ctx: ToolCtx, label: []const u8, prompt: []const u8, s
     ledger.remember(gpa, ctx.io, job.id, job.label);
     @import("subagent_interactive.zig").request(ctx);
     return .{ .text = receipt };
+}
+
+/// The receipt's wait sentence, built under the registry lock before this job
+/// joins the list. With other agents of this session still running it names
+/// them all: one agent_output(ids) call waits for every one, where a call per
+/// id cost a round trip each (ADR 0232).
+fn waitHint(buf: []u8, id: u32, owner: ?[]const u8) []const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    var others: usize = 0;
+    for (subagent.g_agent_jobs.list.items) |other| {
+        if (other.done or !sameOwner(other.owner, owner)) continue;
+        w.print("{s}{d}", .{ if (others == 0) "agent_output(ids [" else ", ", other.id }) catch return singleHint(buf, id);
+        others += 1;
+    }
+    if (others == 0) return singleHint(buf, id);
+    w.print(", {d}], wait_ms>0) blocks until all of them finish", .{id}) catch return singleHint(buf, id);
+    return w.buffered();
+}
+
+fn singleHint(buf: []u8, id: u32) []const u8 {
+    return std.fmt.bufPrint(buf, "agent_output(id {d}, wait_ms>0) blocks until it finishes", .{id}) catch "agent_output(wait_ms>0) blocks until it finishes";
+}
+
+fn sameOwner(a: ?[]const u8, b: ?[]const u8) bool {
+    const x = a orelse return b == null;
+    const y = b orelse return false;
+    return std.mem.eql(u8, x, y);
+}
+
+test "spawn receipt names every running agent for one agent_output(ids) wait (ADR 0232)" {
+    const gpa = std.testing.allocator;
+    const saved = subagent.g_agent_jobs.list;
+    defer subagent.g_agent_jobs.list = saved;
+    subagent.g_agent_jobs.list = .empty;
+    defer subagent.g_agent_jobs.list.deinit(gpa);
+
+    var buf: [256]u8 = undefined;
+    try std.testing.expectEqualStrings("agent_output(id 1, wait_ms>0) blocks until it finishes", waitHint(&buf, 1, null));
+
+    var running: AgentJob = undefined;
+    running.id = 1;
+    running.done = false;
+    running.owner = null;
+    var finished = running;
+    finished.id = 2;
+    finished.done = true;
+    var elsewhere = running;
+    elsewhere.id = 4;
+    elsewhere.owner = "other-session";
+    try subagent.g_agent_jobs.list.appendSlice(gpa, &.{ &running, &finished, &elsewhere });
+    try std.testing.expectEqualStrings("agent_output(ids [1, 3], wait_ms>0) blocks until all of them finish", waitHint(&buf, 3, null));
 }

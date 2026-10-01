@@ -32,6 +32,14 @@ const style = &@import("ansi.zig").style;
 /// "no human is attached".
 pub var g_no_human: bool = false;
 
+/// The g_no_human rule. main.zig settles it before the system prompt is
+/// composed (ADR 0232: the todo nudges stay out when nobody watches), and
+/// session start applies it again. The TUI's terminal shows on stdout.
+pub fn detectNoHuman(io: std.Io, oneshot: bool, json: bool, acp: bool) bool {
+    const terminal = (std.Io.File.stdin().isTty(io) catch false) or (std.Io.File.stdout().isTty(io) catch false);
+    return oneshot or (!json and !acp and !terminal);
+}
+
 /// Block the root agent for an ask_user reply; subagents have no stdin.
 pub fn askUser(self: *Agent, call: ToolCall) !ExecResult {
     // #1308: aliases, a `questions` list, and double-encoded arguments all
@@ -152,4 +160,19 @@ pub fn emitAskUser(self: *Agent, call_id: []const u8, question: []const u8, inpu
     }
     try w.writeByte('\n');
     try w.flush();
+}
+
+test "no human: the prompt leaves the todo nudges out and the tool stays loadable (ADR 0232)" {
+    const prompts = @import("prompts.zig");
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const saved = g_no_human;
+    defer g_no_human = saved;
+    g_no_human = false;
+    try std.testing.expectEqual(prompts.toolAdvertised("todo_write"), prompts.detectCaps().todos);
+    g_no_human = true;
+    try std.testing.expect(!prompts.detectCaps().todos);
+    const base = try prompts.composeBase(arena_state.allocator(), prompts.detectCaps());
+    try std.testing.expect(std.mem.indexOf(u8, base, "todo_write") == null);
+    try std.testing.expect(@import("native_fold.zig").isFolded("todo_write"));
 }

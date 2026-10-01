@@ -333,6 +333,9 @@ test {
     _ = @import("worker_mcp.zig"); // ADR 0227
     _ = @import("mcp_preload.zig"); // ADR 0231
     _ = @import("write_file.zig"); // ADR 0231
+    _ = @import("subagent_fork.zig"); // ADR 0232
+    _ = @import("subagent_spawn_job.zig"); // ADR 0232: the spawn receipt's wait hint
+    _ = @import("ask_user.zig"); // ADR 0232: no todo nudges when nobody watches
     _ = @import("piped_paste.zig"); // ADR 0231
     _ = @import("mcp_connect_notice.zig"); // ADR 0230
     _ = @import("oauth_callback.zig");
