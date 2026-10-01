@@ -54,6 +54,13 @@ the brief alone, at the worker default effort, so an effort set with
 - A child without a spawn or persona effort pin runs at its parent's live
   effort, when the child's model accepts that level. On the codex route an
   unset effort already means the catalog default (ADR 0226).
+- A child can also ask Jev mid-run. While Jev serves the child's own seat,
+  its catalog carries `jev_effort` (eager on Responses), and a selection
+  lands in the child's own pending slot and applies at the child's next
+  request. It moves neither its root's effort nor the session's saved
+  effort: `jev_effort_state.apply` saves only for the root. Jev's
+  session-long circuit is shared, so one failed attempt by any agent
+  stops the rest.
 - On macOS a read-only child's foreground shell runs under seatbelt
   (`/usr/bin/sandbox-exec`): any command may run and read, writes inside the
   project and all network access are refused, and the gate admits the
@@ -77,6 +84,7 @@ memory.
 ## Consequences
 
 An unpinned child of a session at `/effort high` now reasons at high too.
+A child that asks Jev pays for that call like its root does.
 A child sees the user's request, so a brief can be shorter, and a child can
 also be tempted past its own task; its prompt and the context header both
 say to do only its part. A `-p` run that would have kept a checklist no

@@ -391,6 +391,7 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
     const task_prompt = playbook.rideBrief(ctx.io, arena, try goal_pacing.childTaskPrompt(arena, tasked, ctx.loop_deadline_ms, util.unixMs(ctx.io)));
     try @import("subagent_retained.zig").restore(&agent, ctx);
     @import("worker_mcp.zig").inherit(&agent); // ADR 0227
+    @import("worker_jev.zig").offer(&agent); // ADR 0232: a child asks Jev for its own effort mid-run
     // ADR 0232: a fresh child starts from the user's request; a resumed one already has it.
     const first = if (agent.messages.items.len == 0) try @import("subagent_fork.zig").firstMessage(arena, ctx.parent_task, task_prompt) else task_prompt;
     try agent.messages.append(try textMessage(arena, "user", first));
