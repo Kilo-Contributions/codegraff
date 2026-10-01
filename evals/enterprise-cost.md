@@ -3,7 +3,7 @@
 A rough guide built from two measured comparisons, each on the same model
 and account in both harnesses:
 
-- [graff vs the Codex app server](graff-vs-codex-app-server/RESULTS.md) (`gpt-6.1-sol`)
+- [graff vs the Codex app server and pi](graff-vs-codex-app-server/RESULTS.md) (`gpt-6.1-sol`)
 - [graff vs the Grok CLI](graff-vs-grok-cli/RESULTS.md) (`grok-4.7`)
 
 Both ran the same 21 coding and MCP tasks, 3 times each. Costs are list
@@ -13,8 +13,8 @@ prices of the tokens each harness used.
 
 | Compared with | graff | Other harness | graff costs |
 | --- | ---: | ---: | ---: |
-| Codex app server, its reported usage | $0.0164 | $0.0278 | 41% less |
-| Codex app server, with its unreported warm-up request | $0.0164 | up to $0.0524 | up to 69% less |
+| Codex app server, its reported usage | $0.0131 | $0.0426 | 69% less |
+| Codex app server, with its unreported warm-up request | $0.0131 | up to $0.0672 | up to 81% less |
 | Grok CLI, grok-4.7 public list price | $0.039 | $0.26 to $0.33 | 85% to 88% less |
 | Grok CLI, xAI's price for its build-model route | $0.039 | $0.098 | 60% less |
 
@@ -26,15 +26,15 @@ costs above.
 
 | Compared with | graff per month | Other per month | Saved per month | Saved per year |
 | --- | ---: | ---: | ---: | ---: |
-| Codex app server, reported usage | $1,378 | $2,335 | $958 | $11,491 |
-| Codex app server, with warm-up | $1,378 | $4,402 | $3,024 | $36,288 |
+| Codex app server, reported usage | $1,100 | $3,578 | $2,478 | $29,736 |
+| Codex app server, with warm-up | $1,100 | $5,645 | $4,544 | $54,533 |
 | Grok CLI, public list price | $3,284 | $22,042 to $27,770 | $18,757 to $24,486 | $225,086 to $293,832 |
 | Grok CLI, xAI's build-model price | $3,284 | $8,240 | $4,956 | $59,472 |
 
 Time moves too. Against the Grok CLI, graff took 15.5s per task against
 106.9s: about 2,100 fewer hours of agent wall time a month at this volume.
-Against the Codex app server graff was slower, 28.2s against 25.0s per task
-(about 75 more hours a month).
+Against the Codex app server graff is now faster, 22.2s against 28.6s per task
+(about 149 fewer hours a month).
 
 ## How far this carries
 

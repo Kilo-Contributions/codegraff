@@ -333,5 +333,39 @@
     "answer": "stdout",
     "usage": "graff-stderr",
     "default_model": "gpt-6.1-sol"
+  },
+  "graff-repl": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "\u001b[200~{prompt}\u001b[201~\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_NO_TELEMETRY": "1"},
+    "model_prefix": "codex",
+    "default_model": "gpt-6.1-sol",
+    "note": "scripted graff repl over the Codex WebSocket. The prompt rides one bracketed-paste frame, so a multi-line task is one turn as in the other harnesses (needs the piped paste of ADR 0231)."
+  },
+  "graff-gateway-repl": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "\u001b[200~{prompt}\u001b[201~\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_NO_TELEMETRY": "1"},
+    "model_prefix": "codegraff",
+    "note": "scripted graff repl on the Codegraff gateway (CODEGRAFF_API_KEY); pass --model"
+  },
+  "pi-codex": {
+    "cmd": ["pi", "-p", "--mode", "json", "--provider", "openai-codex", "--model", "{model}", "--thinking", "low", "--no-session", "{prompt}"],
+    "answer": "pi-json",
+    "usage": "pi-json",
+    "capabilities": [],
+    "default_model": "gpt-6.1-sol",
+    "note": "pi on the ChatGPT plan (provider openai-codex, signed in through pi; declare gpt-6.1-sol in ~/.pi/agent/models.json until pi lists it). Low effort, the catalog default graff and the Codex app server use. No MCP client: core suite only."
+  },
+  "opencode2": {
+    "cmd": ["python3", "{repo}/graff-evals/opencode2_run.py", "{model}", "{prompt}"],
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "model_prefix": "codegraff",
+    "note": "OpenCode 2 (@opencode/cli 2.x; OPENCODE2_BIN when `opencode` on PATH is 1.x) with a codegraff provider in its config; pass --model. The wrapper maps .mcp.json into opencode.json and reads usage from OpenCode's session database."
   }
 }
