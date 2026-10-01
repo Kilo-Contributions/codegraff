@@ -68,6 +68,7 @@ cd graff-evals
 ./run.py --harness grok --task fix-fib --reps 3
 
 # harness-vs-harness on the same model
+# Results on grok-4.7: evals/graff-vs-grok-cli/RESULTS.md
 ./run.py --harness graff,grok --model grok-4.6
 
 # a different model through graff

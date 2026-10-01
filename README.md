@@ -408,6 +408,15 @@ Tier 1 is `zig fmt`, the 600-line ceiling, test reachability, `zig build test`
 Docs-only pushes skip it. In-house PR fixtures: `graff-evals/`
 (`--suite inhouse`).
 
+## Enterprise
+
+Companies that have raised more than US$500k, or that have meaningful revenue
+or valuation, should contact
+[rach@standardharness.com](mailto:rach@standardharness.com) about enterprise
+offerings: commercial licensing, support, and deployment help. What the
+measured harness comparisons mean for a budget:
+[evals/enterprise-cost.md](evals/enterprise-cost.md).
+
 ## License
 
 **Modified GNU AGPL-3.0** ([`LICENSE`](LICENSE)). Network use triggers
