@@ -23,6 +23,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.12
+    \\  • every ChatGPT login (chatgpt, codex) is the new ChatGPT sign-in
+    \\  • browser sign-ins survive stray connections and old tabs
+    \\  • sub-agents get the MCP tools their root loaded
+    \\  • codex follows the model's default effort and verbosity
+    \\
     \\0.0.302.11
     \\  • codex prompt cache is per account: a new repo starts warm
     \\  • tool loads keep the cached prefix; rare tools load on demand
