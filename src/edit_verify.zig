@@ -584,7 +584,7 @@ test "fsErrorText names the tool, path, and failure (#183)" {
     const wr = fsErrorText(gpa, .write, "nope/out.txt", error.FileNotFound).?;
     defer gpa.free(wr);
     try std.testing.expect(std.mem.indexOf(u8, wr, "write_file") != null);
-    try std.testing.expect(std.mem.indexOf(u8, wr, "parent") != null); // distinguishes a missing parent dir
+    try std.testing.expect(std.mem.indexOf(u8, wr, "directory path") != null); // a missing directory is made (ADR 0232); this is a file in the way
 
     const perm = fsErrorText(gpa, .edit, "p", error.AccessDenied).?;
     defer gpa.free(perm);
