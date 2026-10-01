@@ -345,7 +345,12 @@ fn canonicalize(arena: Allocator, tool: []const u8, args: []const Arg) ![]const 
             else => |v| v,
         });
     } else if (args.len == 1 and args[0].key == null) {
-        try putValue(arena, &obj, field, args[0].value);
+        // ADR 0236: `tool({"id": "x"})` is `tool(id="x")`, not an object for the first parameter.
+        const kw: ?std.json.Value = switch (args[0].value) {
+            .json => |j| try std.json.parseFromSliceLeaky(std.json.Value, arena, j, .{}),
+            else => null,
+        };
+        if (kw != null and kw.? == .object) obj = kw.?.object else try putValue(arena, &obj, field, args[0].value);
     } else {
         for (args) |a| {
             const k = a.key orelse return error.NeedKeywords;

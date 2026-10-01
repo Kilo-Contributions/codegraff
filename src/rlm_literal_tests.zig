@@ -72,3 +72,13 @@ test "ADR 0236: an unsupported statement lists the forms that work" {
     try std.testing.expect(out.is_error);
     try std.testing.expect(std.mem.indexOf(u8, out.text, "A statement is one of") != null);
 }
+
+test "ADR 0236: a lone object argument is the keyword arguments" {
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const ptc = @import("spec_ptc.zig");
+    const call = (try ptc.extractCallBound(arena.allocator(), "c = mcp__linear__list_comments({\"id\": \"ISS-1\"})", &.{})).?;
+    try std.testing.expectEqualStrings("{\"id\":\"ISS-1\"}", call.args_json);
+    const list = (try ptc.extractCallBound(arena.allocator(), "c = mcp__linear__get_many([\"ISS-1\"])", &.{})).?;
+    try std.testing.expectEqualStrings("{\"arg\":[\"ISS-1\"]}", list.args_json);
+}

@@ -28,6 +28,9 @@ off they did it often enough to cost real time on MCP tasks:
   text as a JSON string. `True`, `False`, `None` and single-quoted strings are
   read the Python way. `name = "text"`, `name = 3` and `name = other` bind too
   (`rlm_literal.zig`). For `write_file`, the file holds the literal's JSON text.
+  A lone object argument is the keyword arguments: `tool({"id": "x"})` is
+  `tool(id="x")`. Passed as the first parameter's value instead, the object
+  reached an MCP server as a malformed id.
 - The statement and argument splitters nest `[...]` and `{...}` as well as
   `(...)`.
 - `each(arr, tool[, field])`: `arr` may be a literal; a plain item (a string
