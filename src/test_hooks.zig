@@ -404,4 +404,5 @@ test {
     _ = @import("output_elide.zig"); // #1271: over-cap output keeps head and tail
     _ = @import("graff_dir.zig"); // #1273: .graff/.gitignore keeps run state out of git
     _ = @import("additional_tools.zig"); // ADR 0221: loaded tools as additional_tools items on the ChatGPT plan route
+    _ = @import("codedb_guard_scope.zig"); // ADR 0234: in-place edits and small whole reads pass the codedb guard
 }
