@@ -12,7 +12,7 @@ from pathlib import Path
 if sys.platform == "win32":
     print("skip  no pty on Windows")
     sys.exit(0)
-import pty  # noqa: E402
+import fcntl, pty, struct, termios  # noqa: E402,E401
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "eval"))
 from mock_model import ScriptedModel  # noqa: E402
@@ -64,6 +64,8 @@ def main():
                    TERM="xterm-256color", COLUMNS="120", LINES="40")
         pid, fd = pty.fork()
         if pid == 0:
+            # A fresh pty is 0x0 on Linux; give the TUI a real screen.
+            fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
             os.chdir(work)
             os.execve(binary, [binary, "--model", "vercel"], env)
         out = bytearray()
