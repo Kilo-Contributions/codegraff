@@ -125,16 +125,17 @@ pub const provider_specs = [_]ProviderSpec{
     // lm-studio: the LM Studio app's local OpenAI-compatible server (default :1234).
     // Load a model in LM Studio, then `LMSTUDIO_API_KEY=local graff --model lmstudio`.
     .{ .id = "lmstudio", .display_name = "lmstudio", .kind = .openai, .auth = .bearer, .url = "http://127.0.0.1:1234/v1/chat/completions", .env_key = "LMSTUDIO_API_KEY", .default_model = "lmstudio" },
+    // chatgpt-new: the person's ChatGPT plan through OpenAI's sign-in for
+    // open-source apps (ADR 0221). The key is the OAuth access token saved by
+    // `graff login chatgpt`, sent to the public Responses endpoint. Before
+    // codex on purpose: it is the primary ChatGPT route (ADR 0229), so a bare
+    // model name and the startup default pick it when both are signed in.
+    .{ .id = "chatgpt-new", .display_name = "ChatGPT plan (new sign-in)", .kind = .responses, .auth = .bearer, .url = "https://api.openai.com/v1/responses", .env_key = "CHATGPT_NEW_DISABLED", .default_model = "gpt-6.1-sol", .login = .chatgpt_browser, .sub_login = true, .catalog = .openai, .models_url = "https://api.openai.com/v1/models?client_version=0.159.0" },
     // codex: ChatGPT login via the Responses API. Its "key" isn't an env var
     // — it's the OAuth access token read from CODEX_HOME/auth.json at startup
     // (see loadCodexAuth), the same on-disk-credential trick used for the
     // codegraff gateway key in ~/forge/.credentials.json.
     .{ .id = "codex", .display_name = "Codex (ChatGPT)", .kind = .responses, .auth = .bearer, .url = "https://chatgpt.com/backend-api/codex/responses", .env_key = "CODEX_DISABLED", .default_model = "gpt-5.6-sol", .login = .codex_device, .sub_login = true, .catalog = .codex },
-    // chatgpt-new: the person's ChatGPT plan through OpenAI's sign-in for
-    // open-source apps (ADR 0221). The key is the OAuth access token saved by
-    // `graff login chatgpt-new`, sent to the public Responses endpoint. After
-    // codex on purpose: Codex stays the primary ChatGPT route (spec order).
-    .{ .id = "chatgpt-new", .display_name = "ChatGPT plan (new sign-in)", .kind = .responses, .auth = .bearer, .url = "https://api.openai.com/v1/responses", .env_key = "CHATGPT_NEW_DISABLED", .default_model = "gpt-6.1-sol", .login = .chatgpt_browser, .sub_login = true, .catalog = .openai, .models_url = "https://api.openai.com/v1/models?client_version=0.159.0" },
 };
 
 /// Optional workspace-local router loaded from `.graff/.config.router`.

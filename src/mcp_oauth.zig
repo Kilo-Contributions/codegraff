@@ -6,6 +6,7 @@ const builtin = @import("builtin");
 const util = @import("util.zig");
 const discovery = @import("mcp_oauth_discovery.zig");
 const credential_store = @import("credential_store.zig");
+const callback = @import("oauth_callback.zig");
 
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -415,36 +416,25 @@ fn loginInner(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, server
         query,
     });
 
-    var address = std.Io.net.IpAddress.parseLiteral("127.0.0.1:1456") catch return error.BadOAuthResponse;
-    var listener = try std.Io.net.IpAddress.listen(&address, io, .{});
+    var listener = try callback.listen(io, 1456);
     defer listener.deinit(io);
     try out.print("\nOpen this URL to authorize (the browser should open automatically):\n\n{s}\n\nWaiting for the callback on {s} …\n", .{ authorization_url, redirect_uri });
     try out.flush();
     openBrowser(io, authorization_url);
 
-    const stream = try listener.accept(io);
-    defer stream.close(io);
+    // Only this attempt's redirect (its state) ends the wait.
     var read_buffer: [16 * 1024]u8 = undefined;
-    var reader = std.Io.net.Stream.Reader.init(stream, io, &read_buffer);
-    const request_line = (reader.interface.takeDelimiter('\n') catch null) orelse return error.BadOAuthResponse;
-    const code = try queryParam(arena, request_line, "code") orelse {
-        const description = try queryParam(arena, request_line, "error_description") orelse
-            try queryParam(arena, request_line, "error") orelse "authorization server returned no code";
+    const cb = try callback.wait(io, &listener, "/callback", state, &read_buffer);
+    defer cb.stream.close(io);
+    const code = try queryParam(arena, cb.line, "code") orelse {
+        callback.answer(io, cb.stream, "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOAuth authorization failed. Return to the CLI.\n");
+        const description = try queryParam(arena, cb.line, "error_description") orelse
+            try queryParam(arena, cb.line, "error") orelse "authorization server returned no code";
         try out.print("OAuth authorization failed: {s}\n", .{description});
         try out.flush();
         return error.AuthorizationDenied;
     };
-    const returned_state = try queryParam(arena, request_line, "state") orelse return error.StateMismatch;
-
-    var write_buffer: [2048]u8 = undefined;
-    var stream_writer = std.Io.net.Stream.Writer.init(stream, io, &write_buffer);
-    if (!std.mem.eql(u8, state, returned_state)) {
-        try stream_writer.interface.writeAll("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOAuth state mismatch. Return to the CLI and try again.\n");
-        try stream_writer.interface.flush();
-        return error.StateMismatch;
-    }
-    try stream_writer.interface.writeAll("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\nMCP authorization complete. You can close this tab.\n");
-    try stream_writer.interface.flush();
+    callback.answer(io, cb.stream, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\nMCP authorization complete. You can close this tab.\n");
 
     var fields = [_]struct { []const u8, []const u8 }{
         .{ "grant_type", "authorization_code" },

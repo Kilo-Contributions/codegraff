@@ -21,6 +21,7 @@ const helpers = @import("oauth_helpers.zig");
 const credential_store = @import("credential_store.zig");
 const jwt = @import("oauth_chatgpt_jwt.zig");
 const page = @import("oauth_chatgpt_page.zig");
+const callback = @import("oauth_callback.zig");
 
 const authorize_url = jwt.issuer ++ "/api/accounts/authorize";
 const token_url = jwt.issuer ++ "/api/accounts/oauth/token";
@@ -366,14 +367,14 @@ fn finish(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, saved: ?Re
 fn report(out: *Io.Writer, o: Outcome) !void {
     switch (o.state) {
         .first, .ok => try out.print("✓ signed in to ChatGPT as {s}; plan usage is on. Use it with /model chatgpt-new or `graff --model chatgpt-new/gpt-6.1-sol`. Manage usage: {s}\n", .{ o.account, manage_usage_url }),
-        .noplan => try out.print("✓ signed in to ChatGPT as {s}, but plan usage was not allowed. Run `graff login chatgpt-new` again and allow it, or use an API key.\n", .{o.account}),
+        .noplan => try out.print("✓ signed in to ChatGPT as {s}, but plan usage was not allowed. Run `graff login chatgpt` again and allow it, or use an API key.\n", .{o.account}),
         .denied => try out.writeAll("✗ ChatGPT sign-in was cancelled. Nothing changed.\n"),
         .@"error" => try out.print("✗ ChatGPT sign-in failed: {s}\n", .{o.detail}),
     }
     try out.flush();
 }
 
-/// `graff login chatgpt-new`: open the browser, wait for the loopback callback,
+/// `graff login chatgpt`: open the browser, wait for the loopback callback,
 /// answer it with the branded page, and save the record.
 pub fn login(io: Io, gpa: Allocator, arena: Allocator, home: []const u8) !void {
     var obuf: [4096]u8 = undefined;
@@ -405,25 +406,19 @@ pub fn login(io: Io, gpa: Allocator, arena: Allocator, home: []const u8) !void {
     try out.print("waiting for the sign-in on {s} …\n", .{attempt.redirect});
     try out.flush();
     helpers.openBrowser(io, url);
-    while (true) {
-        const stream = try listener.server.accept(io);
-        defer stream.close(io);
-        var rbuf: [16 * 1024]u8 = undefined;
-        var sr = std.Io.net.Stream.Reader.init(stream, io, &rbuf);
-        const req_line = (sr.interface.takeDelimiter('\n') catch null) orelse continue;
-        var wbuf: [8192]u8 = undefined;
-        var sw = std.Io.net.Stream.Writer.init(stream, io, &wbuf);
-        const cb = parseCallback(arena, req_line) orelse {
-            sw.interface.writeAll(page.not_found) catch {};
-            sw.interface.flush() catch {};
-            continue;
-        };
-        // The browser waits on this response, so the page shows the outcome.
-        const outcome = finish(io, gpa, arena, home, saved, attempt, verifier, cb);
-        sw.interface.writeAll(page.response(arena, outcome.state, outcome.account) catch page.not_found) catch {};
-        sw.interface.flush() catch {};
-        return report(out, outcome);
-    }
+    // Only this attempt's redirect ends the wait; a tab left from an earlier
+    // attempt gets a page saying so (oauth_callback.zig).
+    var rbuf: [16 * 1024]u8 = undefined;
+    const conn = callback.wait(io, &listener.server, "/auth/callback", attempt.state, &rbuf) catch |err| {
+        if (err != error.Cancelled) return err;
+        return report(out, failed("a newer sign-in took over the callback port"));
+    };
+    defer conn.stream.close(io);
+    const cb = parseCallback(arena, conn.line) orelse return report(out, failed("the callback could not be read"));
+    // The browser waits on this response, so the page shows the outcome.
+    const outcome = finish(io, gpa, arena, home, saved, attempt, verifier, cb);
+    callback.answer(io, conn.stream, page.response(arena, outcome.state, outcome.account) catch page.not_found);
+    return report(out, outcome);
 }
 
 var dead_refresh: u64 = 0;

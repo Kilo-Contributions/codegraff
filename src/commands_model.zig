@@ -340,19 +340,16 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
     if (std.mem.startsWith(u8, line, "/login")) {
         root.ensureStoredKeys(keys);
         // Interactive OAuth sign-in for the providers that have a device/PKCE
-        // flow (codegraff, codex/ChatGPT, kimi). Mirrors the `graff login`
+        // flow (codegraff, ChatGPT, kimi). Mirrors the `graff login`
         // subcommands but runs in-session and pulls the fresh key into the live
         // Keys, so this conversation keeps going without a restart. Pure
         // API-key providers don't log in — they point back at /key.
         const rest = std.mem.trim(u8, line["/login".len..], " \t");
         var lit = std.mem.tokenizeAny(u8, rest, " \t");
         var target = lit.next() orelse "";
-        const refresh = while (lit.next()) |a| {
-            if (std.mem.eql(u8, a, "--refresh")) break true;
-        } else false;
         const login_targets = [_]PickItem{
             .{ .name = "codegraff", .desc = "free codegraff key (device-code OAuth)" },
-            .{ .name = "codex", .desc = "ChatGPT account sign-in (also: chatgpt, openai)" },
+            .{ .name = "chatgpt", .desc = "ChatGPT sign-in (also: codex, openai)" },
             .{ .name = "kimi", .desc = "Kimi Code sign-in (device-code OAuth)" },
             .{ .name = "xai", .desc = "Grok / SuperGrok sign-in (device-code OAuth)" },
             .{ .name = "zai", .desc = "Z.AI Coding Plan sign-in (CLI OAuth)" },
@@ -364,14 +361,14 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
                 target = login_targets[idx].name;
             } else {
                 try out.writeAll("interactive logins (OAuth \xe2\x80\x94 no key to paste):\n");
-                for (login_targets) |t| try out.print("  {s} /login {s:<10} {s}\n", .{ if (keys.get(t.name) != null) "\xe2\x9c\x93" else "\xc2\xb7", t.name, t.desc });
+                for (login_targets) |t| try out.print("  {s} /login {s:<10} {s}\n", .{ if (keys.get(@import("args.zig").loginTarget(t.name) orelse t.name) != null) "\xe2\x9c\x93" else "\xc2\xb7", t.name, t.desc });
                 try out.print("{s}other providers use an API key:  /key <provider> <key>{s}\n", .{ style.dim, style.reset });
                 try out.flush();
                 return true;
             }
         }
-        // Same names as `graff login`: chatgpt, openai, gpt and oai are the codex login;
-        // chatgpt-new is the opt-in plan sign-in (ADR 0221).
+        // Same names as `graff login`: every ChatGPT name, codex included, is
+        // the plan's sign-in, chatgpt-new (ADR 0229).
         target = @import("args.zig").loginTarget(target) orelse target;
 
         const home = root.home;
@@ -379,12 +376,6 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
         if (std.mem.eql(u8, target, "codegraff")) {
             oauth.codegraffLogin(root.io, root.gpa, arena, home) catch |err| {
                 try out.print("\xe2\x9c\x97 codegraff login failed: {t}\n", .{err});
-                try out.flush();
-                return true;
-            };
-        } else if (std.mem.eql(u8, target, "codex")) {
-            oauth.codexLogin(root.io, root.gpa, arena, home, refresh) catch |err| {
-                try out.print("\xe2\x9c\x97 codex login failed: {t}\n", .{err});
                 try out.flush();
                 return true;
             };
@@ -419,7 +410,7 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
                 try out.flush();
                 return true;
             }
-            try out.print("can't log into '{s}' \xe2\x80\x94 try /login codegraff | chatgpt | chatgpt-new | kimi | xai | zai (others: /key <provider> <key>)\n", .{target});
+            try out.print("can't log into '{s}' \xe2\x80\x94 try /login codegraff | chatgpt | kimi | xai | zai (others: /key <provider> <key>)\n", .{target});
             try out.flush();
             return true;
         }

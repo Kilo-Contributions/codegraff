@@ -23,6 +23,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.12
+    \\  • every ChatGPT login (chatgpt, codex) is the new ChatGPT sign-in
+    \\  • browser sign-ins survive stray connections and old tabs
+    \\  • sub-agents get the MCP tools their root loaded
+    \\  • codex follows the model's default effort and verbosity
+    \\
     \\0.0.302.11
     \\  • codex prompt cache is per account: a new repo starts warm
     \\  • tool loads keep the cached prefix; rare tools load on demand
@@ -78,7 +84,7 @@ pub const usage_text =
     \\  graff [flags]                    start the REPL
     \\  graff [-p] "prompt"              one-shot: run the prompt, print the answer, exit
     \\  graff login                      get a codegraff key (device-code OAuth)
-    \\  graff login codex [--refresh]    ChatGPT/Codex OAuth login (PKCE)
+    \\  graff login chatgpt              ChatGPT sign-in (also: codex, openai)
     \\  graff login kimi                 Kimi Code OAuth login (device-code)
     \\  graff login xai                  Grok/SuperGrok OAuth login (device-code)
     \\  graff login zai                  Z.AI Coding Plan OAuth login

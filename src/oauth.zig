@@ -20,6 +20,7 @@ const writeCodexAuth = helpers.writeCodexAuth;
 const codex_login_page_html = helpers.codex_login_page_html;
 const queryParam = helpers.queryParam;
 const openBrowser = helpers.openBrowser;
+const callback = @import("oauth_callback.zig");
 
 const ansi = @import("ansi.zig");
 const style = &ansi.style;
@@ -136,41 +137,31 @@ pub fn codexLogin(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, re
 
         // Bind the callback port BEFORE opening the browser, so the redirect
         // can't arrive before we're listening.
-        var addr = std.Io.net.IpAddress.parseLiteral("127.0.0.1:1455") catch return error.BadOAuthResponse;
-        var server = try std.Io.net.IpAddress.listen(&addr, io, .{});
+        var server = try callback.listen(io, 1455);
         defer server.deinit(io);
 
         try out.print("\nOpen this URL to authorize (browser should open automatically):\n\n{s}\n\nwaiting for the callback on {s} …\n", .{ url, codex_redirect });
         try out.flush();
         openBrowser(io, url);
 
-        const stream = try server.accept(io);
-        defer stream.close(io);
-
+        // Only this attempt's redirect ends the wait (oauth_callback.zig).
         var rbuf: [16 * 1024]u8 = undefined;
-        var sr = std.Io.net.Stream.Reader.init(stream, io, &rbuf);
-        const req_line = (sr.interface.takeDelimiter('\n') catch null) orelse return error.BadOAuthResponse;
-
-        // Branded, dark-mode-aware confirmation card (charset utf-8 so the ✓/◆
-        // render) so the callback tab shows a real "you're all set" page, not a
-        // bare line — then we read the code out of the same request below.
-        const page = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n" ++ codex_login_page_html;
-        var wbuf: [4096]u8 = undefined;
-        var sw = std.Io.net.Stream.Writer.init(stream, io, &wbuf);
-        sw.interface.writeAll(page) catch {};
-        sw.interface.flush() catch {};
-
-        const code = queryParam(req_line, "code") orelse {
-            try out.writeAll("✗ no authorization code in callback\n");
+        const cb = callback.wait(io, &server, "/auth/callback", state, &rbuf) catch |err| {
+            if (err != error.Cancelled) return err;
+            try out.writeAll("✗ sign-in cancelled: a newer login took over the callback port\n");
             try out.flush();
             return;
         };
-        const got_state = queryParam(req_line, "state") orelse "";
-        if (!std.mem.eql(u8, got_state, state)) {
-            try out.writeAll("✗ state mismatch — possible CSRF, aborting\n");
+        defer cb.stream.close(io);
+        const code = queryParam(cb.line, "code") orelse {
+            callback.answer(io, cb.stream, "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\nSign-in failed. Return to the terminal.\n");
+            try out.print("✗ sign-in failed: {s}\n", .{queryParam(cb.line, "error") orelse "no authorization code in the callback"});
             try out.flush();
             return;
-        }
+        };
+        // Branded, dark-mode-aware confirmation card (charset utf-8 so the ✓/◆
+        // render) so the callback tab shows a real "you're all set" page.
+        callback.answer(io, cb.stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n" ++ codex_login_page_html);
         body = try std.fmt.allocPrint(arena, "grant_type=authorization_code&client_id={s}&code={s}&redirect_uri={s}&code_verifier={s}", .{ codex_client_id, code, codex_redirect_enc, verifier });
     }
 

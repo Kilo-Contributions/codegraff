@@ -55,7 +55,7 @@ the newest beta. Both check the download against the release's `SHA256SUMS`.
 <summary>Other sign-ins, installing from a checkout, and editors</summary>
 
 ```sh
-graff login chatgpt             # ChatGPT account (same as: graff login codex)
+graff login chatgpt             # ChatGPT sign-in (same as: graff login codex)
 graff login kimi
 graff login zai
 graff login xai
@@ -193,7 +193,7 @@ live catalog.
 | `/plan` | read-only exploration |
 | `/strict` | every message is a tool |
 
-Providers: Anthropic, OpenAI, DeepSeek, xAI, Z.AI, Kimi, Codex (ChatGPT login),
+Providers: Anthropic, OpenAI, DeepSeek, xAI, Z.AI, Kimi, ChatGPT plan, Codex,
 Vercel, OpenRouter, MiniMax, Xiaomi, Groq, Cerebras, Mistral, plus one
 workspace router in `.graff/.config.router`. `graff models refresh` pulls the
 catalogs. Claude-subscription OAuth is deliberately not supported.

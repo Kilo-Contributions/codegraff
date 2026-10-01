@@ -10,6 +10,27 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.12
+
+### Sign-in
+
+- Every ChatGPT login is the sign-in for open-source apps, `chatgpt-new`, because the login through the Codex CLI's client no longer works: `graff login chatgpt`, `graff login codex`, `openai`, `gpt` and `oai`, `/login`, `graff logout chatgpt`, and the model picker's login for a Codex model all run it. With both routes signed in, a bare model name and the startup default pick `chatgpt-new`. An existing Codex CLI `auth.json` still works on the `codex` route. Renewals of the new sign-in are still refused, so a sign-in lasts about an hour (#1422) (ADR 0229). (#1442)
+- Browser sign-ins wait for their own redirect. The codex login answered only the first connection to its callback port, so a connection the browser opened early and dropped ended it, and the real redirect found the port closed ("connection refused"). A tab from an earlier attempt now gets a page saying so instead of ending the sign-in, and a new sign-in takes the port from one still waiting. The ChatGPT and MCP server sign-ins share the fix. (#1442)
+
+### Sub-agents and MCP
+
+- One `load_tool_schemas` call loads natives and MCP tools together, and on the routes that announce loads a child keeps the tools its root loaded. (#1438)
+- A spawned child gets the MCP tools its root loaded, with full schemas (ADR 0227). (#1439)
+- A read-only child may call the MCP tools their server declares read-only (`readOnlyHint`), and inherits only those (ADR 0228). (#1440)
+
+### Codex
+
+- On the codex provider, the default effort is the model catalog's level, and requests carry the catalog's verbosity (ADR 0226). (#1439)
+
+### Evals
+
+- graff side by side with the Codex app server on the same model and account, in `evals/graff-vs-codex-app-server/`. The app-server driver follows the root thread and runs at the model's default effort. (#1441)
+
 ## v0.0.302.11
 
 ### Prompt cache
