@@ -1,0 +1,15 @@
+{
+ "id": "stale-triage",
+ "suite": "mcp-hard",
+ "category": "mcp-aggregate",
+ "prompt": "This workspace is a git repository, and it has a Linear-shaped MCP server named linear. An issue is stale when its priority is 1 or 2 and no commit authored on or after 2026-08-10 (by author date) mentions its key anywhere in the commit message, subject or body. A mention is the issue's identifier, such as ENG-101, as an exact, case-sensitive match that is not part of a longer key such as ENG-1010. Write stale.json as a sorted JSON list of the stale issue keys, then reply with how many there are.",
+ "files": {
+  ".mcp.json": "{\"mcpServers\":{\"linear\":{\"command\":\"python3\",\"args\":[\"linear_fixture_mcp.py\"]}}}\n"
+ },
+ "setup": [
+  "python3 -c \"import pathlib,shutil; p=pathlib.Path('.').resolve(); root=next(x for x in p.parents if (x/'scripts'/'linear_fixture_mcp.py').exists()); shutil.copy(root/'scripts'/'linear_fixture_mcp.py','.')\"",
+  "python3 \"$TASK_ROOT/hidden/stale-gen.py\""
+ ],
+ "check": "python3 \"$TASK_ROOT/hidden/check_stale.py\"",
+ "timeout_s": 300
+}

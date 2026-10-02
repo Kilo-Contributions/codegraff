@@ -1,0 +1,14 @@
+{
+ "id": "triage-rollup",
+ "suite": "mcp-hard",
+ "category": "mcp-aggregate",
+ "prompt": "This workspace has a Linear-shaped MCP server named linear. Group its issues by priority. For each priority, count the issues, sum their estimates, and count every comment on those issues. Write rollup.json as one object keyed by priority, {\"1\": {\"issues\": n, \"estimate\": e, \"comments\": c}, ...}, then reply with the priority whose issues have the most comments.",
+ "files": {
+  ".mcp.json": "{\"mcpServers\":{\"linear\":{\"command\":\"python3\",\"args\":[\"linear_fixture_mcp.py\"]}}}\n"
+ },
+ "setup": [
+  "python3 -c \"import pathlib,shutil; p=pathlib.Path('.').resolve(); root=next(x for x in p.parents if (x/'scripts'/'linear_fixture_mcp.py').exists()); shutil.copy(root/'scripts'/'linear_fixture_mcp.py','.')\""
+ ],
+ "check": "python3 \"$TASK_ROOT/hidden/check_rollup.py\"",
+ "timeout_s": 300
+}

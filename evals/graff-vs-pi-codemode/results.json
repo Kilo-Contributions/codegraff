@@ -1,0 +1,2384 @@
+{
+ "measured": "2026-10-02",
+ "note": "wall = mean seconds per task; input = all input tokens incl. cached; calls = model calls per task; 3 runs of each task per arm",
+ "mimo-v2.6-pro": {
+  "session_1_all_tasks": {
+   "overall": {
+    "graff v0.0.302.16": {
+     "runs": 33,
+     "pass": 27,
+     "wall": 81.5,
+     "calls": 8.3,
+     "input": 75869,
+     "cached_pct": 90,
+     "output": 1505,
+     "timeouts": 3
+    },
+    "graff, rlm off": {
+     "runs": 33,
+     "pass": 30,
+     "wall": 55.1,
+     "calls": 8.3,
+     "input": 79114,
+     "cached_pct": 90,
+     "output": 1807,
+     "timeouts": 0
+    },
+    "Pi 1.0 + codemode": {
+     "runs": 33,
+     "pass": 31,
+     "wall": 72.0,
+     "calls": 10.3,
+     "input": 91132,
+     "cached_pct": 90,
+     "output": 2158,
+     "timeouts": 1
+    },
+    "Pi 1.0": {
+     "runs": 33,
+     "pass": 32,
+     "wall": 92.8,
+     "calls": 12.4,
+     "input": 110690,
+     "cached_pct": 90,
+     "output": 2753,
+     "timeouts": 1
+    }
+   },
+   "families": {
+    "graff v0.0.302.16": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 36.0,
+      "calls": 7.2,
+      "input": 54086,
+      "cached_pct": 89,
+      "output": 654,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 8,
+      "wall": 87.5,
+      "calls": 9.7,
+      "input": 91371,
+      "cached_pct": 92,
+      "output": 1191,
+      "timeouts": 1
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 128.6,
+      "calls": 5.3,
+      "input": 61552,
+      "cached_pct": 95,
+      "output": 1109,
+      "timeouts": 1
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 11,
+      "wall": 86.6,
+      "calls": 8.6,
+      "input": 78144,
+      "cached_pct": 89,
+      "output": 2113,
+      "timeouts": 1
+     }
+    },
+    "graff, rlm off": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 27.4,
+      "calls": 4,
+      "input": 27503,
+      "cached_pct": 90,
+      "output": 833,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 8,
+      "wall": 48.9,
+      "calls": 7.3,
+      "input": 86764,
+      "cached_pct": 88,
+      "output": 1367,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 41.2,
+      "calls": 8,
+      "input": 88800,
+      "cached_pct": 96,
+      "output": 1235,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 13,
+      "wall": 72.7,
+      "calls": 10.6,
+      "input": 93231,
+      "cached_pct": 90,
+      "output": 2576,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0 + codemode": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 43.2,
+      "calls": 8.8,
+      "input": 32554,
+      "cached_pct": 82,
+      "output": 959,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 47.3,
+      "calls": 10.7,
+      "input": 58597,
+      "cached_pct": 85,
+      "output": 1480,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 56.0,
+      "calls": 9,
+      "input": 59232,
+      "cached_pct": 87,
+      "output": 1979,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 14,
+      "wall": 101.5,
+      "calls": 11,
+      "input": 140464,
+      "cached_pct": 93,
+      "output": 3081,
+      "timeouts": 1
+     }
+    },
+    "Pi 1.0": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 66.3,
+      "calls": 10,
+      "input": 44883,
+      "cached_pct": 83,
+      "output": 1506,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 48.6,
+      "calls": 9.1,
+      "input": 68387,
+      "cached_pct": 84,
+      "output": 1459,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 92.3,
+      "calls": 12,
+      "input": 101775,
+      "cached_pct": 89,
+      "output": 3436,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 14,
+      "wall": 130.1,
+      "calls": 15.5,
+      "input": 164177,
+      "cached_pct": 92,
+      "output": 3891,
+      "timeouts": 1
+     }
+    }
+   },
+   "tasks": {
+    "graff v0.0.302.16": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 128.6,
+      "calls": 5.3,
+      "input": 61552,
+      "cached_pct": 95,
+      "output": 1109,
+      "timeouts": 1
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 47.9,
+      "calls": 10.3,
+      "input": 79448,
+      "cached_pct": 90,
+      "output": 807,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 24.1,
+      "calls": 4,
+      "input": 28725,
+      "cached_pct": 85,
+      "output": 501,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 54.2,
+      "calls": 7.7,
+      "input": 69557,
+      "cached_pct": 86,
+      "output": 1967,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 0,
+      "wall": 29.6,
+      "calls": 5,
+      "input": 36797,
+      "cached_pct": 89,
+      "output": 1125,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 76.0,
+      "calls": 9,
+      "input": 79479,
+      "cached_pct": 86,
+      "output": 1968,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 63.1,
+      "calls": 8.3,
+      "input": 70443,
+      "cached_pct": 86,
+      "output": 2143,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 210.0,
+      "calls": 13,
+      "input": 134446,
+      "cached_pct": 95,
+      "output": 3364,
+      "timeouts": 1
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 60.1,
+      "calls": 11.3,
+      "input": 123479,
+      "cached_pct": 91,
+      "output": 1819,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 171.9,
+      "calls": 11,
+      "input": 101045,
+      "cached_pct": 91,
+      "output": 942,
+      "timeouts": 1
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 30.5,
+      "calls": 6.7,
+      "input": 49589,
+      "cached_pct": 94,
+      "output": 812,
+      "timeouts": 0
+     }
+    },
+    "graff, rlm off": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 41.2,
+      "calls": 8,
+      "input": 88800,
+      "cached_pct": 96,
+      "output": 1235,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 22.1,
+      "calls": 4,
+      "input": 27077,
+      "cached_pct": 92,
+      "output": 735,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 32.7,
+      "calls": 4,
+      "input": 27929,
+      "cached_pct": 87,
+      "output": 931,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 71.6,
+      "calls": 8,
+      "input": 70961,
+      "cached_pct": 90,
+      "output": 2048,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 1,
+      "wall": 44.0,
+      "calls": 5.7,
+      "input": 39586,
+      "cached_pct": 90,
+      "output": 1120,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 51.5,
+      "calls": 10.7,
+      "input": 91271,
+      "cached_pct": 94,
+      "output": 1959,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 58.4,
+      "calls": 9,
+      "input": 74199,
+      "cached_pct": 86,
+      "output": 1966,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 138.2,
+      "calls": 19.7,
+      "input": 190140,
+      "cached_pct": 91,
+      "output": 5784,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 53.8,
+      "calls": 8.3,
+      "input": 125712,
+      "cached_pct": 86,
+      "output": 2088,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 66.0,
+      "calls": 8.3,
+      "input": 96209,
+      "cached_pct": 87,
+      "output": 1081,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 27.0,
+      "calls": 5.3,
+      "input": 38371,
+      "cached_pct": 94,
+      "output": 933,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0 + codemode": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 56.0,
+      "calls": 9,
+      "input": 59232,
+      "cached_pct": 87,
+      "output": 1979,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 36.2,
+      "calls": 8,
+      "input": 26259,
+      "cached_pct": 82,
+      "output": 896,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 50.2,
+      "calls": 9.7,
+      "input": 38848,
+      "cached_pct": 81,
+      "output": 1022,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 91.4,
+      "calls": 10,
+      "input": 52467,
+      "cached_pct": 85,
+      "output": 2937,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 26.6,
+      "calls": 5.3,
+      "input": 20306,
+      "cached_pct": 72,
+      "output": 1322,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 45.5,
+      "calls": 8,
+      "input": 36100,
+      "cached_pct": 85,
+      "output": 1645,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 47.7,
+      "calls": 7.3,
+      "input": 27157,
+      "cached_pct": 81,
+      "output": 1607,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 296.1,
+      "calls": 24.3,
+      "input": 566293,
+      "cached_pct": 95,
+      "output": 7894,
+      "timeouts": 1
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 52.0,
+      "calls": 11.7,
+      "input": 91915,
+      "cached_pct": 86,
+      "output": 1920,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.6,
+      "calls": 9.3,
+      "input": 32572,
+      "cached_pct": 83,
+      "output": 948,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 51.2,
+      "calls": 11,
+      "input": 51303,
+      "cached_pct": 84,
+      "output": 1571,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 92.3,
+      "calls": 12,
+      "input": 101775,
+      "cached_pct": 89,
+      "output": 3436,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 76.8,
+      "calls": 10.7,
+      "input": 53272,
+      "cached_pct": 85,
+      "output": 1707,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 55.7,
+      "calls": 9.3,
+      "input": 36494,
+      "cached_pct": 81,
+      "output": 1305,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 102.5,
+      "calls": 13,
+      "input": 99316,
+      "cached_pct": 85,
+      "output": 3801,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 48.9,
+      "calls": 8.7,
+      "input": 35297,
+      "cached_pct": 82,
+      "output": 1965,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 79.5,
+      "calls": 13.7,
+      "input": 63737,
+      "cached_pct": 86,
+      "output": 2457,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 36.7,
+      "calls": 6.7,
+      "input": 21156,
+      "cached_pct": 82,
+      "output": 1545,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 383.1,
+      "calls": 35.3,
+      "input": 601381,
+      "cached_pct": 95,
+      "output": 9689,
+      "timeouts": 1
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 68.5,
+      "calls": 10,
+      "input": 112817,
+      "cached_pct": 84,
+      "output": 2125,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.5,
+      "calls": 8.7,
+      "input": 35606,
+      "cached_pct": 83,
+      "output": 1012,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 42.7,
+      "calls": 8.7,
+      "input": 56739,
+      "cached_pct": 85,
+      "output": 1241,
+      "timeouts": 0
+     }
+    }
+   }
+  },
+  "session_2_adr0238_mcp": {
+   "overall": {
+    "graff + ADR 0238": {
+     "runs": 15,
+     "pass": 14,
+     "wall": 31.0,
+     "calls": 8.3,
+     "input": 72655,
+     "cached_pct": 92,
+     "output": 1012,
+     "timeouts": 0
+    },
+    "graff v0.0.302.16": {
+     "runs": 15,
+     "pass": 13,
+     "wall": 37.1,
+     "calls": 8.6,
+     "input": 82459,
+     "cached_pct": 92,
+     "output": 1128,
+     "timeouts": 0
+    },
+    "graff, rlm off": {
+     "runs": 15,
+     "pass": 15,
+     "wall": 38.3,
+     "calls": 6.7,
+     "input": 69919,
+     "cached_pct": 89,
+     "output": 1032,
+     "timeouts": 0
+    },
+    "Pi 1.0 + codemode": {
+     "runs": 15,
+     "pass": 15,
+     "wall": 39.3,
+     "calls": 9.1,
+     "input": 45517,
+     "cached_pct": 84,
+     "output": 1412,
+     "timeouts": 0
+    }
+   },
+   "families": {
+    "graff + ADR 0238": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 5,
+      "wall": 26.2,
+      "calls": 7.3,
+      "input": 54407,
+      "cached_pct": 93,
+      "output": 803,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 34.1,
+      "calls": 9,
+      "input": 84820,
+      "cached_pct": 92,
+      "output": 1151,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    },
+    "graff v0.0.302.16": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 5,
+      "wall": 32.9,
+      "calls": 7.3,
+      "input": 55381,
+      "cached_pct": 92,
+      "output": 917,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 8,
+      "wall": 39.9,
+      "calls": 9.4,
+      "input": 100511,
+      "cached_pct": 92,
+      "output": 1268,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    },
+    "graff, rlm off": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 18.3,
+      "calls": 4,
+      "input": 28365,
+      "cached_pct": 88,
+      "output": 742,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 51.7,
+      "calls": 8.4,
+      "input": 97622,
+      "cached_pct": 89,
+      "output": 1226,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    },
+    "Pi 1.0 + codemode": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 37.4,
+      "calls": 9.5,
+      "input": 44381,
+      "cached_pct": 84,
+      "output": 1452,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 40.6,
+      "calls": 8.9,
+      "input": 46274,
+      "cached_pct": 84,
+      "output": 1385,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    }
+   },
+   "tasks": {
+    "graff + ADR 0238": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 37.0,
+      "calls": 11,
+      "input": 82405,
+      "cached_pct": 92,
+      "output": 1002,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 15.4,
+      "calls": 3.7,
+      "input": 26409,
+      "cached_pct": 95,
+      "output": 605,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 46.8,
+      "calls": 10.7,
+      "input": 119176,
+      "cached_pct": 92,
+      "output": 1826,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 40.0,
+      "calls": 12,
+      "input": 103868,
+      "cached_pct": 94,
+      "output": 1007,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 15.6,
+      "calls": 4.3,
+      "input": 31416,
+      "cached_pct": 87,
+      "output": 621,
+      "timeouts": 0
+     }
+    },
+    "graff v0.0.302.16": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 42.2,
+      "calls": 10,
+      "input": 76658,
+      "cached_pct": 94,
+      "output": 1030,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 23.7,
+      "calls": 4.7,
+      "input": 34105,
+      "cached_pct": 87,
+      "output": 804,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 31.5,
+      "calls": 8,
+      "input": 79210,
+      "cached_pct": 88,
+      "output": 1209,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 56.0,
+      "calls": 14,
+      "input": 173117,
+      "cached_pct": 93,
+      "output": 1603,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 32.2,
+      "calls": 6.3,
+      "input": 49206,
+      "cached_pct": 94,
+      "output": 994,
+      "timeouts": 0
+     }
+    },
+    "graff, rlm off": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 17.2,
+      "calls": 4,
+      "input": 28810,
+      "cached_pct": 90,
+      "output": 720,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 19.3,
+      "calls": 4,
+      "input": 27920,
+      "cached_pct": 86,
+      "output": 763,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 60.9,
+      "calls": 8,
+      "input": 121527,
+      "cached_pct": 87,
+      "output": 1570,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 62.7,
+      "calls": 12,
+      "input": 134049,
+      "cached_pct": 89,
+      "output": 1281,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 31.4,
+      "calls": 5.3,
+      "input": 37291,
+      "cached_pct": 91,
+      "output": 827,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0 + codemode": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 27.9,
+      "calls": 7.3,
+      "input": 40192,
+      "cached_pct": 82,
+      "output": 1176,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 46.9,
+      "calls": 11.7,
+      "input": 48570,
+      "cached_pct": 86,
+      "output": 1727,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 42.0,
+      "calls": 8.3,
+      "input": 68227,
+      "cached_pct": 82,
+      "output": 1938,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 40.8,
+      "calls": 9.3,
+      "input": 35285,
+      "cached_pct": 85,
+      "output": 1012,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 39.2,
+      "calls": 9,
+      "input": 35310,
+      "cached_pct": 85,
+      "output": 1207,
+      "timeouts": 0
+     }
+    }
+   }
+  },
+  "session_3_pi_codemode_mcp": {
+   "overall": {
+    "Pi 1.0 + codemode": {
+     "runs": 15,
+     "pass": 14,
+     "wall": 34.3,
+     "calls": 8.7,
+     "input": 47594,
+     "cached_pct": 84,
+     "output": 1318,
+     "timeouts": 0
+    },
+    "Pi 1.0": {
+     "runs": 15,
+     "pass": 15,
+     "wall": 37.8,
+     "calls": 8.8,
+     "input": 44825,
+     "cached_pct": 84,
+     "output": 1399,
+     "timeouts": 0
+    },
+    "Pi 1.0, MCP direct": {
+     "runs": 15,
+     "pass": 15,
+     "wall": 30.5,
+     "calls": 6.9,
+     "input": 66934,
+     "cached_pct": 79,
+     "output": 1229,
+     "timeouts": 0
+    }
+   },
+   "families": {
+    "Pi 1.0 + codemode": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 33.9,
+      "calls": 8.2,
+      "input": 34803,
+      "cached_pct": 82,
+      "output": 1273,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 8,
+      "wall": 34.5,
+      "calls": 9.1,
+      "input": 56122,
+      "cached_pct": 84,
+      "output": 1348,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    },
+    "Pi 1.0": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 38.3,
+      "calls": 9.2,
+      "input": 41386,
+      "cached_pct": 84,
+      "output": 1325,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 37.4,
+      "calls": 8.6,
+      "input": 47117,
+      "cached_pct": 84,
+      "output": 1449,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    },
+    "Pi 1.0, MCP direct": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 31.6,
+      "calls": 7.2,
+      "input": 77038,
+      "cached_pct": 79,
+      "output": 1251,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 29.8,
+      "calls": 6.7,
+      "input": 60199,
+      "cached_pct": 80,
+      "output": 1214,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    }
+   },
+   "tasks": {
+    "Pi 1.0 + codemode": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 33.8,
+      "calls": 8.3,
+      "input": 39962,
+      "cached_pct": 82,
+      "output": 1155,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.1,
+      "calls": 8,
+      "input": 29644,
+      "cached_pct": 82,
+      "output": 1391,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 2,
+      "wall": 40.1,
+      "calls": 9.3,
+      "input": 84018,
+      "cached_pct": 84,
+      "output": 1650,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 30.2,
+      "calls": 10.3,
+      "input": 35832,
+      "cached_pct": 84,
+      "output": 1106,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 33.3,
+      "calls": 7.7,
+      "input": 48516,
+      "cached_pct": 84,
+      "output": 1288,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.4,
+      "calls": 9.3,
+      "input": 50237,
+      "cached_pct": 84,
+      "output": 1432,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.2,
+      "calls": 9,
+      "input": 32536,
+      "cached_pct": 85,
+      "output": 1218,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 48.3,
+      "calls": 9.3,
+      "input": 76889,
+      "cached_pct": 84,
+      "output": 2224,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 29.8,
+      "calls": 9.3,
+      "input": 34437,
+      "cached_pct": 87,
+      "output": 932,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.1,
+      "calls": 7,
+      "input": 30025,
+      "cached_pct": 80,
+      "output": 1190,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0, MCP direct": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 32.0,
+      "calls": 7.3,
+      "input": 77615,
+      "cached_pct": 79,
+      "output": 1248,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 31.2,
+      "calls": 7,
+      "input": 76461,
+      "cached_pct": 78,
+      "output": 1255,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 37.7,
+      "calls": 7.3,
+      "input": 70618,
+      "cached_pct": 81,
+      "output": 1636,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 25.7,
+      "calls": 7,
+      "input": 74733,
+      "cached_pct": 79,
+      "output": 899,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 26.1,
+      "calls": 5.7,
+      "input": 35246,
+      "cached_pct": 78,
+      "output": 1106,
+      "timeouts": 0
+     }
+    }
+   }
+  }
+ },
+ "gpt-6-astra": {
+  "session_1_all_tasks": {
+   "overall": {
+    "graff v0.0.302.16": {
+     "runs": 33,
+     "pass": 33,
+     "wall": 54.1,
+     "calls": 4.5,
+     "input": 49367,
+     "cached_pct": 89,
+     "output": 788,
+     "timeouts": 0
+    },
+    "graff, rlm off": {
+     "runs": 33,
+     "pass": 33,
+     "wall": 57.3,
+     "calls": 4.6,
+     "input": 52177,
+     "cached_pct": 89,
+     "output": 927,
+     "timeouts": 0
+    },
+    "graff + ADR 0238": {
+     "runs": 33,
+     "pass": 33,
+     "wall": 48.3,
+     "calls": 3.8,
+     "input": 44041,
+     "cached_pct": 89,
+     "output": 835,
+     "timeouts": 0
+    },
+    "Pi 1.0 + codemode": {
+     "runs": 33,
+     "pass": 33,
+     "wall": 41.7,
+     "calls": 4.8,
+     "input": 20941,
+     "cached_pct": 54,
+     "output": 647,
+     "timeouts": 0
+    },
+    "Pi 1.0": {
+     "runs": 33,
+     "pass": 33,
+     "wall": 48.1,
+     "calls": 5.2,
+     "input": 21887,
+     "cached_pct": 57,
+     "output": 704,
+     "timeouts": 0
+    }
+   },
+   "families": {
+    "graff v0.0.302.16": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 31.5,
+      "calls": 3.3,
+      "input": 38882,
+      "cached_pct": 91,
+      "output": 523,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 51.4,
+      "calls": 6.4,
+      "input": 82622,
+      "cached_pct": 89,
+      "output": 823,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 42.2,
+      "calls": 2.3,
+      "input": 34864,
+      "cached_pct": 88,
+      "output": 756,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 15,
+      "wall": 67.2,
+      "calls": 4.1,
+      "input": 36508,
+      "cached_pct": 88,
+      "output": 880,
+      "timeouts": 0
+     }
+    },
+    "graff, rlm off": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 38.5,
+      "calls": 4,
+      "input": 45116,
+      "cached_pct": 92,
+      "output": 674,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 55.8,
+      "calls": 6.1,
+      "input": 78441,
+      "cached_pct": 90,
+      "output": 917,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 48.4,
+      "calls": 3,
+      "input": 44539,
+      "cached_pct": 83,
+      "output": 892,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 15,
+      "wall": 67.5,
+      "calls": 4.2,
+      "input": 40771,
+      "cached_pct": 87,
+      "output": 1042,
+      "timeouts": 0
+     }
+    },
+    "graff + ADR 0238": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 31.4,
+      "calls": 3.5,
+      "input": 41050,
+      "cached_pct": 86,
+      "output": 486,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 37.7,
+      "calls": 3.9,
+      "input": 45901,
+      "cached_pct": 90,
+      "output": 654,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.7,
+      "calls": 2,
+      "input": 29762,
+      "cached_pct": 87,
+      "output": 646,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 15,
+      "wall": 64.2,
+      "calls": 4.3,
+      "input": 46977,
+      "cached_pct": 90,
+      "output": 1121,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0 + codemode": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 30.5,
+      "calls": 5.2,
+      "input": 26302,
+      "cached_pct": 47,
+      "output": 368,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 34.8,
+      "calls": 5.6,
+      "input": 33909,
+      "cached_pct": 59,
+      "output": 409,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 32.7,
+      "calls": 2,
+      "input": 9596,
+      "cached_pct": 15,
+      "output": 507,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 15,
+      "wall": 52.1,
+      "calls": 4.7,
+      "input": 13285,
+      "cached_pct": 59,
+      "output": 930,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 30.9,
+      "calls": 5.2,
+      "input": 26285,
+      "cached_pct": 55,
+      "output": 364,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 36.7,
+      "calls": 5.9,
+      "input": 38228,
+      "cached_pct": 61,
+      "output": 407,
+      "timeouts": 0
+     },
+     "Commit digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 29.8,
+      "calls": 2,
+      "input": 8837,
+      "cached_pct": 30,
+      "output": 464,
+      "timeouts": 0
+     },
+     "Multi-file coding": {
+      "runs": 15,
+      "pass": 15,
+      "wall": 65.3,
+      "calls": 5.3,
+      "input": 12933,
+      "cached_pct": 55,
+      "output": 1066,
+      "timeouts": 0
+     }
+    }
+   },
+   "tasks": {
+    "graff v0.0.302.16": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 42.2,
+      "calls": 2.3,
+      "input": 34864,
+      "cached_pct": 88,
+      "output": 756,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.3,
+      "calls": 4,
+      "input": 46287,
+      "cached_pct": 92,
+      "output": 549,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 28.8,
+      "calls": 2.7,
+      "input": 31476,
+      "cached_pct": 88,
+      "output": 496,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 36.4,
+      "calls": 3.3,
+      "input": 36910,
+      "cached_pct": 90,
+      "output": 682,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 43.3,
+      "calls": 3.3,
+      "input": 37807,
+      "cached_pct": 88,
+      "output": 860,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 53.0,
+      "calls": 4,
+      "input": 47862,
+      "cached_pct": 84,
+      "output": 1027,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 114.8,
+      "calls": 5,
+      "input": 0,
+      "cached_pct": 0,
+      "output": 0,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 88.5,
+      "calls": 5,
+      "input": 59962,
+      "cached_pct": 91,
+      "output": 1830,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 56.5,
+      "calls": 6.7,
+      "input": 88613,
+      "cached_pct": 87,
+      "output": 927,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 60.1,
+      "calls": 8,
+      "input": 106090,
+      "cached_pct": 89,
+      "output": 924,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 37.7,
+      "calls": 4.7,
+      "input": 53164,
+      "cached_pct": 91,
+      "output": 618,
+      "timeouts": 0
+     }
+    },
+    "graff, rlm off": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 48.4,
+      "calls": 3,
+      "input": 44539,
+      "cached_pct": 83,
+      "output": 892,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.5,
+      "calls": 4,
+      "input": 44602,
+      "cached_pct": 93,
+      "output": 677,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.5,
+      "calls": 4,
+      "input": 45630,
+      "cached_pct": 91,
+      "output": 671,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 42.3,
+      "calls": 3.3,
+      "input": 36529,
+      "cached_pct": 86,
+      "output": 822,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 49.9,
+      "calls": 3.3,
+      "input": 37349,
+      "cached_pct": 85,
+      "output": 1030,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 53.1,
+      "calls": 4,
+      "input": 47147,
+      "cached_pct": 83,
+      "output": 1023,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 105.3,
+      "calls": 5.3,
+      "input": 23579,
+      "cached_pct": 88,
+      "output": 473,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 86.8,
+      "calls": 5,
+      "input": 59253,
+      "cached_pct": 91,
+      "output": 1860,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 52.9,
+      "calls": 6,
+      "input": 80263,
+      "cached_pct": 85,
+      "output": 880,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 76.3,
+      "calls": 8,
+      "input": 106288,
+      "cached_pct": 91,
+      "output": 1236,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.3,
+      "calls": 4.3,
+      "input": 48773,
+      "cached_pct": 93,
+      "output": 635,
+      "timeouts": 0
+     }
+    },
+    "graff + ADR 0238": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.7,
+      "calls": 2,
+      "input": 29762,
+      "cached_pct": 87,
+      "output": 646,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 31.4,
+      "calls": 3.7,
+      "input": 42609,
+      "cached_pct": 82,
+      "output": 486,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 31.4,
+      "calls": 3.3,
+      "input": 39490,
+      "cached_pct": 90,
+      "output": 487,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 40.1,
+      "calls": 3.3,
+      "input": 37168,
+      "cached_pct": 89,
+      "output": 723,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 47.9,
+      "calls": 3.3,
+      "input": 38019,
+      "cached_pct": 86,
+      "output": 969,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 52.5,
+      "calls": 4,
+      "input": 47858,
+      "cached_pct": 93,
+      "output": 1025,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 92.7,
+      "calls": 5.7,
+      "input": 48070,
+      "cached_pct": 90,
+      "output": 1079,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 87.8,
+      "calls": 5.3,
+      "input": 63772,
+      "cached_pct": 89,
+      "output": 1810,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.8,
+      "calls": 4,
+      "input": 47587,
+      "cached_pct": 92,
+      "output": 671,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 36.3,
+      "calls": 4,
+      "input": 46797,
+      "cached_pct": 90,
+      "output": 616,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 38.1,
+      "calls": 3.7,
+      "input": 43320,
+      "cached_pct": 88,
+      "output": 675,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0 + codemode": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 32.7,
+      "calls": 2,
+      "input": 9596,
+      "cached_pct": 15,
+      "output": 507,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 30.8,
+      "calls": 5.3,
+      "input": 27067,
+      "cached_pct": 56,
+      "output": 383,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 30.3,
+      "calls": 5,
+      "input": 25536,
+      "cached_pct": 38,
+      "output": 353,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 25.1,
+      "calls": 3,
+      "input": 5728,
+      "cached_pct": 45,
+      "output": 363,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 37.8,
+      "calls": 4.3,
+      "input": 10647,
+      "cached_pct": 55,
+      "output": 579,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 50.6,
+      "calls": 4.7,
+      "input": 13777,
+      "cached_pct": 51,
+      "output": 878,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 63.6,
+      "calls": 5.7,
+      "input": 17203,
+      "cached_pct": 63,
+      "output": 1171,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 83.2,
+      "calls": 6,
+      "input": 19069,
+      "cached_pct": 67,
+      "output": 1661,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.9,
+      "calls": 5,
+      "input": 30783,
+      "cached_pct": 57,
+      "output": 417,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 32.5,
+      "calls": 5.3,
+      "input": 31110,
+      "cached_pct": 49,
+      "output": 363,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 36.9,
+      "calls": 6.3,
+      "input": 39833,
+      "cached_pct": 69,
+      "output": 445,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0": {
+     "commit-digest": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 29.8,
+      "calls": 2,
+      "input": 8837,
+      "cached_pct": 30,
+      "output": 464,
+      "timeouts": 0
+     },
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 28.9,
+      "calls": 5,
+      "input": 26403,
+      "cached_pct": 58,
+      "output": 366,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 32.9,
+      "calls": 5.3,
+      "input": 26166,
+      "cached_pct": 52,
+      "output": 361,
+      "timeouts": 0
+     },
+     "solo-census": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 25.5,
+      "calls": 3.3,
+      "input": 5303,
+      "cached_pct": 31,
+      "output": 369,
+      "timeouts": 0
+     },
+     "solo-coverage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 39.4,
+      "calls": 4.7,
+      "input": 9892,
+      "cached_pct": 63,
+      "output": 639,
+      "timeouts": 0
+     },
+     "solo-fix-three": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 93.6,
+      "calls": 5.7,
+      "input": 14255,
+      "cached_pct": 51,
+      "output": 951,
+      "timeouts": 0
+     },
+     "solo-rename-api": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 84.5,
+      "calls": 6.7,
+      "input": 19078,
+      "cached_pct": 55,
+      "output": 1677,
+      "timeouts": 0
+     },
+     "solo-sidecar": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 83.8,
+      "calls": 6.3,
+      "input": 16137,
+      "cached_pct": 63,
+      "output": 1692,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 35.1,
+      "calls": 5,
+      "input": 30766,
+      "cached_pct": 42,
+      "output": 408,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 31.9,
+      "calls": 6,
+      "input": 38528,
+      "cached_pct": 68,
+      "output": 385,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 43.2,
+      "calls": 6.7,
+      "input": 45391,
+      "cached_pct": 68,
+      "output": 427,
+      "timeouts": 0
+     }
+    }
+   }
+  },
+  "session_2_pi_codemode_mcp": {
+   "overall": {
+    "Pi 1.0 + codemode": {
+     "runs": 15,
+     "pass": 15,
+     "wall": 41.2,
+     "calls": 5.3,
+     "input": 29917,
+     "cached_pct": 50,
+     "output": 388,
+     "timeouts": 0
+    },
+    "Pi 1.0": {
+     "runs": 15,
+     "pass": 15,
+     "wall": 35.6,
+     "calls": 5.7,
+     "input": 33670,
+     "cached_pct": 55,
+     "output": 402,
+     "timeouts": 0
+    },
+    "Pi 1.0, MCP direct": {
+     "runs": 15,
+     "pass": 15,
+     "wall": 40.6,
+     "calls": 5.6,
+     "input": 41667,
+     "cached_pct": 63,
+     "output": 477,
+     "timeouts": 0
+    }
+   },
+   "families": {
+    "Pi 1.0 + codemode": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 32.3,
+      "calls": 5,
+      "input": 25566,
+      "cached_pct": 44,
+      "output": 363,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 47.1,
+      "calls": 5.6,
+      "input": 32817,
+      "cached_pct": 54,
+      "output": 405,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    },
+    "Pi 1.0": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 34.2,
+      "calls": 5.5,
+      "input": 28689,
+      "cached_pct": 49,
+      "output": 384,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 36.5,
+      "calls": 5.8,
+      "input": 36991,
+      "cached_pct": 58,
+      "output": 413,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    },
+    "Pi 1.0, MCP direct": {
+     "MCP reports": {
+      "runs": 6,
+      "pass": 6,
+      "wall": 55.8,
+      "calls": 7.5,
+      "input": 63423,
+      "cached_pct": 68,
+      "output": 673,
+      "timeouts": 0
+     },
+     "MCP joins": {
+      "runs": 9,
+      "pass": 9,
+      "wall": 30.5,
+      "calls": 4.3,
+      "input": 27163,
+      "cached_pct": 56,
+      "output": 346,
+      "timeouts": 0
+     },
+     "Commit digest": null,
+     "Multi-file coding": null
+    }
+   },
+   "tasks": {
+    "Pi 1.0 + codemode": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 31.4,
+      "calls": 5,
+      "input": 25541,
+      "cached_pct": 53,
+      "output": 356,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 33.3,
+      "calls": 5,
+      "input": 25590,
+      "cached_pct": 36,
+      "output": 370,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 33.2,
+      "calls": 5,
+      "input": 30796,
+      "cached_pct": 48,
+      "output": 418,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 68.9,
+      "calls": 5.7,
+      "input": 30468,
+      "cached_pct": 60,
+      "output": 376,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 39.1,
+      "calls": 6,
+      "input": 37188,
+      "cached_pct": 53,
+      "output": 420,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 31.5,
+      "calls": 5,
+      "input": 26229,
+      "cached_pct": 41,
+      "output": 365,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 36.8,
+      "calls": 6,
+      "input": 31150,
+      "cached_pct": 56,
+      "output": 403,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.6,
+      "calls": 5,
+      "input": 30766,
+      "cached_pct": 45,
+      "output": 407,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 34.2,
+      "calls": 6,
+      "input": 38598,
+      "cached_pct": 66,
+      "output": 383,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 40.8,
+      "calls": 6.3,
+      "input": 41611,
+      "cached_pct": 60,
+      "output": 449,
+      "timeouts": 0
+     }
+    },
+    "Pi 1.0, MCP direct": {
+     "linear-nohint": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 59.4,
+      "calls": 9.7,
+      "input": 87475,
+      "cached_pct": 73,
+      "output": 690,
+      "timeouts": 0
+     },
+     "linear-nohint-warm": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 52.2,
+      "calls": 5.3,
+      "input": 39371,
+      "cached_pct": 56,
+      "output": 657,
+      "timeouts": 0
+     },
+     "stale-triage": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 22.1,
+      "calls": 4,
+      "input": 22003,
+      "cached_pct": 51,
+      "output": 209,
+      "timeouts": 0
+     },
+     "triage-rollup": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 39.3,
+      "calls": 5,
+      "input": 41136,
+      "cached_pct": 61,
+      "output": 457,
+      "timeouts": 0
+     },
+     "xref-issues": {
+      "runs": 3,
+      "pass": 3,
+      "wall": 30.1,
+      "calls": 4,
+      "input": 18349,
+      "cached_pct": 53,
+      "output": 373,
+      "timeouts": 0
+     }
+    }
+   }
+  }
+ }
+}
