@@ -1,0 +1,12 @@
+{
+  "id": "sa-census",
+  "suite": "subagents",
+  "category": "subagents",
+  "prompt": "logs/ has one directory per service (auth, billing, search, mailer), each holding plain and gzipped log files. Use one sub-agent per service, running in parallel, to count that service's log lines, its ERROR lines (the level is the third whitespace-separated field), and its most frequent error code among ERROR lines (the code is the fourth field; ties go to the smallest code). Then write summary.json as {\"services\": {\"<service>\": {\"lines\": N, \"errors\": N, \"top_error\": \"E###\"}, ...}, \"total_errors\": N}.",
+  "setup": [
+    "python3 \"$TASK_ROOT/hidden/sa-census-gen.py\"",
+    "git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.com commit -qm init"
+  ],
+  "check": "python3 \"$TASK_ROOT/hidden/sa-census.py\"",
+  "timeout_s": 420
+}

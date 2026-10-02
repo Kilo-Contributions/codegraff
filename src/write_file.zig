@@ -81,22 +81,39 @@ pub fn exec(ctx: tools.ToolCtx, input: std.json.Value) !tools.ToolOutput {
         defer if (before == .content) gpa.free(before.content);
         snaps.record(path, before);
     };
-    Io.Dir.cwd().writeFile(io, .{ .sub_path = resolved, .data = content }) catch |err| {
+    const made_dir = writeCreating(io, resolved, content, prev_stat == null) catch |err| {
         if (edit_verify.fsErrorText(gpa, .write, path, err)) |t| return .{ .text = t, .is_error = true };
         return err;
     };
     edit_verify.preserveMode(io, resolved, prev_stat);
     noteKnown(resolved);
-    return .{ .text = try resultText(gpa, path, content, if (prev_stat) |st| st.size else null) };
+    const dir = if (made_dir) std.fs.path.dirname(path) else null;
+    return .{ .text = try resultText(gpa, path, content, if (prev_stat) |st| st.size else null, dir) };
 }
 
-fn resultText(gpa: Allocator, path: []const u8, content: []const u8, prev_size: ?u64) ![]u8 {
+/// A new file whose directory is missing gets the directory first, as
+/// `mkdir -p` would. Refusing it cost the model a second generation of the
+/// whole content, which is most of what a large write costs. True when the
+/// directory was made.
+fn writeCreating(io: Io, resolved: []const u8, data: []const u8, new_file: bool) !bool {
+    Io.Dir.cwd().writeFile(io, .{ .sub_path = resolved, .data = data }) catch |err| {
+        if (err != error.FileNotFound or !new_file) return err;
+        const parent = std.fs.path.dirname(resolved) orelse return err;
+        try Io.Dir.cwd().createDirPath(io, parent);
+        try Io.Dir.cwd().writeFile(io, .{ .sub_path = resolved, .data = data });
+        return true;
+    };
+    return false;
+}
+
+fn resultText(gpa: Allocator, path: []const u8, content: []const u8, prev_size: ?u64, made_dir: ?[]const u8) ![]u8 {
     var out: std.Io.Writer.Allocating = .init(gpa);
     errdefer out.deinit();
     const w = &out.writer;
     if (prev_size) |was| {
         try w.print("replaced {s} ({d} bytes; was {d})", .{ path, content.len, was });
     } else try w.print("created {s} ({d} bytes)", .{ path, content.len });
+    if (made_dir) |d| try w.print(" in new directory {s}", .{d});
     if (std.ascii.endsWithIgnoreCase(path, ".json")) try jsonNote(gpa, w, content);
     return out.toOwnedSlice();
 }
@@ -163,4 +180,17 @@ test "write_file creates, refuses to clobber an unread file, and replaces a know
     defer gpa.free(again.text);
     try std.testing.expect(!again.is_error);
     try std.testing.expect(std.mem.startsWith(u8, again.text, try std.fmt.allocPrint(a, "replaced {s} (6 bytes; was 8); NOT valid JSON (", .{out_json})));
+
+    // A new file in a missing directory gets the directory, not a refusal
+    // the model answers by generating the whole content again.
+    const nested = try std.fmt.allocPrint(a, "{s}/docs/deep/FORMAT.md", .{dir});
+    args.getPtr("path").?.* = .{ .string = nested };
+    args.getPtr("content").?.* = .{ .string = "# x\n" };
+    const made = try exec(ctx, .{ .object = args });
+    defer gpa.free(made.text);
+    try std.testing.expect(!made.is_error);
+    try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "created {s} (4 bytes) in new directory {s}/docs/deep", .{ nested, dir }), made.text);
+    const landed = try tmp.dir.readFileAlloc(io, "docs/deep/FORMAT.md", gpa, .limited(64));
+    defer gpa.free(landed);
+    try std.testing.expectEqualStrings("# x\n", landed);
 }

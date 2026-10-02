@@ -41,6 +41,8 @@ pub const local_tools_note =
     \\edit_file for changes to existing files and write_file for new
     \\files or full rewrites. write_file will not replace a file you have not
     \\read, so write a new file without first checking that its path is free.
+    \\When a script computes a file's content, let that script write the file
+    \\instead of printing it for write_file.
     \\For a read-only exact-key lookup in one known file,
     \\call read_file once with contains set to the exact key and answer from its
     \\output; do not request the whole file first. To navigate code — finding symbols,
@@ -374,7 +376,8 @@ pub const lean_local_tools_note =
     \\read_file before editing; prefer edit_file for existing files and
     \\write_file for new files. write_file never replaces a file you have not
     \\read, so skip existence checks; its result is the evidence, so skip
-    \\read-backs. Use the smallest unique edit spans and
+    \\read-backs. A file a script computes is written by that script, not
+    \\copied into write_file. Use the smallest unique edit spans and
     \\preserve terminal-newline state. Navigate with codedb (context, around,
     \\callpath, list_dir, status).
     \\Independent reads belong in ONE response, not a chain of turns.

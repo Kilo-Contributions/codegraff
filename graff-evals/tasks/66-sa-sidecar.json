@@ -1,0 +1,12 @@
+{
+  "id": "sa-sidecar",
+  "suite": "subagents",
+  "category": "subagents",
+  "files_dir": "fixtures/sa-sidecar",
+  "prompt": "`python3 test_parser.py` fails. Fix confparse/parser.py (not the test) until it passes. Meanwhile, have a sub-agent write docs/FORMAT.md: a reference for the config format parser.py accepts (sections, each directive's syntax with an example, comments, value types). Run that sub-agent in the background while you fix the parser; both must be done before you finish.",
+  "setup": [
+    "git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.com commit -qm init"
+  ],
+  "check": "python3 test_parser.py && python3 \"$TASK_ROOT/hidden/sa-sidecar.py\"",
+  "timeout_s": 420
+}

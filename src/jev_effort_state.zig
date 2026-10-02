@@ -72,6 +72,7 @@ pub fn applyToState(agent: anytype) bool {
 
 pub fn apply(agent: anytype) void {
     if (!applyToState(agent)) return;
+    if (agent.sub) return; // ADR 0232: a child's selection is its own; the saved effort is the root's
     _ = @import("repl_glue.zig").saveThinkingSettings(agent.io, agent.gpa, agent.reasoning, agent.fast, agent.ultracode_mode, agent.show_thinking, agent.ai_title);
 }
 

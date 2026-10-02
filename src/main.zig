@@ -397,7 +397,7 @@ pub fn main(init: std.process.Init) !void {
         for (approvals.plan_read_roots.items) |p| gpa.free(p);
         approvals.plan_read_roots.deinit(gpa);
     }
-    // buildSystemPrompt layers the base, project instructions, overrides, skills, and MCP notes.
+    @import("ask_user.zig").g_no_human = @import("ask_user.zig").detectNoHuman(io, flags.oneshot_prompt != null, json_mode, @import("mcp_boot.zig").isAcp(flags.positionals.items)); // before the prompt composes (ADR 0232)
     const sys_normal = try startup.buildSystemPrompt(io, arena, out, flags.system_prompt_flag, flags.append_system_flag, json_mode or flags.oneshot_prompt != null or init.environ_map.get("GRAFF_REPL_DEBUG") == null, (flags.oneshot_prompt != null or !(Io.File.stdin().isTty(io) catch true)) and !flags.effectiveYolo(), mcp_tools, g_codedbpro_licensed, init.environ_map.get("GRAFF_LEARNED_PROMPT"), init.environ_map);
     boot.mark(io, "system prompt");
     session_run.learningNotice(io, arena, init.environ_map, out, json_mode or flags.oneshot_prompt != null);

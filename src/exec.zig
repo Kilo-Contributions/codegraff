@@ -344,10 +344,11 @@ fn execToolInner(ctx: ToolCtx, call: ToolCall) !ToolOutput {
     }
     if (local_tools.isLocal(call.name)) return local_tools.exec(gpa, io, call.name, input);
     if (std.mem.eql(u8, call.name, "agent_output")) {
+        const wait_ms: u64 = @intCast(@max(intField(input, "wait_ms") orelse 0, 0));
+        if (input == .object) if (input.object.get("ids")) |ids| if (ids == .array) return @import("subagent_interactive.zig").outputMany(ctx, ids.array.items, wait_ms);
         const id = intField(input, "id") orelse return missingArg(gpa, "id");
-        const wait_ms = intField(input, "wait_ms") orelse 0;
         if (id < 0 or id > std.math.maxInt(u32)) return .{ .text = try gpa.dupe(u8, "invalid agent id"), .is_error = true };
-        return @import("subagent_interactive.zig").output(ctx, @intCast(id), @intCast(@max(wait_ms, 0)));
+        return @import("subagent_interactive.zig").output(ctx, @intCast(id), wait_ms);
     }
     if (std.mem.eql(u8, call.name, "subagent_resume")) return @import("subagent_resume.zig").exec(ctx, input);
     if (std.mem.eql(u8, call.name, "agent_message")) return @import("subagent_messaging.zig").send(ctx, input);
@@ -414,10 +415,13 @@ test "native Jev dispatch rejects other models and latches off after one failed 
     try std.testing.expect(older_model.is_error);
     ctx.provider.model = "gpt-6-sol";
     try std.testing.expect(jev.available(ctx.provider)); // ineligible attempts did not trip the circuit
+    // ADR 0232: a child asks too. Upstream fails here, so its call is the one
+    // attempt and opens the circuit for the whole session.
     ctx.from_sub = true;
     const worker = try execToolInner(ctx, call);
     defer std.testing.allocator.free(worker.text);
-    try std.testing.expect(worker.is_error);
+    try std.testing.expect(!worker.is_error);
+    try std.testing.expect(!jev.available(ctx.provider));
     ctx.from_sub = false;
     const first = try execToolInner(ctx, call);
     defer std.testing.allocator.free(first.text);

@@ -31,6 +31,8 @@ pub const Owned = struct {
         copy.worker_family = try a.dupe(u8, source.worker_family);
         copy.session_name = try a.dupe(u8, source.session_name);
         copy.parent_tool_call_id = try a.dupe(u8, source.parent_tool_call_id);
+        copy.parent_task = try a.dupe(u8, source.parent_task);
+        copy.parent_messages = &.{}; // the caller's history moves on once this call returns
         if (source.worker_id) |id| copy.worker_id = try a.dupe(u8, id);
         if (source.approvals) |ap| {
             ap.mutex.lockUncancelable(source.io);

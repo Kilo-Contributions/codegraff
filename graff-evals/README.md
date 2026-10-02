@@ -24,6 +24,8 @@ harness under test spends model calls.
 | `inhouse` | Distilled PR fixtures with SPEC.md. Cheap harness A/B — not the live badge. Opt-in. |
 | `live` | Capped 12 gated PRs, no SPEC.md. Pass @ n=3; list$ on passing reps only. See [LIVE.md](../artifacts/graff-evals-live/LIVE.md). |
 | `bg` | Commands that outlast the 15s `-p` foreground wait, so each run must collect background results. For A/Bs of how the harness words and delivers them. Opt-in. |
+| `subagents` | Work the prompt asks to hand to sub-agents in parallel: per-package bugfixes, a per-service log census, an API rename across three packages, an endpoint-coverage merge of two inventories, and a docs sidecar beside a fix. Fixtures are git repos; held-out checks. Opt-in. |
+| `subagents-solo` | The same five tasks with the delegation wording removed: the counterfactual that says whether the children paid for themselves. Opt-in. |
 
 Terminal-Bench and other Harbor datasets run graff through the adapter in [harbor/](harbor/README.md).
 
@@ -56,6 +58,9 @@ CODEGRAFF_API_KEY=cg_sk_… ./run.py --suite swe --harness graff-dev,opencode-co
 # Results: evals/graff-vs-codex-app-server/RESULTS.md
 ./run.py --suite mcp --harness graff-repl,codex-app-server -j 8 --interleave
 ./run.py --suite core --harness graff-repl,codex-app-server,pi-codex -j 8 --interleave
+# sub-agents and their counterfactual on one model; tools in the eval tree split each run into
+# parent and child time (the codex driver tags each child thread in EVAL_TRACE_DIR)
+./run.py --suite subagents,subagents-solo --harness graff-repl,codex-app-server --model gpt-6-astra -j 6 --interleave
 # one gateway model in graff, Claude Code, OpenCode 2 and pi (set CODEGRAFF_API_KEY; OPENCODE2_BIN
 # when `opencode` on PATH is 1.x; Claude Code needs an Anthropic-format proxy in front of the
 # gateway, see the write-up). Results: evals/graff-vs-claude-code/RESULTS.md
