@@ -41,6 +41,14 @@ pub fn isDeepseekFamily(provider_id: []const u8, model: []const u8) bool {
     return std.mem.indexOf(u8, model, "deepseek") != null;
 }
 
+/// ADR 0237: DeepSeek documents `low`, `high` and `max`. At graff's default
+/// (`medium`) the first request of an MCP task planned the whole job before
+/// its first call. The default keeps thinking on at `low`; `/effort low`
+/// still turns it off (writeChatExtras).
+pub fn deepseekEffort(requested: []const u8) []const u8 {
+    return if (std.mem.eql(u8, requested, "medium")) "low" else requested;
+}
+
 /// OpenAI-chat extras after `prompt_cache_key`: Z.AI thinking, Vercel
 /// `reasoning.effort`, DeepSeek thinking on/off, then `reasoning_effort`.
 pub fn writeChatExtras(s: *std.json.Stringify, provider_id: []const u8, model: []const u8, send_effort: bool, requested: []const u8) !void {
@@ -75,7 +83,8 @@ pub fn writeChatExtras(s: *std.json.Stringify, provider_id: []const u8, model: [
     }
     if (!std.mem.eql(u8, provider_id, "kimi") and send_effort) {
         try s.objectField("reasoning_effort");
-        try s.write(if (is_zai) reasoningEffort(requested) else @import("meta_wire.zig").chatEffort(requested, provider_id, model));
+        const effort = @import("meta_wire.zig").chatEffort(requested, provider_id, model);
+        try s.write(if (is_zai) reasoningEffort(requested) else if (isDeepseekFamily(provider_id, model)) deepseekEffort(effort) else effort);
     }
 }
 
@@ -85,6 +94,48 @@ test "DeepSeek family is native id or a deepseek model name" {
     try std.testing.expect(isDeepseekFamily("fireworks", "accounts/fireworks/models/deepseek-v4-flash"));
     try std.testing.expect(!isDeepseekFamily("codegraff", "glm-5.3-flash"));
     try std.testing.expect(!isDeepseekFamily("zai", "glm-5.3"));
+}
+
+test "ADR 0237: DeepSeek thinks at its low level by default; /effort low turns thinking off" {
+    const Agent = @import("agent.zig").Agent;
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var messages = std.json.Array.init(arena);
+    var user: std.json.ObjectMap = .empty;
+    try user.put(arena, "role", .{ .string = "user" });
+    try user.put(arena, "content", .{ .string = "hello" });
+    try messages.append(.{ .object = user });
+    var agent: Agent = .{
+        .gpa = std.testing.allocator,
+        .arena = arena,
+        .io = std.testing.io,
+        .client = undefined,
+        .provider = .{ .id = "deepseek", .kind = .openai, .auth = .bearer, .url = "https://api.deepseek.com/chat/completions", .api_key = "k", .model = "deepseek-v4-pro", .context = 1_000_000 },
+        .messages = messages,
+        .sub = false,
+        .label = "",
+        .out = null,
+        .sys_normal = "system",
+        .reasoning = .medium,
+    };
+    const cases = [_]struct { effort: @TypeOf(agent.reasoning), thinking: []const u8, wire: []const u8 }{
+        .{ .effort = .medium, .thinking = "enabled", .wire = "low" }, // graff's default
+        .{ .effort = .low, .thinking = "disabled", .wire = "low" },
+        .{ .effort = .high, .thinking = "enabled", .wire = "high" },
+        .{ .effort = .ultra, .thinking = "enabled", .wire = "max" },
+    };
+    for (cases) |c| {
+        agent.reasoning = c.effort;
+        const body = try agent.buildBody(null, false, true, true);
+        defer std.testing.allocator.free(body);
+        const thinking = try std.fmt.allocPrint(arena, "\"thinking\":{{\"type\":\"{s}\"}}", .{c.thinking});
+        const wire = try std.fmt.allocPrint(arena, "\"reasoning_effort\":\"{s}\"", .{c.wire});
+        try std.testing.expect(std.mem.indexOf(u8, body, thinking) != null);
+        try std.testing.expect(std.mem.indexOf(u8, body, wire) != null);
+    }
+    try std.testing.expectEqualStrings("low", deepseekEffort("medium"));
+    try std.testing.expectEqualStrings("high", deepseekEffort("high"));
 }
 
 test "Z.AI maps graff efforts onto low|high|max" {
