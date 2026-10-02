@@ -90,7 +90,7 @@ sha256 must match a real release; do not submit against `/latest/`):
   "repository": "https://github.com/justrach/codegraff",
   "website": "https://codegraff.com",
   "authors": ["Rach Pradhan"],
-  "license": "AGPL-3.0-only",
+  "license": "LicenseRef-codegraff",
   "distribution": {
     "binary": {
       "darwin-aarch64": {

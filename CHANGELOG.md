@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.16
+
+### License
+
+- The LICENSE gains a funded-company term for every version after 0.0.302.15. A company that, with its affiliates, has raised more than US$500,000 (equity, convertible notes, SAFEs or similar, at any valuation) may use graff only under a commercial license granted jointly by the Licensors, including on its own computers, CI and networks. A company that crosses the line has 30 days to get a license or stop. Individuals and organizations that are not funded companies keep the AGPL-3.0 terms, and versions up to and including 0.0.302.15 keep the license they shipped with. Components under their own license, such as the Apache-2.0 SDKs, keep it; a copy of graff they include or download stays under the LICENSE. Contact rach@standardharness.com. graff itself is unchanged from v0.0.302.15. (#1447)
+
 ## v0.0.302.15
 
 ### Models
