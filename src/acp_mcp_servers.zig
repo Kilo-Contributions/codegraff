@@ -74,10 +74,11 @@ fn pairs(arena: Allocator, value: ?Value) !?std.json.ObjectMap {
 }
 
 /// How long session/new and session/load wait on the client's servers
-/// (#1291). Local stdio servers handshake well inside it. One stuck on DNS or
-/// an unreachable host no longer holds the reply for minutes: it keeps
-/// connecting in the background and joins on a later model request.
-pub const attach_budget_ms: u32 = 3000;
+/// (#1291, ADR 0230). Long enough for a server restored from the tool cache,
+/// so the first request's catalog already has it; never long enough to hold
+/// the session for a real handshake, which keeps connecting in the background
+/// and joins on a later model request.
+pub const attach_budget_ms: u32 = 250;
 
 /// The live ACP session's hook (engine.Dispatch.mcp_servers): start what the
 /// client named, merge whatever connects within `attach_budget_ms`, then

@@ -314,7 +314,7 @@ pub fn fsErrorText(gpa: Allocator, op: FileOp, path: []const u8, err: anyerror) 
         error.FileNotFound, error.NotDir => switch (op) {
             .read => std.fmt.allocPrint(gpa, "read_file: {s} does not exist (paths are relative to the cwd) — check the name, or list the directory with codedb list_dir", .{path}),
             .edit => std.fmt.allocPrint(gpa, "edit_file: {s} does not exist — edit_file only rewrites an existing file; use write_file to create it", .{path}),
-            .write => std.fmt.allocPrint(gpa, "write_file: cannot create {s} — its parent directory does not exist; create it first with bash `mkdir -p`", .{path}),
+            .write => std.fmt.allocPrint(gpa, "write_file: cannot create {s} — part of its directory path is not a directory", .{path}),
         },
         error.IsDir => std.fmt.allocPrint(gpa, "{s}: {s} is a directory, not a file", .{ op.tool(), path }),
         error.AccessDenied, error.PermissionDenied => std.fmt.allocPrint(gpa, "{s}: permission denied for {s}", .{ op.tool(), path }),
@@ -584,7 +584,7 @@ test "fsErrorText names the tool, path, and failure (#183)" {
     const wr = fsErrorText(gpa, .write, "nope/out.txt", error.FileNotFound).?;
     defer gpa.free(wr);
     try std.testing.expect(std.mem.indexOf(u8, wr, "write_file") != null);
-    try std.testing.expect(std.mem.indexOf(u8, wr, "parent") != null); // distinguishes a missing parent dir
+    try std.testing.expect(std.mem.indexOf(u8, wr, "directory path") != null); // a missing directory is made (ADR 0232); this is a file in the way
 
     const perm = fsErrorText(gpa, .edit, "p", error.AccessDenied).?;
     defer gpa.free(perm);

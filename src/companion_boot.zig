@@ -1,11 +1,11 @@
 //! Companion auto-connect (codedb-pro / muonry), split out of session_start
 //! so the TUI boot path can name the hang and stay under 600 lines.
 //!
-//! Interactive `--yolo` used to call `Registry.addServer` on the main thread
-//! after the plugin receipt. The registry is still empty on a deferred MCP
-//! boot (ADR 0035), so a PATH-installed companion looked "not connected" and
-//! the handshake (stdio probe + 15s cap) sat in front of the first paint.
-//! Queue it onto `pending_starts` instead; native tools run now.
+//! An interactive session used to call `Registry.addServer` on the main
+//! thread after the plugin receipt. The registry is still empty on a deferred
+//! MCP boot (ADR 0035, 0230), so a PATH-installed companion looked "not
+//! connected" and the handshake (stdio probe + 15s cap) sat in front of the
+//! first paint. Queue it onto `pending_starts` instead; native tools run now.
 
 const std = @import("std");
 const Io = std.Io;
@@ -19,9 +19,10 @@ const mcp_boot = @import("mcp_boot.zig");
 const mcp_schema_gate = @import("mcp_schema_gate.zig");
 const skills = @import("skills.zig");
 
-/// Same gate as MCP `defer_join`: interactive yolo, including ACP, not CLI `--json` / `-p`.
+/// Same gate as MCP `defer_join` (ADR 0230): every interactive session,
+/// including ACP, not CLI `--json` / `-p`.
 pub fn deferCompanion(flags: args.Flags, json_mode: bool) bool {
-    return flags.oneshot_prompt == null and mcp_boot.deferMcpJoin(flags.effectiveYolo(), json_mode, mcp_boot.isAcp(flags.positionals.items));
+    return flags.oneshot_prompt == null and mcp_boot.deferMcpJoin(json_mode, mcp_boot.isAcp(flags.positionals.items));
 }
 
 pub fn probeLicensed(gpa: Allocator, io: Io) bool {
@@ -55,7 +56,7 @@ fn interactive(flags: args.Flags, json_mode: bool) bool {
 }
 
 /// Spawn the first PATH-installed companion that is not already connected
-/// or queued. Interactive `--yolo` queues a background handshake (ADR 0035);
+/// or queued. An interactive session queues a background handshake (ADR 0230);
 /// every other path still `addServer`s on this thread.
 pub fn connectCompanion(io: Io, arena: Allocator, registry: *mcp.Registry, flags: args.Flags, out: *Io.Writer, json_mode: bool, environ_map: anytype) !void {
     const sink = engine_sink.writerSink(out);
@@ -84,11 +85,11 @@ pub fn connectCompanion(io: Io, arena: Allocator, registry: *mcp.Registry, flags
     }
 }
 
-test "deferCompanion: interactive yolo only" {
+test "deferCompanion: every interactive session, not -p or --json (ADR 0230)" {
     try std.testing.expect(deferCompanion(.{ .yolo_flag = true }, false));
+    try std.testing.expect(deferCompanion(.{}, false)); // interactive without --yolo
     try std.testing.expect(!deferCompanion(.{ .yolo_flag = true }, true));
     try std.testing.expect(!deferCompanion(.{ .yolo_flag = true, .oneshot_prompt = "hi" }, false));
-    try std.testing.expect(!deferCompanion(.{}, false));
     try std.testing.expect(!deferCompanion(.{ .oneshot_prompt = "hi" }, false));
 }
 

@@ -163,7 +163,7 @@ fn readOnlyChildAllows(registry: ?*mcp.Registry, call: ToolCall) bool {
     const cmd_val = args.get("command") orelse return true; // action=output / kill
     if (cmd_val != .string) return true;
     const cmd = std.mem.trim(u8, cmd_val.string, " \t");
-    return Approvals.readOnlyAllowed(cmd) or Approvals.readOnlyExternal(cmd);
+    return Approvals.readOnlyAllowed(cmd) or Approvals.readOnlyExternal(cmd) or @import("readonly_sandbox.zig").admits(call.input); // ADR 0232
 }
 
 test "a read-only child keeps reads and read-only shell, not writes (#1360)" {
@@ -181,7 +181,10 @@ test "a read-only child keeps reads and read-only shell, not writes (#1360)" {
     try std.testing.expect(readOnlyChildAllows(null, call(a, "bash", "{\"action\":\"output\",\"id\":3}")));
     try std.testing.expect(!readOnlyChildAllows(null, call(a, "write_file", "{\"path\":\"a\",\"content\":\"b\"}")));
     try std.testing.expect(!readOnlyChildAllows(null, call(a, "edit_file", "{}")));
-    try std.testing.expect(!readOnlyChildAllows(null, call(a, "bash", "{\"command\":\"rm -rf build\"}")));
+    // ADR 0232: on macOS a foreground command runs under the sandbox, which refuses the
+    // write; in the background, or with no sandbox, only the allowlist runs.
+    try std.testing.expectEqual(@import("readonly_sandbox.zig").available, readOnlyChildAllows(null, call(a, "bash", "{\"command\":\"rm -rf build\"}")));
+    try std.testing.expect(!readOnlyChildAllows(null, call(a, "bash", "{\"command\":\"rm -rf build\",\"run_in_background\":true}")));
     // ADR 0228: an MCP tool is a read when its server declares it read-only.
     var registry = mcp.Registry.empty(std.testing.allocator, std.testing.io);
     defer registry.deinit();

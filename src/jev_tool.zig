@@ -20,7 +20,7 @@ pub const description = "Optionally ask Jev to choose the reasoning effort for t
 pub const input_schema =
     \\{"type":"object","properties":{"task":{"type":"string","description":"Short non-sensitive summary of the next task; no code, paths or secrets"}},"required":["task"],"additionalProperties":false}
 ;
-const spec = ToolSpec{ .name = name, .desc = description, .schema = input_schema };
+pub const spec = ToolSpec{ .name = name, .desc = description, .schema = input_schema };
 const endpoint = "https://gateway.codegraff.com/v1/systemone";
 const skip_text = "Jev effort selection unavailable; session effort is unchanged. No more Jev requests will be sent this session.";
 const auth_skip_text = "Jev effort selection unavailable (Codegraff authorization failed); session effort is unchanged.";
@@ -244,7 +244,6 @@ fn selectedEffort(arena: Allocator, provider: Provider, raw: []const u8) !Reason
 }
 
 pub fn execute(ctx: ToolCtx, input: Value) !ToolOutput {
-    if (ctx.from_sub) return invalid(ctx.gpa, "jev_effort is available only to the root agent");
     if (!state.codegraff_login.load(.acquire)) return invalid(ctx.gpa, "jev_effort requires a Codegraff login (`graff login`)");
     if (!scope.eligible(ctx.provider)) return invalid(ctx.gpa, "jev_effort is available only with Codex/OpenAI GPT-6 or Xiaomi MiMo v2.6 models");
     if (state.down.load(.acquire)) return skipped(ctx.gpa);

@@ -92,6 +92,9 @@ pub fn context(self: *Agent) ToolCtx {
         .agent_cwd = self.agent_cwd,
         .subagent_feedback = self.feedback,
         .read_miss = &self.read_miss,
+        .parent_effort = self.reasoning,
+        .parent_messages = self.messages.items,
+        .read_only_shell = self.read_only,
     };
 }
 

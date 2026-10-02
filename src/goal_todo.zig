@@ -95,7 +95,19 @@ pub fn retireFinishedForNewAsk(root: *Agent) usize {
     return n;
 }
 
-pub const WriteResult = struct { text: []const u8, rejected: bool = false, dropped_open: usize = 0, kept_verify: usize = 0 };
+pub const WriteResult = struct {
+    /// The rendered list, for the UI (`todo_list_updated`).
+    text: []const u8,
+    /// What the model reads back: counts and only what graff kept (ADR 0233).
+    model_text: []const u8 = "",
+    rejected: bool = false,
+    dropped_open: usize = 0,
+    kept_verify: usize = 0,
+
+    pub fn reply(self: WriteResult) []const u8 {
+        return if (self.model_text.len > 0) self.model_text else self.text;
+    }
+};
 
 /// The whole todo_write handler: replace the current epoch's checklist with
 /// `list` (the tool call's "todos" argument, already parsed), preserving
@@ -130,14 +142,17 @@ pub fn applyTodoWrite(root: *Agent, list: ?Value) !WriteResult {
         }
     }
     const rendered = goal_state.renderTodos(root, epoch);
-    if (cleared.dropped_open == 0 and cleared.kept_verify == 0) return .{ .text = rendered };
+    const reply = try @import("todo_reply.zig").text(root.arena, root.todos.items, epoch, incoming.items, cleared.dropped_open, cleared.kept_verify);
+    if (cleared.dropped_open == 0 and cleared.kept_verify == 0) return .{ .text = rendered, .model_text = reply };
     if (cleared.kept_verify > 0 and cleared.dropped_open == 0)
         return .{
             .text = try std.fmt.allocPrint(root.arena, "{s}\n({d} verification item(s) you left out were kept as unresolved acceptance requirements)", .{ rendered, cleared.kept_verify }),
+            .model_text = reply,
             .kept_verify = cleared.kept_verify,
         };
     return .{
         .text = try std.fmt.allocPrint(root.arena, "{s}\n({d} open item(s) you left out were dropped; re-list one to keep it)", .{ rendered, cleared.dropped_open }),
+        .model_text = reply,
         .dropped_open = cleared.dropped_open,
         .kept_verify = cleared.kept_verify,
     };
@@ -213,6 +228,25 @@ test "a replace keeps omitted completed items and still drops omitted open ones"
     ));
     try std.testing.expect(goal_state.allDone(root.todos.items, 1));
     try std.testing.expect(goal_state.checklistFinished(&root));
+}
+
+test "ADR 0233: the model reads counts and kept items; the UI keeps the rendered list" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const ar = arena_state.allocator();
+    var root = todoRoot(ar);
+    root.goal = .{ .objective = "ship phase 2", .epoch = 1 };
+    _ = try applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"write the helper","status":"completed"},
+        \\          {"content":"wire it up","status":"in_progress"}]}
+    ));
+    const r = try applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"wire it up","status":"completed"}]}
+    ));
+    try std.testing.expectEqualStrings("[x] write the helper\n[x] wire it up", r.text);
+    try std.testing.expectEqualStrings("Todo list saved: 2 done, 0 in progress, 0 pending.\nKept from before (not in your list):\n[x] write the helper", r.reply());
+    const rejected = try applyTodoWrite(&root, try todosArg(ar, "{\"todos\":[]}"));
+    try std.testing.expectEqualStrings(rejected.text, rejected.reply());
 }
 
 test "an incoming item with the same content replaces the preserved one, never duplicates it" {

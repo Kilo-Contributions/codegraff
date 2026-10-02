@@ -7,11 +7,11 @@
 //! resulting tool list is identical to the serial build — only the wait is
 //! shorter: max(latency) instead of sum(latency).
 //!
-//! `--yolo` (including `-p`) sets `defer_join`: tasks start immediately but
-//! the first model call is not blocked. `joinBeforeRequest` merges each one
-//! that has finished (ADR 0035, 0221). Lean `-p` with no project `.mcp.json`
-//! skips imported global/plugin handshakes (ADR 0029 is the project file).
-//! `joinPending` still blocks for `/mcp` and teardown.
+//! Every session but `--json` sets `defer_join` (ADR 0230): tasks start at
+//! once, nothing waits for them, and `joinBeforeRequest` merges each one that
+//! has finished (ADR 0035, 0221). Lean `-p` with no project `.mcp.json` skips
+//! imported global/plugin handshakes (ADR 0029 is the project file).
+//! `joinPending` still blocks for `/mcp add|trust` and teardown.
 
 const std = @import("std");
 
@@ -42,7 +42,7 @@ pub const PendingStart = struct {
     ready: ?*std.atomic.Value(bool) = null,
     await_entered: ?*Io.Event = null,
 
-    fn finished(self: *const PendingStart) bool {
+    pub fn finished(self: *const PendingStart) bool {
         return if (self.ready) |flag| flag.load(.acquire) else true;
     }
 
@@ -337,12 +337,12 @@ pub fn isAcp(positionals: []const []const u8) bool {
     return positionals.len > 0 and std.mem.eql(u8, positionals[0], "acp");
 }
 
-/// ADR 0035: `--yolo` (including `-p`, which implies yolo) starts MCP in the
-/// background. `--json` keeps a blocking connect so the protocol stream does
-/// not race a late catalog merge. ACP shares stdout discipline, but its
-/// interactive protocol must remain responsive while optional servers connect.
-pub fn deferMcpJoin(yolo: bool, json_mode: bool, acp: bool) bool {
-    return yolo and (!json_mode or acp);
+/// ADR 0230: every session connects MCP in the background, interactive
+/// (after consent) as well as `--yolo`, `-p` and ACP, so no handshake holds up
+/// the start. `--json` keeps a blocking connect so the protocol stream does
+/// not race a late catalog merge; ACP shares its stdout but must stay live.
+pub fn deferMcpJoin(json_mode: bool, acp: bool) bool {
+    return !json_mode or acp;
 }
 
 /// Lean `-p` connects workspace `.mcp.json` (ADR 0029). It does not handshake
@@ -352,14 +352,6 @@ pub fn oneshotSkipsImportedMcp(oneshot: bool, lean: bool, project_servers: usize
     return oneshot and lean and project_servers == 0;
 }
 
-fn noteMcpDeferred(io: Io) void {
-    const sink = @import("engine_sink.zig").hostedSink() orelse return;
-    sink.emit(io, .{ .session_notice = .{
-        .text = "MCP still connecting — native tools this turn",
-        .tone = .dim,
-    } });
-}
-
 /// No model request waits out a deferred MCP handshake (ADR 0035), but each
 /// merges the ones already finished, the first included: a dormant server
 /// restored from cache that merged later would change the catalog mid-session
@@ -367,11 +359,13 @@ fn noteMcpDeferred(io: Io) void {
 /// request 100 ms for it). `/mcp` and teardown may wait.
 pub fn joinBeforeRequest(reg: *Registry) bool {
     reg.mutex.lockUncancelable(reg.io);
+    defer reg.mutex.unlock(reg.io);
     const decision = firstRequestJoin(reg.pending_starts.len, &reg.first_request_join_skipped);
+    // Queued for the root request to report (mcp_connect_notice.drain).
+    if (decision != .none) reg.connect_notices.collect(reg); // named before the merge consumes them
     const merged = if (decision != .none) joinReadyLocked(reg) else false;
-    const waiting = reg.pending_starts.len > 0;
-    reg.mutex.unlock(reg.io);
-    if (decision == .skip and waiting) noteMcpDeferred(reg.io);
+    if (merged) reg.connect_notices.resolve(reg);
+    if (decision == .skip and reg.pending_starts.len > 0) reg.connect_notices.still_connecting = true;
     return merged;
 }
 
@@ -481,10 +475,9 @@ test "firstRequestJoin skips once, then joins" {
     try std.testing.expectEqual(.none, firstRequestJoin(0, &skipped));
 }
 
-test "deferMcpJoin covers -p yolo and leaves --json blocking" {
-    try std.testing.expect(deferMcpJoin(true, false, false));
-    try std.testing.expect(!deferMcpJoin(true, true, false));
-    try std.testing.expect(!deferMcpJoin(false, false, false));
+test "deferMcpJoin: every session but --json connects in the background (ADR 0230)" {
+    try std.testing.expect(deferMcpJoin(false, false)); // interactive, --yolo, -p
+    try std.testing.expect(!deferMcpJoin(true, false)); // --json
 }
 
 test "oneshotSkipsImportedMcp is lean -p with no project .mcp.json" {
@@ -592,7 +585,6 @@ test "ACP stdout discipline does not block optional startup handshakes" {
     try std.testing.expect(isAcp(&.{"acp"}));
     try std.testing.expect(!isAcp(&.{}));
     try std.testing.expect(!isAcp(&.{ "repl", "acp" }));
-    try std.testing.expect(deferMcpJoin(true, true, isAcp(&.{"acp"})));
-    try std.testing.expect(!deferMcpJoin(false, true, true));
-    try std.testing.expect(!deferMcpJoin(true, true, isAcp(&.{"repl"})));
+    try std.testing.expect(deferMcpJoin(true, isAcp(&.{"acp"})));
+    try std.testing.expect(!deferMcpJoin(true, isAcp(&.{"repl"})));
 }

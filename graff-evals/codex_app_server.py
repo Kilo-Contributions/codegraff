@@ -214,13 +214,13 @@ def run_turn(srv: AppServer, thread_id: str, text: str, deadline: float, steer: 
             state["after_item"] = time.monotonic()
         elif method == "item/completed":
             item = params.get("item") or {}
-            trace(dict(item_sizes(item), thread="root" if root else "child"))
+            trace(dict(item_sizes(item), thread="root" if root else "child", tid=(tid or "")[-8:]))
             if root and item.get("type") == "agentMessage":
                 state["answer"] = item.get("text") or state["answer"]
         elif method == "thread/tokenUsage/updated":
             totals[tid or thread_id] = (params.get("tokenUsage") or {}).get("total")
             state["usage"] = summed(totals)
-            trace({"ev": "usage", "thread": "root" if root else "child", "last": (params.get("tokenUsage") or {}).get("last")})
+            trace({"ev": "usage", "thread": "root" if root else "child", "tid": (tid or "")[-8:], "last": (params.get("tokenUsage") or {}).get("last")})
             state["calls"] = state.get("calls", 0) + 1
             if os.environ.get("EVAL_DEBUG"):
                 print(f"[usage-event] {json.dumps(params.get('tokenUsage'))}", file=sys.stderr)

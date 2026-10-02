@@ -73,6 +73,11 @@ pub fn execSubagent(ctx: ToolCtx, input: Value) !ToolOutput {
     const ask = vision_ask.seat(ctx, base, obj, cell, label, prompt, sys_override, niche);
     if (ask.pin.effort_outcome == .unsupported_effort) return .{ .text = try ctx.gpa.dupe(u8, "subagent: Off is unsupported by this model; choose a supported effort"), .is_error = true };
     if (ask.blocked) return .{ .text = try vision_ask.blockMessage(ctx.gpa, ask), .is_error = true };
+    // ADR 0232: the child sees the user's request and runs at its parent's effort unless pinned.
+    const effort = @import("subagent_fork.zig").effort(ctx.parent_effort, ask.pin.effort, ask.pin.provider orelse base);
+    var forked = ctx;
+    forked.parent_task = try @import("subagent_fork.zig").task(ctx.gpa, ctx.parent_messages);
+    defer ctx.gpa.free(forked.parent_task);
     const keep = tools.json_args.flag(input, "retained");
     // Interactive roots default to detached workers, but an explicit false
     // asks for a foreground child that completes within this prompt turn.
@@ -81,15 +86,15 @@ pub fn execSubagent(ctx: ToolCtx, input: Value) !ToolOutput {
         else => false,
     };
     if ((ctx.interactive_children and !explicit_foreground) or tools.json_args.flag(input, "run_in_background")) {
-        var child = ctx;
+        var child = forked;
         if (keep) child.retained_worker = try @import("subagent_retained.zig").create(ctx, label);
         errdefer if (keep) child.retained_worker.?.deinit(ctx.gpa, ctx.io);
-        return spawnSubBackground(child, label, prompt, sys_override, niche, isolation, isolation_fallback, ask.pin.provider, ask.pin.effort, ask);
+        return spawnSubBackground(child, label, prompt, sys_override, niche, isolation, isolation_fallback, ask.pin.provider, effort, ask);
     }
     const run = if (keep)
-        try @import("subagent_resume.zig").foreground(ctx, label, prompt, sys_override, niche, isolation, isolation_fallback, ask.pin.provider, ask.pin.effort)
+        try @import("subagent_resume.zig").foreground(forked, label, prompt, sys_override, niche, isolation, isolation_fallback, ask.pin.provider, effort)
     else
-        try runSub(ctx, "subagent", label, prompt, sys_override, niche, isolation, isolation_fallback, ask.pin.provider, ask.pin.effort);
+        try runSub(forked, "subagent", label, prompt, sys_override, niche, isolation, isolation_fallback, ask.pin.provider, effort);
     return vision_ask.flagReport(ctx.gpa, run.output, ask);
 }
 

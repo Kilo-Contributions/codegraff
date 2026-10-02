@@ -172,6 +172,9 @@ pub fn build(b: *std.Build) void {
     const mcp_lazy_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-lazy.py" });
     mcp_lazy_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_lazy_test.step);
+    const mcp_async_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-async-start.py" });
+    mcp_async_test.addArtifactArg(exe);
+    test_step.dependOn(&mcp_async_test.step);
     const mcp_add_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-add.py" });
     mcp_add_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_add_test.step);
@@ -193,6 +196,9 @@ pub fn build(b: *std.Build) void {
     const repl_background_wait_test = b.addSystemCommand(&.{ "python3", "scripts/test-repl-background-wait.py" });
     repl_background_wait_test.addArtifactArg(exe);
     test_step.dependOn(&repl_background_wait_test.step);
+    const shell_wait_todo_test = b.addSystemCommand(&.{ "python3", "scripts/test-shell-wait-and-todo-reply.py" });
+    shell_wait_todo_test.addArtifactArg(exe);
+    test_step.dependOn(&shell_wait_todo_test.step);
     const workflow_isolation_test = b.addSystemCommand(&.{ "python3", "scripts/test-workflow-isolation.py" });
     workflow_isolation_test.addArtifactArg(exe);
     test_step.dependOn(&workflow_isolation_test.step);

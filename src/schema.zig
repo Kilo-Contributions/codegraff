@@ -69,7 +69,7 @@ pub const base_specs = [_]ToolSpec{
     },
     .{
         .name = "write_file",
-        .desc = "Create a file, or replace one you have read, edited or written in this session. It will not replace any other existing file unless replace is true, so there is no need to check whether a path exists first. The result says whether it created or replaced the file and, for a .json path, whether the content parses.",
+        .desc = "Create a file, or replace one you have read, edited or written in this session. It will not replace any other existing file unless replace is true, so there is no need to check whether a path exists first, and a missing directory is created. The result says whether it created or replaced the file and, for a .json path, whether the content parses.",
         .schema =
         \\{"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}, "replace": {"type": "boolean", "description": "Overwrite an existing file you have not read in this session"}}, "required": ["path", "content"]}
         ,

@@ -333,7 +333,13 @@ test {
     _ = @import("worker_mcp.zig"); // ADR 0227
     _ = @import("mcp_preload.zig"); // ADR 0231
     _ = @import("write_file.zig"); // ADR 0231
+    _ = @import("subagent_fork.zig"); // ADR 0232
+    _ = @import("subagent_spawn_job.zig"); // ADR 0232: the spawn receipt's wait hint
+    _ = @import("ask_user.zig"); // ADR 0232: no todo nudges when nobody watches
+    _ = @import("readonly_sandbox.zig"); // ADR 0232: a read-only child computes under seatbelt
+    _ = @import("worker_jev.zig"); // ADR 0232: a child asks Jev for its own effort mid-run
     _ = @import("piped_paste.zig"); // ADR 0231
+    _ = @import("mcp_connect_notice.zig"); // ADR 0230
     _ = @import("oauth_callback.zig");
     _ = @import("cache_key_tests.zig"); // ADR 0223: moved off http_headers.zig (600-line cap)
     _ = @import("mcp_shapes_tests.zig"); // ADR 0225: moved off mcp_shapes.zig (600-line cap)
@@ -406,4 +412,6 @@ test {
     _ = @import("additional_tools.zig"); // ADR 0221: loaded tools as additional_tools items on the ChatGPT plan route
     _ = @import("rlm_literal.zig"); // ADR 0236: JSON literals in rlm scripts
     _ = @import("rlm_literal_tests.zig"); // ADR 0236: each() over plain items, literal binds and args
+    _ = @import("todo_reply.zig"); // ADR 0233: todo_write replies with counts, not the list
+    _ = @import("codedb_guard_scope.zig"); // ADR 0234: in-place edits and small whole reads pass the codedb guard
 }

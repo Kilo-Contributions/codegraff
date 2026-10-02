@@ -102,6 +102,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     var tools_now = tools_in;
     const stale = self.toolsJson();
     const joined = if (self.registry) |reg| @import("mcp_pages.zig").beforeRequest(reg) else false; // joins deferred starts, re-lists changed servers
+    if (self.registry) |reg| if (!self.sub) @import("mcp_connect_notice.zig").drain(reg, @import("engine_sink.zig").forAgent(self), self.io); // ADR 0230
     const preloaded = @import("mcp_preload.zig").namedServers(self); // ADR 0231: a named server's schemas ride this request
     if (joined or preloaded or @import("additional_tools.zig").staleCatalog(self)) {
         self.invalidateRootTools();

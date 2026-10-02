@@ -77,6 +77,7 @@ RATES = {
         "high_out": 3.75,
     },
     # graff src/pricing_table.zig (OpenAI GPT-6 list prices per 1M; Codex route)
+    "gpt-6-astra": {"high_at": 272_000, "in": 10.0, "cache": 1.0, "out": 50.0, "high_in": 20.0, "high_cache": 2.0, "high_out": 75.0},
     "gpt-6-sol": {"high_at": 272_000, "in": 2.0, "cache": 0.2, "out": 10.0, "high_in": 4.0, "high_cache": 0.4, "high_out": 15.0},
     "gpt-6.1-sol": {"high_at": 272_000, "in": 2.0, "cache": 0.1, "out": 10.0, "high_in": 4.0, "high_cache": 0.2, "high_out": 15.0},
     # platform.kimi.ai/docs/pricing/chat-k3 — cache-hit / cache-miss / output

@@ -31,7 +31,8 @@ class Model(ScriptedModel):
         text = json.dumps(body.get("messages", []))
         with self._lock:
             self.requests.append(body)
-            root = PROMPT in text
+            # A child's first message quotes the user's request too (ADR 0232); its own system prompt tells it apart.
+            root = PROMPT in text and "You are a subagent" not in text
             if root:
                 self.root_bodies.append(body)
             n = len(self.root_bodies)

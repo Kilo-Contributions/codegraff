@@ -1,0 +1,13 @@
+{
+  "id": "solo-coverage",
+  "suite": "subagents-solo",
+  "category": "subagents",
+  "files_dir": "fixtures/sa-coverage",
+  "prompt": "api/routes/ defines HTTP endpoints, with @route(METHOD, PATH) decorators or add_route(METHOD, PATH, handler) calls, and docs/api/ documents endpoints as `### METHOD PATH` headings. List every endpoint the code defines and every endpoint the docs describe. Then write coverage.json as {\"undocumented\": [...], \"stale_docs\": [...]}: endpoints defined but not documented, and documented but not defined, each as a \"METHOD PATH\" string, each list sorted.",
+  "setup": [
+    "git init -q && git add -A && git -c user.name=eval -c user.email=eval@example.com commit -qm init"
+  ],
+  "check": "python3 \"$TASK_ROOT/hidden/sa-coverage.py\"",
+  "timeout_s": 300,
+  "counterfactual_of": "sa-coverage"
+}

@@ -23,6 +23,13 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.14
+    \\  • MiMo answers without thinking unless effort is high (/effort high)
+    \\  • MCP servers connect in the background; the first message never waits
+    \\  • sub-agents start with your prompts and their parent's effort
+    \\  • the shell tool names the OS; small reads and sed -i pass the guard
+    \\  • rlm takes JSON literals; todo_write replies with counts
+    \\
     \\0.0.302.13
     \\  • fewer round trips: named MCP servers and subagents load up front
     \\  • write_file won't replace an unread file and says what it did
