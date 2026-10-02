@@ -33,8 +33,9 @@ no Licensor may grant any such license alone.
 This reservation runs solely and personally to the two Licensors named above.
 EVERY OTHER PERSON OR ENTITY receives, copies, runs, modifies, conveys, and
 interacts with this software strictly and only under the AGPL-3.0 as set out
-below -- including its Section 13 obligation to offer the Corresponding Source
-to all users who interact with a modified version remotely over a network.
+below, subject to the FUNDED COMPANIES term that follows -- including its
+Section 13 obligation to offer the Corresponding Source to all users who
+interact with a modified version remotely over a network.
 Nothing in this carve-out grants any right to anyone other than the two named
 Licensors.
 
@@ -56,7 +57,45 @@ license under the AGPL-3.0 is irrevocable except by reason of that recipient's
 own material breach. Both Licensors have agreed to and signed these Additional
 Terms.
 
-For commercial or proprietary licensing, contact the Licensors.
+--------------------------------------------------------------------------------
+FUNDED COMPANIES (Additional Term for versions after 0.0.302.15)
+--------------------------------------------------------------------------------
+
+This Additional Term is part of this License for every version of this
+software released after version 0.0.302.15, and for any copy whose LICENSE
+contains it. A version whose LICENSE does not contain it remains licensed as
+that LICENSE states.
+
+A "Funded Company" is any company, partnership, or other organization that,
+together with its Affiliates, has raised more than US$500,000 in total from
+investors or lenders, through equity, convertible notes, SAFEs, or similar
+instruments, at any valuation. An "Affiliate" is any organization that
+controls, is controlled by, or is under common control with it.
+
+A Funded Company, and anyone using this software on its behalf (including its
+employees, contractors, and agents), may use this software for any purpose
+only under a separate commercial license granted jointly by the Licensors.
+"Use" includes running this software on the Funded Company's computers,
+servers, continuous-integration systems, or networks, and making it available
+to its personnel or users over a network. The AGPL-3.0 license below is not
+granted to a Funded Company, or to anyone acting on its behalf, for any such
+use.
+
+An organization that becomes a Funded Company may continue its existing use
+for 30 days, within which it must obtain a commercial license or stop using
+this software.
+
+Individuals using this software for themselves, and organizations that are not
+Funded Companies, receive this software under the AGPL-3.0 as set out below.
+
+Components in this repository distributed under their own license (such as an
+SDK under Apache-2.0) keep that license; a copy of this software that such a
+component includes or downloads remains under this License.
+
+Both Licensors have agreed to this Additional Term.
+
+For commercial or proprietary licensing, contact the Licensors at
+rach@standardharness.com.
 
 --------------------------------------------------------------------------------
 The complete text of the GNU Affero General Public License, Version 3 follows.
