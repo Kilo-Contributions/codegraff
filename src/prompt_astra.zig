@@ -115,8 +115,9 @@ test "GPT6 emitted requests keep one stable guidance block and refresh on model 
                 try testing.expect(std.mem.indexOf(u8, instructions, "# GPT-6.1 Sol working guidance") == null);
             }
             // ADR 0226: on codex the default medium is the catalog's level (low for gpt-6.1-sol).
+            // ADR 0235: MiMo on the gateway thinks only at high, so the default is none.
             const effort: []const u8 = if (std.mem.eql(u8, model, "mimo-v2.6-flash"))
-                (if (std.mem.eql(u8, provider, "codegraff")) "high" else "low")
+                (if (std.mem.eql(u8, provider, "codegraff")) "none" else "low")
             else if (std.mem.eql(u8, provider, "codex") and std.mem.eql(u8, model, "gpt-6.1-sol"))
                 "low"
             else

@@ -64,7 +64,7 @@ test "thought-level options follow the active model allowlist and normalized cur
     try std.testing.expect((try option(&live, arena)) == null);
 }
 
-test "MiMo thought-level discovery names Off and On and normalizes saved positive levels" {
+test "MiMo thought-level discovery names Off and On; levels below high are Off (ADR 0235)" {
     var state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer state.deinit();
     const arena = state.allocator();
@@ -76,7 +76,9 @@ test "MiMo thought-level discovery names Off and On and normalizes saved positiv
     try std.testing.expect(root.jev_effort_pending.commit(root.io, pending, .none));
     try std.testing.expect(@import("jev_effort_state.zig").applyToState(&root));
     try std.testing.expectEqualStrings("none", (try option(&live, arena)).?.currentValue);
-    root.reasoning = .low;
+    root.reasoning = .medium; // graff's default
+    try std.testing.expectEqualStrings("none", (try option(&live, arena)).?.currentValue);
+    root.reasoning = .high;
     const on = (try option(&live, arena)).?;
     try std.testing.expectEqualStrings("high", on.currentValue);
     try std.testing.expectEqual(@as(usize, 2), on.options.len);

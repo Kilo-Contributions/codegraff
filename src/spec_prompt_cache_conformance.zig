@@ -171,7 +171,8 @@ test "prompt cache: effort is never auto-flipped (prefix stays)" {
     defer std.testing.allocator.free(b1);
     const b2 = try root.buildBody(null, false, true, true);
     defer std.testing.allocator.free(b2);
-    try std.testing.expect(std.mem.indexOf(u8, b1, "\"thinking\":{\"type\":\"enabled\"}") != null);
-    try std.testing.expect(std.mem.indexOf(u8, b2, "\"thinking\":{\"type\":\"enabled\"}") != null);
+    // The gateway default is MiMo, which thinks only at high and above (ADR 0235).
+    try std.testing.expect(std.mem.indexOf(u8, b1, "\"thinking\":{\"type\":\"disabled\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, b2, "\"thinking\":{\"type\":\"disabled\"}") != null);
     try std.testing.expectEqualStrings(cacheKeyIn(b1).?, cacheKeyIn(b2).?);
 }
