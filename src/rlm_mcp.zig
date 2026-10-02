@@ -176,7 +176,7 @@ pub fn evalEach(
     const tool = stripQuotes(parsed.tool);
     const field: ?[]const u8 = if (parsed.field) |f| stripQuotes(f) else if (ctx.registry) |reg| firstField(reg, tool) else null;
     const items = jsonArray(arena, arr_text) catch {
-        return .{ .fail = .{ .text = try std.fmt.allocPrint(ctx.gpa, "rlm: each() needs a JSON array (got {s})", .{arr_text}), .is_error = true } };
+        return .{ .fail = .{ .text = try std.fmt.allocPrint(ctx.gpa, "rlm: each() needs a JSON array (got {s})", .{arr_text[0..@min(arr_text.len, 200)]}), .is_error = true } };
     };
     var out: std.ArrayList(u8) = .empty;
     try out.append(arena, '[');

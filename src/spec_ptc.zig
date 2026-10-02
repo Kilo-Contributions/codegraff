@@ -373,6 +373,7 @@ fn hostField(tool: []const u8) []const u8 {
     if (std.mem.eql(u8, tool, "bash") or std.mem.eql(u8, tool, "shell")) return "command";
     if (std.mem.eql(u8, tool, "webfetch")) return "url";
     if (std.mem.eql(u8, tool, "subagent")) return "prompt";
+    if (std.mem.eql(u8, tool, "read_tool_result")) return "handle";
     return "arg";
 }
 
@@ -590,4 +591,6 @@ test "extractCallBound: a bare bound name passes its text; write_file takes path
     // argument is `command`, as the tool description tells scripts to use it.
     const sh = (try extractCallBound(a, "r = shell(\"python3 x.py\")", &binds)).?;
     try std.testing.expectEqualStrings("{\"command\":\"python3 x.py\"}", sh.args_json);
+    // read_tool_result's one positional argument is its handle (ADR 0238).
+    try std.testing.expectEqualStrings("{\"handle\":\"tr_0\"}", (try extractCallBound(a, "h = read_tool_result(\"tr_0\")", &binds)).?.args_json);
 }

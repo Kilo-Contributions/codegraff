@@ -11,6 +11,7 @@ const Allocator = std.mem.Allocator;
 const spec_ptc = @import("spec_ptc.zig");
 const rlm_spec = @import("rlm_spec.zig");
 const rlm_mcp = @import("rlm_mcp.zig");
+const mcp_shapes = @import("mcp_shapes.zig");
 
 pub const StmtHit = rlm_mcp.StmtHit;
 
@@ -101,8 +102,13 @@ fn jsonArray(arena: Allocator, text: []const u8) ![]const Value {
 }
 
 fn fieldValue(arena: Allocator, item: Value, field: []const u8) ![]const u8 {
-    if (item != .object) return error.Miss;
-    const v = item.object.get(field) orelse return error.Miss;
+    const v = switch (item) {
+        // ADR 0238: an each() item is the tool's whole result; a comment
+        // list answers through its printed fold, {n, latest_author}.
+        .object => |obj| obj.get(field) orelse mcp_shapes.foldField(item, field) orelse return error.Miss,
+        .array => mcp_shapes.foldField(item, field) orelse return error.Miss,
+        else => return error.Miss,
+    };
     var aw: std.Io.Writer.Allocating = .init(arena);
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     try s.write(v);
@@ -119,6 +125,21 @@ test "len() counts a JSON array bind" {
     const hit = try evalStmt(arena, gpa, "n = len(issues)", &binds, &bind_out);
     try std.testing.expect(hit == .ok);
     try std.testing.expectEqualStrings("3", bind_out.items[0].text);
+}
+
+test "project() reads a field the printed view drops, and n/latest_author off an each() bind (ADR 0238)" {
+    const gpa = std.testing.allocator;
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const binds = [_]rlm_spec.Binding{
+        .{ .name = "issues", .text = "[{\"id\":\"ISS-1\",\"priority\":2,\"estimate\":3},{\"id\":\"ISS-2\",\"priority\":1,\"estimate\":4}]" },
+        .{ .name = "comments", .text = "[[{\"body\":\"a\",\"author\":{\"name\":\"ada\"},\"createdAt\":\"2026-08-11\"},{\"body\":\"b\",\"author\":{\"name\":\"bev\"},\"createdAt\":\"2026-08-12\"}],[]]" },
+    };
+    try std.testing.expectEqualStrings("[2,1]", try evalExpr(arena, "project(issues, \"priority\")", &binds));
+    try std.testing.expectEqualStrings("[2,0]", try evalExpr(arena, "project(comments, \"n\")", &binds));
+    try std.testing.expectEqualStrings("[\"bev\",null]", try evalExpr(arena, "project(comments, \"latest_author\")", &binds));
+    try std.testing.expectError(error.Miss, evalExpr(arena, "project(comments, \"body\")", &binds));
 }
 
 test "project() extracts one field; print(len()) resolves" {

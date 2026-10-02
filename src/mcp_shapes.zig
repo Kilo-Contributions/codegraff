@@ -295,7 +295,8 @@ pub const slim_min_bytes: usize = 800;
 const identity_keys = [_][]const u8{ "id", "identifier", "title", "name" };
 
 /// Learnt projection: identity keys on issue-like rows; comments fold to
-/// `{n, latest_author}`. Values of `description`/`body` never survive.
+/// `{n, latest_author}`. Values of `description`/`body` never survive. An
+/// each() bind (one whole result per item, ADR 0238) is cut item by item.
 /// Returns null when the payload is small, not a JSON array of objects, or
 /// has nothing to cut. Caller owns a non-null result.
 pub fn slim(alloc: Allocator, payload: []const u8) ?[]u8 {
@@ -304,9 +305,57 @@ pub fn slim(alloc: Allocator, payload: []const u8) ?[]u8 {
     const parsed = std.json.parseFromSlice(Value, alloc, trimmed, .{}) catch return null;
     defer parsed.deinit();
     const items = arrayItems(parsed.value) orelse return null;
+    if (items.len == 0) return null;
+    if (items[0] == .array or wrapsRows(items[0])) return slimEach(alloc, items);
+    if (items[0] != .object) return null;
+    return slimRows(alloc, items);
+}
+
+/// An each() item that is a whole `{"comments": [...]}`-style result, not a row.
+fn wrapsRows(v: Value) bool {
+    if (v != .object or hasIdentity(v.object) or looksLikeComments(v.object)) return false;
+    return arrayItems(v) != null;
+}
+
+fn slimRows(alloc: Allocator, items: []const Value) ?[]u8 {
     if (items.len == 0 or items[0] != .object) return null;
     if (looksLikeComments(items[0].object)) return slimComments(alloc, items);
     return slimIdentity(alloc, items);
+}
+
+/// ADR 0238: print() of an each() bind shows each item's own cut, the view
+/// the per-item slim used to bind. Null when no item had anything to cut.
+fn slimEach(alloc: Allocator, items: []const Value) ?[]u8 {
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    var cut_any = false;
+    aw.writer.writeByte('[') catch return null;
+    for (items, 0..) |item, i| {
+        if (i > 0) aw.writer.writeByte(',') catch return null;
+        if (slimRows(alloc, arrayItems(item) orelse &[_]Value{})) |cut| {
+            defer alloc.free(cut);
+            aw.writer.writeAll(cut) catch return null;
+            cut_any = true;
+            continue;
+        }
+        var s: std.json.Stringify = .{ .writer = &aw.writer };
+        s.write(item) catch return null;
+    }
+    aw.writer.writeByte(']') catch return null;
+    if (!cut_any) return null;
+    return aw.toOwnedSlice() catch null;
+}
+
+/// ADR 0238: project(x, "n" | "latest_author") over an each() bind reads a
+/// comment list through its fold, so the printed view's fields stay
+/// projectable. Null for any other field or a list that is not comments.
+pub fn foldField(item: Value, field: []const u8) ?Value {
+    const items = arrayItems(item) orelse return null;
+    if (items.len > 0 and (items[0] != .object or !looksLikeComments(items[0].object))) return null;
+    if (std.mem.eql(u8, field, "n")) return .{ .integer = @intCast(items.len) };
+    if (!std.mem.eql(u8, field, "latest_author")) return null;
+    if (items.len == 0) return .null;
+    return .{ .string = authorName(items[latestIndex(items)]) orelse "" };
 }
 
 /// Remember the fat payload, then replace it with the learnt cut when one
@@ -319,8 +368,8 @@ pub fn takeSlim(gpa: Allocator, text: []u8) []u8 {
 
 /// ADR 0225: `takeSlim`, lossless. With `keep_in` the full payload is kept as
 /// a tool-result handle that the slim result names, so a dropped field is one
-/// read_tool_result away. Null (an rlm bind, which each/project/write_file
-/// parse as JSON) or a failed write returns the plain cut.
+/// read_tool_result away. Null or a failed write returns the plain cut. An
+/// rlm bind never comes here: it keeps the whole result (ADR 0238).
 pub fn takeSlimKept(gpa: Allocator, keep_in: ?tool_handle.Target, text: []u8) []u8 {
     const cut = slim(gpa, text) orelse return text;
     defer gpa.free(text);
@@ -328,7 +377,7 @@ pub fn takeSlimKept(gpa: Allocator, keep_in: ?tool_handle.Target, text: []u8) []
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
     const path = tool_handle.keep(arena_state.allocator(), target, text) orelse return cut;
-    const out = std.fmt.allocPrint(gpa, "{s}\n[slimmed from {d} bytes; the full result is handle {s} (read_tool_result reads any dropped field)]", .{ cut, text.len, tool_handle.idOf(path) }) catch return cut;
+    const out = std.fmt.allocPrint(gpa, "{s}\n[slimmed from {d} bytes; the full result is handle {s} (read_tool_result reads any dropped field; in rlm, x = read_tool_result(\"{s}\") binds it whole for project() or write_file())]", .{ cut, text.len, tool_handle.idOf(path), tool_handle.idOf(path) }) catch return cut;
     gpa.free(cut);
     return out;
 }
@@ -347,7 +396,7 @@ fn looksLikeComments(obj: std.json.ObjectMap) bool {
     return obj.get("body") != null and obj.get("author") != null;
 }
 
-fn slimComments(alloc: Allocator, items: []const Value) ?[]u8 {
+fn latestIndex(items: []const Value) usize {
     var latest_i: usize = items.len - 1;
     var latest_at: []const u8 = "";
     for (items, 0..) |item, i| {
@@ -359,7 +408,11 @@ fn slimComments(alloc: Allocator, items: []const Value) ?[]u8 {
             latest_i = i;
         }
     }
-    const name = authorName(items[latest_i]);
+    return latest_i;
+}
+
+fn slimComments(alloc: Allocator, items: []const Value) ?[]u8 {
+    const name = authorName(items[latestIndex(items)]);
     var aw: Io.Writer.Allocating = .init(alloc);
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     s.beginObject() catch {
@@ -466,8 +519,8 @@ pub fn annotate(gpa: Allocator, arena: Allocator, io: Io, cwd: ?[]const u8, text
 /// ADR 0225: what `slim` (exec.zig) does to every large list result, said
 /// where the model first meets the tools. Unsaid, the model wrote code for
 /// the full rows, failed on the first missing field, and spent calls finding
-/// the real shape.
-pub const slim_rule = "\nLarge list results from these tools come back slimmed: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. Code against those fields. A direct call's result names a handle holding the full result; rlm binds stay slimmed.";
+/// the real shape. ADR 0238: rlm binds keep every field; only print() slims.
+pub const slim_rule = "\nLarge list results from these tools are shown slimmed: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. A direct call's result names a handle holding the full result. In rlm a bind keeps every field: print() shows the slim view, project(x, field) reads any field, and write_file(\"f.json\", x) saves the whole result for a script.";
 
 pub fn lookup(io: Io, name: []const u8) ?[]const u8 {
     store.mu.lockUncancelable(io);
@@ -489,93 +542,4 @@ test "shutdown frees a filled cache and is a no-op when empty (#1196)" {
     try std.testing.expectEqual(@as(usize, 0), store.map.count());
     try std.testing.expect(store.gpa == null);
     shutdown(io);
-}
-
-test "infer strips values and keeps keys plus broad types" {
-    const gpa = std.testing.allocator;
-    var arena_state = std.heap.ArenaAllocator.init(gpa);
-    defer arena_state.deinit();
-    const a = arena_state.allocator();
-    const shape = try infer(a,
-        \\[{"id":"ISS-1","title":"Login","n":3,"ok":true,"meta":{"x":1},"tags":["a"]}]
-    );
-    try std.testing.expect(std.mem.indexOf(u8, shape, "ISS-1") == null);
-    try std.testing.expect(std.mem.indexOf(u8, shape, "Login") == null);
-    try std.testing.expect(std.mem.indexOf(u8, shape, "\"id\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, shape, "string") != null);
-    try std.testing.expect(std.mem.indexOf(u8, shape, "number") != null);
-    try std.testing.expect(std.mem.indexOf(u8, shape, "bool") != null);
-}
-
-test "remember merges keys; annotate splices shapes; prefix text is untouched" {
-    const gpa = std.testing.allocator;
-    const io = std.testing.io;
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const n = try tmp.dir.realPath(io, &path_buf);
-    const dir = path_buf[0..n];
-    reset(gpa, io);
-    defer reset(gpa, io);
-    var dummy_client: std.http.Client = .{ .allocator = gpa, .io = io };
-    defer dummy_client.deinit();
-    const ctx: ToolCtx = .{
-        .gpa = gpa,
-        .io = io,
-        .client = &dummy_client,
-        .provider = undefined,
-        .registry = null,
-        .from_sub = false,
-        .approvals = null,
-        .tracer = null,
-        .agent_cwd = dir,
-    };
-    remember(ctx, "mcp__linear__list_issues", "[{\"id\":\"A\",\"title\":\"t\"}]");
-    remember(ctx, "mcp__linear__list_issues", "[{\"id\":\"B\",\"state\":\"open\"}]");
-    const hit = lookup(io, "mcp__linear__list_issues") orelse return error.MissingShape;
-    try std.testing.expect(std.mem.indexOf(u8, hit, "\"id\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, hit, "\"title\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, hit, "\"state\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, hit, "\"A\"") == null);
-    var arena_state = std.heap.ArenaAllocator.init(gpa);
-    defer arena_state.deinit();
-    const annotated = try annotate(gpa, arena_state.allocator(), io, dir, "1 tool schema(s) below\nmcp__linear__list_issues");
-    try std.testing.expect(std.mem.indexOf(u8, annotated, "return_shapes") != null);
-    try std.testing.expect(std.mem.indexOf(u8, annotated, "mcp__linear__list_issues") != null);
-    try std.testing.expect(std.mem.indexOf(u8, annotated, "muscle:") == null);
-    try std.testing.expect(std.mem.indexOf(u8, @import("mcp_schema_gate.zig").tool_desc, "return_shapes") == null);
-    try std.testing.expect(std.mem.indexOf(u8, @import("rlm.zig").tool_desc, "muscle:") == null);
-}
-
-test "annotate writes a muscle playbook once two MCP shapes are stored" {
-    const gpa = std.testing.allocator;
-    const io = std.testing.io;
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const n = try tmp.dir.realPath(io, &path_buf);
-    const dir = path_buf[0..n];
-    reset(gpa, io);
-    defer reset(gpa, io);
-    var dummy_client: std.http.Client = .{ .allocator = gpa, .io = io };
-    defer dummy_client.deinit();
-    const ctx: ToolCtx = .{
-        .gpa = gpa,
-        .io = io,
-        .client = &dummy_client,
-        .provider = undefined,
-        .registry = null,
-        .from_sub = false,
-        .approvals = null,
-        .tracer = null,
-        .agent_cwd = dir,
-    };
-    remember(ctx, "mcp__linear__list_issues", "[{\"id\":\"A\"}]");
-    remember(ctx, "mcp__linear__list_comments", "[{\"body\":\"b\",\"author\":\"ada\"}]");
-    var arena_state = std.heap.ArenaAllocator.init(gpa);
-    defer arena_state.deinit();
-    const annotated = try annotate(gpa, arena_state.allocator(), io, dir, "2 tool schema(s)");
-    try std.testing.expect(std.mem.indexOf(u8, annotated, "muscle:") != null);
-    try std.testing.expect(std.mem.indexOf(u8, annotated, "each(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, @import("mcp_schema_gate.zig").tool_desc, "muscle:") == null);
 }

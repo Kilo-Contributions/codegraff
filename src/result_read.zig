@@ -116,6 +116,9 @@ pub fn exec(ctx: tools.ToolCtx, call: tools.ToolCall) !tools.ToolOutput {
         break :blk search(arena, stored, q) catch
             return .{ .text = try gpa.dupe(u8, "read_tool_result: query must not be empty"), .is_error = true };
     } else blk: {
+        // ADR 0238: an rlm bind is not in the conversation, so a read with no
+        // range binds the whole stored result; print() still shows the slim view.
+        if (ctx.rlm_host and tools.intField(call.input, "offset") == null and tools.intField(call.input, "limit") == null) break :blk stored;
         const off = clampOffset(tools.intField(call.input, "offset"), stored.len);
         const lim = clampLimit(tools.intField(call.input, "limit"));
         break :blk try sliceText(arena, stored, off, lim);
