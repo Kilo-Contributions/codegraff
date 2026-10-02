@@ -381,7 +381,7 @@ fn renderPrintPart(ctx: ToolCtx, arena: Allocator, inner: []const u8, binds: []c
             status.* = try order.copy(ctx.gpa, out);
             return "";
         }
-        if (mcp_shapes.slim(arena, out.text)) |s| return s;
+        if (mcp_shapes.slim(arena, out.text)) |s| return slimNote(arena, s, out.text.len);
         return try arena.dupe(u8, out.text);
     }
     // Preserve the historical missing-bind echo, but do not pretend an
@@ -397,7 +397,14 @@ fn unsupportedPrint(ctx: ToolCtx, status: *?ToolOutput) ![]const u8 {
 }
 
 fn maybeSlim(arena: Allocator, payload: []const u8) []const u8 {
-    return mcp_shapes.slim(arena, payload) orelse payload;
+    const cut = mcp_shapes.slim(arena, payload) orelse return payload;
+    return slimNote(arena, cut, payload.len);
+}
+
+/// ADR 0238: a printed cut says it is one. Unsaid, a model that printed a
+/// file it had just saved took the view for the file's contents.
+pub fn slimNote(arena: Allocator, cut: []const u8, full: usize) []const u8 {
+    return std.fmt.allocPrint(arena, "{s}\n[slim view of a {d}-byte value; the value keeps every field: project(x, field) reads one, write_file saves it whole]", .{ cut, full }) catch cut;
 }
 
 fn observe(ctx: ToolCtx, call: spec_ptc.Call, out: ToolOutput) !void {

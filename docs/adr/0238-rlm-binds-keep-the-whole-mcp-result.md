@@ -27,9 +27,11 @@ not in the conversation: only `print()` output is.
 
 - An MCP call from inside an rlm script (`ToolCtx.rlm_host`) binds the
   tool's whole result. `exec.zig` no longer slims it.
-- `print()` still shows the slim view (`rlm.maybeSlim`). An `each()` bind,
-  one whole result per item, prints each item's own cut, the view the
-  per-item slim used to bind.
+- `print()` still shows the slim view (`rlm.maybeSlim`), now with one line
+  that says it is a slim view of an N-byte value that keeps every field. An
+  `each()` bind, one whole result per item, prints each item's own cut, the
+  view the per-item slim used to bind. Unmarked, a model that printed a file
+  it had just saved took the view for the file's contents.
 - `project(x, field)` reads any field of a row. Over an `each()` bind of
   comment lists, `n` and `latest_author` read the fold, so scripts written
   against the printed view keep working.

@@ -467,3 +467,11 @@ test "#1016: literal read_file stays native when an MCP short name collides" {
     try std.testing.expect(std.mem.indexOf(u8, out.text, "hello-native") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.text, "MCP tool schema is not loaded") == null);
 }
+
+test "a printed slim view names itself and the full size (ADR 0238)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const note = @import("rlm.zig").slimNote(arena_state.allocator(), "[{\"id\":\"ISS-1\"}]", 56005);
+    try std.testing.expect(std.mem.startsWith(u8, note, "[{\"id\":\"ISS-1\"}]\n[slim view of a 56005-byte value"));
+    try std.testing.expect(std.mem.indexOf(u8, note, "write_file") != null);
+}
