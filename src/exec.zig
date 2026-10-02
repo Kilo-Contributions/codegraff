@@ -189,8 +189,10 @@ fn execToolInner(ctx: ToolCtx, call: ToolCall) !ToolOutput {
         if (!r.is_error) {
             const shapes = @import("mcp_shapes.zig");
             shapes.remember(ctx, call.name, r.text);
-            const keep_in: ?@import("tool_handle.zig").Target = if (ctx.rlm_host) null else .{ .io = io, .dir = .cwd() };
-            return .{ .text = shapes.takeSlimKept(gpa, keep_in, r.text), .is_error = false };
+            // ADR 0238: an rlm bind keeps every field. rlm slims only what it
+            // prints, so a script can still project or save a dropped field.
+            if (ctx.rlm_host) return .{ .text = r.text, .is_error = false };
+            return .{ .text = shapes.takeSlimKept(gpa, .{ .io = io, .dir = .cwd() }, r.text), .is_error = false };
         }
         return .{ .text = r.text, .is_error = r.is_error };
     }

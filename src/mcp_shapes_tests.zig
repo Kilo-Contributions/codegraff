@@ -18,7 +18,7 @@ test "annotate states the slim rule on every load result, stored shapes or not" 
     try std.testing.expect(std.mem.startsWith(u8, annotated, "1 tool schema(s) below"));
     try std.testing.expect(std.mem.indexOf(u8, annotated, "latest_author") != null);
     try std.testing.expect(std.mem.indexOf(u8, annotated, "return_shapes") == null); // nothing stored yet
-    try std.testing.expect(std.mem.indexOf(u8, @import("mcp_schema_gate.zig").tool_desc, "come back slimmed") == null); // never the prefix
+    try std.testing.expect(std.mem.indexOf(u8, @import("mcp_schema_gate.zig").tool_desc, "shown slimmed") == null); // never the prefix
 }
 
 test "slim drops description/body; comments fold to n and latest_author" {
@@ -48,7 +48,7 @@ test "slim drops description/body; comments fold to n and latest_author" {
     try std.testing.expect(std.mem.indexOf(u8, folded, pad_s) == null);
 }
 
-test "a direct call's slim result names a handle holding the full payload; an rlm bind stays plain JSON" {
+test "a direct call's slim result names a handle holding the full payload; with no handle target the cut stays plain JSON" {
     const gpa = std.testing.allocator;
     const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{});
@@ -75,4 +75,113 @@ test "a direct call's slim result names a handle holding the full payload; an rl
     const parsed = try std.json.parseFromSlice(std.json.Value, gpa, bind, .{}); // rlm parses binds as JSON
     defer parsed.deinit();
     try std.testing.expect(std.mem.indexOf(u8, bind, "handle") == null);
+}
+
+test "infer strips values and keeps keys plus broad types" {
+    const gpa = std.testing.allocator;
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const shape = try shapes.infer(a,
+        \\[{"id":"ISS-1","title":"Login","n":3,"ok":true,"meta":{"x":1},"tags":["a"]}]
+    );
+    try std.testing.expect(std.mem.indexOf(u8, shape, "ISS-1") == null);
+    try std.testing.expect(std.mem.indexOf(u8, shape, "Login") == null);
+    try std.testing.expect(std.mem.indexOf(u8, shape, "\"id\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shape, "string") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shape, "number") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shape, "bool") != null);
+}
+
+test "remember merges keys; annotate splices shapes; prefix text is untouched" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const n = try tmp.dir.realPath(io, &path_buf);
+    const dir = path_buf[0..n];
+    shapes.reset(gpa, io);
+    defer shapes.reset(gpa, io);
+    var dummy_client: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer dummy_client.deinit();
+    const ctx: @import("tools.zig").ToolCtx = .{
+        .gpa = gpa,
+        .io = io,
+        .client = &dummy_client,
+        .provider = undefined,
+        .registry = null,
+        .from_sub = false,
+        .approvals = null,
+        .tracer = null,
+        .agent_cwd = dir,
+    };
+    shapes.remember(ctx, "mcp__linear__list_issues", "[{\"id\":\"A\",\"title\":\"t\"}]");
+    shapes.remember(ctx, "mcp__linear__list_issues", "[{\"id\":\"B\",\"state\":\"open\"}]");
+    const hit = shapes.lookup(io, "mcp__linear__list_issues") orelse return error.MissingShape;
+    try std.testing.expect(std.mem.indexOf(u8, hit, "\"id\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, hit, "\"title\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, hit, "\"state\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, hit, "\"A\"") == null);
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const annotated = try shapes.annotate(gpa, arena_state.allocator(), io, dir, "1 tool schema(s) below\nmcp__linear__list_issues");
+    try std.testing.expect(std.mem.indexOf(u8, annotated, "return_shapes") != null);
+    try std.testing.expect(std.mem.indexOf(u8, annotated, "mcp__linear__list_issues") != null);
+    try std.testing.expect(std.mem.indexOf(u8, annotated, "muscle:") == null);
+    try std.testing.expect(std.mem.indexOf(u8, @import("mcp_schema_gate.zig").tool_desc, "return_shapes") == null);
+    try std.testing.expect(std.mem.indexOf(u8, @import("rlm.zig").tool_desc, "muscle:") == null);
+}
+
+test "annotate writes a muscle playbook once two MCP shapes are stored" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const n = try tmp.dir.realPath(io, &path_buf);
+    const dir = path_buf[0..n];
+    shapes.reset(gpa, io);
+    defer shapes.reset(gpa, io);
+    var dummy_client: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer dummy_client.deinit();
+    const ctx: @import("tools.zig").ToolCtx = .{
+        .gpa = gpa,
+        .io = io,
+        .client = &dummy_client,
+        .provider = undefined,
+        .registry = null,
+        .from_sub = false,
+        .approvals = null,
+        .tracer = null,
+        .agent_cwd = dir,
+    };
+    shapes.remember(ctx, "mcp__linear__list_issues", "[{\"id\":\"A\"}]");
+    shapes.remember(ctx, "mcp__linear__list_comments", "[{\"body\":\"b\",\"author\":\"ada\"}]");
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const annotated = try shapes.annotate(gpa, arena_state.allocator(), io, dir, "2 tool schema(s)");
+    try std.testing.expect(std.mem.indexOf(u8, annotated, "muscle:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, annotated, "each(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @import("mcp_schema_gate.zig").tool_desc, "muscle:") == null);
+}
+
+test "print of an each() bind cuts every item; a bind that slim cannot cut prints whole (ADR 0238)" {
+    const gpa = std.testing.allocator;
+    const pad: [400]u8 = @splat('x');
+    const pad_s: []const u8 = &pad;
+    const each_bind = try std.fmt.allocPrint(gpa, "[[{{\"body\":\"{s}\",\"author\":{{\"name\":\"ada\"}},\"createdAt\":\"2026-08-11\"}},{{\"body\":\"{s}\",\"author\":{{\"name\":\"bev\"}},\"createdAt\":\"2026-08-12\"}}],[{{\"body\":\"{s}\",\"author\":{{\"name\":\"cam\"}},\"createdAt\":\"2026-08-13\"}}]]", .{ pad_s, pad_s, pad_s });
+    defer gpa.free(each_bind);
+    const shown = shapes.slim(gpa, each_bind) orelse return error.ExpectedEachSlim;
+    defer gpa.free(shown);
+    try std.testing.expectEqualStrings("[{\"n\":2,\"latest_author\":\"bev\"},{\"n\":1,\"latest_author\":\"cam\"}]", shown);
+    const plain = try std.fmt.allocPrint(gpa, "[[1,2,3],[\"{s}\",\"{s}\"]]", .{ pad_s, pad_s });
+    defer gpa.free(plain);
+    try std.testing.expect(shapes.slim(gpa, plain) == null);
+}
+
+test "the slim rule says an rlm bind keeps every field (ADR 0238)" {
+    try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "keeps every field") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "binds stay slimmed") == null);
+    try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "write_file") != null);
 }
