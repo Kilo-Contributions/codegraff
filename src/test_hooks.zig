@@ -413,4 +413,5 @@ test {
     _ = @import("rlm_literal.zig"); // ADR 0236: JSON literals in rlm scripts
     _ = @import("rlm_literal_tests.zig"); // ADR 0236: each() over plain items, literal binds and args
     _ = @import("todo_reply.zig"); // ADR 0233: todo_write replies with counts, not the list
+    _ = @import("codedb_guard_scope.zig"); // ADR 0234: in-place edits and small whole reads pass the codedb guard
 }

@@ -219,7 +219,8 @@ pub fn runPostToolHooks(ctx: ToolCtx, call: ToolCall, out: ToolOutput) void {
 
 /// Built-in pre_tool guard for issue #626. Blocks a bash command that scans or
 /// reads a *concrete source file* (`grep`/`sed`/`cat`/… on a path ending in a
-/// known code extension) and redirects the model to the codedb tool, whose
+/// known code extension; not an in-place `sed -i` edit or a whole read of
+/// small files, ADR 0234) and redirects the model to the codedb tool, whose
 /// structural queries (symbol/callers/deps/outline/context) otherwise go
 /// unused. Narrow on purpose: only known scan/read utilities, only a concrete
 /// source path (globs like `*.zig` are left alone), only when `codedb` is on
@@ -248,6 +249,9 @@ pub fn codedbGuard(ctx: ToolCtx, call: ToolCall) ?ToolOutput {
         is_scanner = true;
     };
     if (!is_scanner) return null;
+    // ADR 0234: an in-place edit and a whole read of small files cost a round trip to refuse and save nothing.
+    const scope = @import("codedb_guard_scope.zig");
+    if (scope.inPlaceEdit(tool, trimmed) or scope.smallReadIn(ctx.io, ctx.agent_cwd, tool, trimmed)) return null;
 
     // …aimed at a concrete source file (not a glob — codedb glob/tree cover that).
     const src_path = extractSourceFilePath(cmd) orelse return null;
