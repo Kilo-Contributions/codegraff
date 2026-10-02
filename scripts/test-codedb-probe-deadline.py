@@ -100,7 +100,7 @@ else: print('fixture codedb')
         env.pop('GRAFF_NO_CODEDB_GUARD',None)
         env.update(HOME=tmp,PATH=str(work/'bin')+os.pathsep+env['PATH'],LMSTUDIO_API_KEY='local',
                    GRAFF_FLEET='off',GRAFF_NO_TELEMETRY='1',GRAFF_NO_SMOLIFY='1')
-        call={'tool':'bash','arguments':{'command':'cat fixture.zig'}}
+        call={'tool':'bash','arguments':{'command':'cat fixture.zig | head -n 5'}}  # piped: still guarded (ADR 0234 passes small whole reads)
         replies=[call,call,call,{'text':'probe fixture completed'}]
         if args.nested:
             replies.insert(0,{'tool':'subagent','arguments':{'description':'probe fixture','prompt':'Run the local guard fixture in the shared directory.','isolation':'shared_cwd'}})
