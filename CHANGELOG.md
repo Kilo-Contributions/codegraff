@@ -10,6 +10,28 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.14
+
+### Models
+
+- MiMo thinks only at `high` effort and above (ADR 0235). graff's default effort is `medium`, which used to turn MiMo's thinking on for every call; MiMo then thought at length before each action, and that was most of a task's time. `minimal`, `low` and `medium` now send thinking Off; `/effort high`, a worker's effort pin or Jev's `high` turn it on. The picker, status line and ACP show the default as Off. (#1453)
+
+### Speed
+
+- MCP servers connect in the background in every session but `--json` (ADR 0230), so a slow server no longer holds the first message. Each request merges the servers that have finished connecting, `/mcp` names the ones still connecting, and ACP `session/new` waits at most 250 ms for a client's servers. (#1445)
+- Shell waits and `todo_write` replies stop costing turns (ADR 0233). Interactive sessions ignore a shorter shell `timeout`, so a quick command is no longer parked after a second and the turn no longer ends; unattended sessions keep a shorter wait but not below 5 s. `todo_write` replies with counts instead of repeating the list. (#1451)
+- The shell tool names the OS its commands run on, so models write BSD `sed -i ''` on macOS. The codedb guard (#626) lets in-place `sed` edits and pipe-free whole-file reads up to 16 KiB through; searches and bigger reads still go to codedb (ADR 0234). (#1452)
+- `rlm` takes JSON array and object literals as arguments and binds, `each()` maps plain values as well as objects, a lone object argument is the keyword arguments, and a refused statement lists the forms that work (ADR 0236). (#1454)
+
+### Sub-agents
+
+- Sub-agents at parity with the codex route (ADR 0232): `write_file` creates a missing directory, `agent_output` takes `ids`, a child starts with the user's prompts from its parent's history at the parent's live effort and can ask Jev for its own, read-only children on macOS run any command under a sandbox that refuses writes in the project and network access, and each finished child writes a `subagent` trace line. Unattended prompts leave out the `todo_write` nudges. (#1445)
+
+### Evals
+
+- `graff-evals` gains a `subagents` suite of five delegation tasks and its `subagents-solo` counterfactual, with `subagent_split.py` to split parent and child time. (#1445)
+- MiMo v2.6 Pro and Flash: v0.0.302.13 against this release and OpenCode 2, in `evals/mimo-v2.6/`. DeepSeek V4 Pro on DeepSeek's own API, graff against deepseek-harness, in `evals/graff-vs-deepseek-harness/`. `gpt-6-astra` beside the Codex app server, in `evals/graff-vs-codex-app-server/ASTRA.md`. See [docs/releases/v0.0.302.14.md](docs/releases/v0.0.302.14.md).
+
 ## v0.0.302.13
 
 ### Speed
