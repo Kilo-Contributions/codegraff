@@ -23,6 +23,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.16
+    \\  • license: companies that raised over US$500k need a commercial license
+    \\
     \\0.0.302.15
     \\  • DeepSeek's default effort thinks at its low level (/effort high for more)
     \\
