@@ -126,7 +126,8 @@ test "Codegraff Gemini sends low for default effort; /effort high still sends" {
     try std.testing.expect(deepseek.sendReasoningEffort());
     const ds = try deepseek.buildBody(null, false, true, true);
     defer std.testing.allocator.free(ds);
-    try std.testing.expect(std.mem.indexOf(u8, ds, "\"reasoning_effort\":\"medium\"") != null);
+    // ADR 0237: graff's default keeps thinking on at DeepSeek's low level.
+    try std.testing.expect(std.mem.indexOf(u8, ds, "\"reasoning_effort\":\"low\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, ds, "\"thinking\":{\"type\":\"enabled\"}") != null);
 }
 

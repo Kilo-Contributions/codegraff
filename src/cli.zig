@@ -23,6 +23,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.15
+    \\  • DeepSeek's default effort thinks at its low level (/effort high for more)
+    \\
     \\0.0.302.14
     \\  • MiMo answers without thinking unless effort is high (/effort high)
     \\  • MCP servers connect in the background; the first message never waits

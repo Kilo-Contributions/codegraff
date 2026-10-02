@@ -263,6 +263,7 @@ record only when you need the evidence or the edge cases.
 | [0234](0234-the-model-knows-the-os-and-the-codedb-guard-only-redirects-searches.md) | The `shell` tool names the OS its commands run on (macOS: BSD tools, `sed -i ''`). The codedb guard lets an in-place `sed -i` edit and a pipe-free whole-file read of files up to 16 KiB through; searches and bigger reads still go to codedb. |
 | [0235](0235-mimo-thinks-only-at-high-effort.md) | MiMo thinks only at `high` and above: `minimal`/`low`/`medium` (graff's default) send thinking Off on the Chat and Responses wires; On, a worker pin, or Jev's `high` turn it on. Replaces ADR 0192's "positive values mean On" below high. |
 | [0236](0236-rlm-takes-json-literals-and-each-maps-plain-values.md) | `rlm` takes JSON array/object literals as arguments and binds (`name = [...]`, bound names allowed inside); its splitters nest `[]`/`{}`; `each(arr, tool[, field])` passes plain items as is, picks `field` from objects (default: an MCP tool's first parameter) and names the fields it found; an unsupported statement lists the forms that work. |
+| [0237](0237-deepseek-thinks-at-its-low-level-by-default.md) | DeepSeek's default effort (`medium`) sends `reasoning_effort: low` with thinking enabled; `/effort low` still turns thinking off (ADR 0054), and `high` and above are unchanged. |
 
 ## When to write one
 

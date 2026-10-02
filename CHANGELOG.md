@@ -10,6 +10,16 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.15
+
+### Models
+
+- DeepSeek's default effort thinks at DeepSeek's `low` level (ADR 0237). graff's default (`medium`) used to send `reasoning_effort: medium` with thinking on, and on DeepSeek V4 Pro the first request of a turn planned the whole job before its first tool call. The default now sends `low` with thinking still enabled. `/effort low` still turns thinking off (ADR 0054), `high` and above are unchanged, and the flash models' default stays thinking off. The picker, status line and ACP still call the default Medium. (#1456)
+
+### Evals
+
+- DeepSeek V4 Pro at graff's default effort: v0.0.302.14 against this release, with thinking off and deepseek-harness alongside, in `evals/graff-vs-deepseek-harness/DEFAULT-EFFORT.md`. See [docs/releases/v0.0.302.15.md](docs/releases/v0.0.302.15.md).
+
 ## v0.0.302.14
 
 ### Models

@@ -2,6 +2,8 @@
 
 Measured 2026-10-02. Both harnesses ran DeepSeek V4 Pro (`deepseek-v4-pro`) on DeepSeek's own API with the same key, side by side on one machine, interleaved task by task.
 
+v0.0.302.15 changed what graff's default effort sends to DeepSeek; [DEFAULT-EFFORT.md](DEFAULT-EFFORT.md) measures it against this page's build.
+
 | Arm | What ran |
 | --- | --- |
 | graff | The v0.0.302.14 code (#1445, #1451-#1454) as a scripted `graff repl` with `--model deepseek/deepseek-v4-pro`, at graff's default effort. |
