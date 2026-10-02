@@ -250,9 +250,6 @@ pub fn resolveKeys(io: Io, gpa: Allocator, arena: Allocator, environ_map: anytyp
 }
 
 fn missingCredentials() noreturn {
-    // `tui`/TTY `repl` claim the pager before credential resolution. Fatal
-    // exits do not unwind defers, so release that claim before stderr prints.
-    @import("tui").restore.releaseIfOwned();
     std.process.fatal(
         \\no API key found. quickest fixes:
         \\  graff login                         free codegraff key (device-code OAuth)

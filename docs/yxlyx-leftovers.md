@@ -1,6 +1,8 @@
 # yxlyx leftovers (279 continuation)
 
-What still exists in this repo versus what is parked. No new product mode.
+Historical status at the v0.0.282 cut: what existed in this repo versus what
+was parked. This is not a current issue inventory; the embedded TUI and its
+simulator have since moved out of this repository. No new product mode.
 
 Landed on [v0.0.282](releases/v0.0.282.md): `#674` atomic paste spans,
 `#693` Codex WS `type:error`, `#694` HTTP client generations (ADR 0048),

@@ -266,6 +266,7 @@ record only when you need the evidence or the edge cases.
 | [0237](0237-deepseek-thinks-at-its-low-level-by-default.md) | DeepSeek's default effort (`medium`) sends `reasoning_effort: low` with thinking enabled; `/effort low` still turns thinking off (ADR 0054), and `high` and above are unchanged. |
 | [0238](0238-rlm-binds-keep-the-whole-mcp-result.md) | An MCP call inside an rlm script binds the whole result; `print()` shows the slim view (each item of an `each()` bind cut on its own), `project(x, field)` reads any field (`n`/`latest_author` through a comment list's fold), and `write_file` saves the whole result; inside rlm, `read_tool_result("tr_N")` with no range binds a stored result whole. |
 | [0239](0239-saved-workspaces-have-durable-discovery.md) | Remember saved workspace roots locally; remote picker targets are workspace-qualified, and resume must enter the selected tree before restoring it. |
+| [0240](0240-fullscreen-tui-is-an-external-client.md) | The fullscreen UI is maintained separately; `graff tui` launches installed `graff-tui` before engine startup, sibling first then PATH, without downloading. TTY `graff repl` uses the line REPL. Supersedes 0041, 0042 and the fullscreen portion of 0142. |
 
 ## When to write one
 

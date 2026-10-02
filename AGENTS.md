@@ -45,42 +45,12 @@ new load-bearing decision, add a record in the same branch.
 - **The font is not ours.** The terminal emulator owns the typeface — it loads the font, measures the cell grid, and rasterizes glyphs itself; the wire protocol has no sequence for an app to request a font. (xterm's legacy `OSC 50` is unimplemented by modern emulators and would hijack the user's whole terminal — do not emit it.) If a user asks to "change the REPL font," the answer is their terminal's config, e.g. `font-family = Geist Mono` (the site's typeface) in Ghostty — never a code change here.
 - **HDR/wide-gamut color is not ours either.** Truecolor SGR is 8-bit sRGB per channel — the protocol's ceiling; no sequence expresses Display P3 or EDR headroom, and macOS terminals clip app colors to SDR regardless of the panel. Pick values that look right on both P3 and sRGB displays (as `#059669` does); that's the whole lever.
 
-## Driving the pager (no PTY, no Ghostty window)
+## Separate terminal UI
 
-Do not spawn `graff tui` or a terminal emulator to inspect or click the pager.
-The headless session is `TUI/sim.zig` (`Term`): the same `key.next` → `keys.handle`
-→ `render` → `dump.visible` path Ghostty uses on a real TTY.
-
-```zig
-var term: @import("sim.zig").Term = undefined;
-term.init(alloc, 80, 24);
-defer term.deinit();
-_ = term.typeText("/help");
-_ = term.enter();
-const vis = try term.screen();          // glyphs a user would see (no SGR)
-const rows = try term.annotated();      // " 12|  › Ran bash"
-_ = try term.clickText("Ran bash");     // click the first matching glyph
-_ = try term.hoverText("[Image #1]");   // hover an image chip
-const lay = try term.layout();          // overlay / focus / origins / images / pending
-```
-
-High-level helpers (`typeText`, `enter`, `clickText`, `hoverText`, `clickAt`,
-`hoverAt`) are enough for most work. When you must speak Ghostty's wire:
-
-| input | bytes |
-|---|---|
-| printable | the UTF-8 itself |
-| Enter | `\r` |
-| click at (col, row) | `ESC [ < 0 ; COL ; ROW M` (1-based cells) |
-| hover | `ESC [ < 35 ; COL ; ROW M` |
-| bracketed paste | `ESC [ 200 ~` … body … `ESC [ 201 ~` |
-| CSI-u (Ctrl+P) | `ESC [ 112 ; 5 u` |
-
-Feed those with `term.feed(bytes)`. Coordinates are 1-based screen cells, same
-as SGR mouse. Read `term.annotated()` to pick a row, then `clickAt(x, y)`.
-
-`/debug` stays the observability HUD; `term.layout()` is how you see why a
-click missed (overlay, prompt-origin, mid-origin).
+The fullscreen terminal UI is maintained separately. `graff tui` launches an
+installed `graff-tui` executable (beside graff first, then on `PATH`); it does
+not download one. Keep UI rendering tests in that project. This repository
+owns the engine, line REPL, ACP protocol, and external-launcher boundary.
 
 ## File size
 
@@ -89,13 +59,14 @@ click missed (overlay, prompt-origin, mid-origin).
 - If a touched file is already over 600 LOC, do not grow it; move it toward the limit before adding more behavior.
 - Generated files, vendored dependencies, lockfiles, and machine-produced artifacts are exempt; change their generator or source instead of hand-editing them.
 
-## Engine features are the same on REPL, TUI, and ACP
+## Engine features are the same on REPL and ACP
 
 Messaging (`peer_message`, idle peer mail, Accord live wake) and other
 engine-side behavior (turns, tools, compaction, goals) must work the same on
-the line REPL, the fullscreen TUI, and ACP clients such as Harness (`graff acp`). Surface
+the line REPL and ACP clients such as Harness (`graff acp`) and the separate
+terminal UI. Surface
 chrome can differ; the engine path cannot. If you add a wake, a latch, or a
-delivery rule, wire it on all three in the same change.
+delivery rule, wire it through the REPL and ACP engine paths in the same change.
 
 The desktop app is Harness, which lives in its own repository and drives
 graff over ACP. A new-chat folder rule, a worktree handoff, or a session cwd
@@ -143,12 +114,12 @@ Install the tracked hooks once, and the checks run themselves:
 scripts/install-hooks.sh
 ```
 
-That points `core.hooksPath` at `.githooks/`, whose `pre-push` runs **tier 1** of the internal eval set: `zig fmt`, the 600-line ceiling, test reachability, `zig build`, the unit suite plus a count that may grow and never shrink, the named goal/loop/todo invariants, SDK drift, plus the TUI / tuiguard legs. It is deterministic and offline (no provider calls, no network, no spend). A warm `fmt`/`reach`/`sdk` subset is seconds; a post-`src` change rebuilds zig and runs the PTY probes, which is minutes (see #641). Prefer `scripts/eval-tier1.sh --only <check>` for a local edit. A push that only touches docs skips it.
+That points `core.hooksPath` at `.githooks/`, whose `pre-push` runs **tier 1** of the internal eval set: `zig fmt`, the 600-line ceiling, test reachability, `zig build`, the unit suite plus a count that may grow and never shrink, the named goal/loop/todo invariants, SDK drift, plus the terminal regression checks. It is deterministic and offline (no provider calls, no network, no spend). A warm `fmt`/`reach`/`sdk` subset is seconds; a post-`src` change rebuilds zig and runs the PTY probes, which is minutes (see #641). Prefer `scripts/eval-tier1.sh --only <check>` for a local edit. A push that only touches docs skips it.
 
 ```bash
 scripts/eval-tier1.sh                 # run it by hand
 scripts/eval-tier1.sh --only sdk      # rerun one check
-scripts/eval-tier1.sh --only tui,tuiguard  # a comma-separated list (#641)
+scripts/eval-tier1.sh --only fmt,reach  # a comma-separated list (#641)
 scripts/eval-tier1.sh --list          # the check names
 git push --no-verify                  # emergency skip (GRAFF_SKIP_PREPUSH=1 also works)
 ```
