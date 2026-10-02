@@ -1,0 +1,16 @@
+{
+ "id": "commit-digest",
+ "suite": "aggregate",
+ "category": "aggregate",
+ "prompt": "This directory is a git repository. Look at the non-merge commits whose author date, read in the author's own timezone (what `git log --date=short --format=%ad` prints), is 2026-09-25 or later. Count, for each top-level directory, how many of those commits touch at least one file under it; files at the repository root count under \"(root)\". Do the counting inside a single script so the raw git log never reaches you. Write the counts to digest.json as one JSON object mapping directory name to count, then reply with the five top-level directories with the most commits and one line on the main theme of the week.",
+ "files": {},
+ "setup": [
+  "rm -rf .git && git init -q -b main .",
+  "git fetch -q --shallow-since=2026-09-20 https://github.com/justrach/codegraff.git 5f9aa8225e43ba774dbb89064f2b3e16ec38c85c",
+  "git checkout -q -B main FETCH_HEAD"
+ ],
+ "setup_timeout_s": 180,
+ "strict_setup": true,
+ "check": "python3 -c \"import json,subprocess,collections; out=subprocess.run(['git','log','--no-merges','--date=short','--name-only','--pretty=format:@@%ad'],capture_output=True,text=True).stdout; c=collections.Counter(); [c.update({(f.split('/')[0] if '/' in f else '(root)') for f in b.split(chr(10))[1:] if f.strip()}) for b in out.split('@@') if b.strip() and b.split(chr(10))[0].strip()>='2026-09-25']; got=json.load(open('digest.json')); exit(0 if {k:int(v) for k,v in got.items() if int(v)}==dict(c) else 1)\"",
+ "timeout_s": 300
+}

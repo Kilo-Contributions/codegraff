@@ -26,6 +26,8 @@ harness under test spends model calls.
 | `bg` | Commands that outlast the 15s `-p` foreground wait, so each run must collect background results. For A/Bs of how the harness words and delivers them. Opt-in. |
 | `subagents` | Work the prompt asks to hand to sub-agents in parallel: per-package bugfixes, a per-service log census, an API rename across three packages, an endpoint-coverage merge of two inventories, and a docs sidecar beside a fix. Fixtures are git repos; held-out checks. Opt-in. |
 | `subagents-solo` | The same five tasks with the delegation wording removed: the counterfactual that says whether the children paid for themselves. Opt-in. |
+| `mcp-hard` | Linear-shaped fixture MCP tasks that need more than ids and titles: cross-reference issue keys against `src/` (with decoy keys), roll issues up by priority, and join issues with git history by author date. Opt-in. |
+| `aggregate` | Aggregate local data in one script: a per-directory commit digest over a pinned slice of this repository's history, fetched from GitHub in setup. Opt-in. |
 
 Terminal-Bench and other Harbor datasets run graff through the adapter in [harbor/](harbor/README.md).
 
@@ -66,6 +68,15 @@ CODEGRAFF_API_KEY=cg_sk_… ./run.py --suite swe --harness graff-dev,opencode-co
 # gateway, see the write-up). Results: evals/graff-vs-claude-code/RESULTS.md
 ./run.py --suite core,mcp --harness graff-gateway-repl,claude-code,opencode2 --model <gateway model> -j 6 --interleave
 ./run.py --suite core --harness pi-codegraff --model <gateway model> -j 6
+# graff and Pi 1.0, each with and without its code mode (set CODEGRAFF_API_KEY for the gateway; PI1_BIN
+# when `pi` on PATH is older than 1.0, PI1_MODELS / PI1_AUTH for Pi's provider and sign-in, PI1_THINKING to
+# match graff's effort). pi1-direct is Pi with no codemode at all (MCP tools declared directly).
+# Results: evals/graff-vs-pi-codemode/RESULTS.md
+./run.py --suite mcp,mcp-hard,aggregate,subagents-solo --task linear-nohint --task linear-nohint-warm \
+  --task xref-issues --task triage-rollup --task stale-triage --task commit-digest --task solo-fix-three \
+  --task solo-census --task solo-rename-api --task solo-coverage --task solo-sidecar \
+  --harness graff-gateway-repl,graff-gateway-repl-norlm,pi1-codemode,pi1 --model mimo-v2.6-pro --reps 3 -j 8 --interleave
+./run.py --suite mcp,mcp-hard --harness pi1-codemode,pi1,pi1-direct --model mimo-v2.6-pro --reps 3 -j 8 --interleave
 ```
 
 ## Run it

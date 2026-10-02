@@ -1,0 +1,29 @@
+{
+ "id": "xref-issues",
+ "suite": "mcp-hard",
+ "category": "mcp-aggregate",
+ "prompt": "This workspace has a Linear-shaped MCP server named linear. For every issue it lists, count how many files under src/ contain that issue's key (its identifier, such as ENG-101) as an exact, case-sensitive match that is not part of a longer key such as ENG-1010. A file counts once per key. Write xref.json as one object mapping every issue key to its count, including keys with a count of 0, then reply with the keys that no file under src/ mentions.",
+ "files": {
+  ".mcp.json": "{\"mcpServers\":{\"linear\":{\"command\":\"python3\",\"args\":[\"linear_fixture_mcp.py\"]}}}\n",
+  "src/auth/session.py": "# ENG-101: resume drops the session\n# see ENG-101 again for the retry\nRESUME = 'ENG-104 adjacent'\n",
+  "src/auth/tokens.py": "# Token refresh, tracked in ENG-101\n",
+  "src/billing/tax.py": "# Rounding fix (ENG-104); unrelated migration ENG-1040\n",
+  "src/billing/invoice.py": "INVOICE_NOTE = 'ENG-104'\n",
+  "src/search/index.py": "# ENG-103 index rebuild; ENG-107 shard\n",
+  "src/search/query.py": "# ENG-107: query timeout\n",
+  "src/mailer/send.py": "# ENG-108 bounce handling; old note: eng-105\n",
+  "src/mailer/queue.py": "# backlog from ENG-108\n",
+  "src/api/routes.py": "# ENG-101 login route, ENG-104 tax route, ENG-1010 is a different ticket\n",
+  "src/api/errors.py": "# error mapping for ENG-105\n",
+  "src/util/retry.py": "# retries: ENG-107, ENG-104\n",
+  "src/util/clock.py": "# clock skew (ENG-104)\n",
+  "src/util/log.py": "# ENG-1040 migration only\n",
+  "src/README.md": "Search work lives under ENG-103.\n",
+  "docs/notes.md": "Planning: ENG-102 and ENG-106 are not in code yet.\n"
+ },
+ "setup": [
+  "python3 -c \"import pathlib,shutil; p=pathlib.Path('.').resolve(); root=next(x for x in p.parents if (x/'scripts'/'linear_fixture_mcp.py').exists()); shutil.copy(root/'scripts'/'linear_fixture_mcp.py','.')\""
+ ],
+ "check": "python3 \"$TASK_ROOT/hidden/check_xref.py\"",
+ "timeout_s": 300
+}
