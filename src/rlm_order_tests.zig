@@ -5,11 +5,11 @@ const tools = @import("tools.zig");
 const gpa = std.testing.allocator;
 const io = std.testing.io;
 
-const Fixture = struct {
+pub const Fixture = struct { // shared with rlm_literal_tests.zig
     tmp: std.testing.TmpDir,
     client: std.http.Client,
     cwd: []u8,
-    fn init() !Fixture {
+    pub fn init() !Fixture {
         var tmp = std.testing.tmpDir(.{});
         errdefer tmp.cleanup();
         try tmp.dir.writeFile(io, .{ .sub_path = "target.txt", .data = "old" });
@@ -17,10 +17,10 @@ const Fixture = struct {
         const n = try tmp.dir.realPath(io, &buf);
         return .{ .tmp = tmp, .client = .{ .allocator = gpa, .io = io }, .cwd = try gpa.dupe(u8, buf[0..n]) };
     }
-    fn ctx(self: *Fixture) tools.ToolCtx {
+    pub fn ctx(self: *Fixture) tools.ToolCtx {
         return .{ .gpa = gpa, .io = io, .client = &self.client, .provider = undefined, .registry = null, .from_sub = false, .approvals = null, .tracer = null, .agent_cwd = self.cwd };
     }
-    fn deinit(self: *Fixture) void {
+    pub fn deinit(self: *Fixture) void {
         @import("jobs.zig").jobsReap(gpa, io);
         @import("job_notify.zig").resetForTest(io);
         rlm.resetLive(gpa, io);
@@ -28,7 +28,7 @@ const Fixture = struct {
         gpa.free(self.cwd);
         self.tmp.cleanup();
     }
-    fn run(self: *Fixture, code: []const u8) !tools.ToolOutput {
+    pub fn run(self: *Fixture, code: []const u8) !tools.ToolOutput {
         return rlm.runScript(self.ctx(), code);
     }
 };

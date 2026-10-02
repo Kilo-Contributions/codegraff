@@ -404,4 +404,6 @@ test {
     _ = @import("output_elide.zig"); // #1271: over-cap output keeps head and tail
     _ = @import("graff_dir.zig"); // #1273: .graff/.gitignore keeps run state out of git
     _ = @import("additional_tools.zig"); // ADR 0221: loaded tools as additional_tools items on the ChatGPT plan route
+    _ = @import("rlm_literal.zig"); // ADR 0236: JSON literals in rlm scripts
+    _ = @import("rlm_literal_tests.zig"); // ADR 0236: each() over plain items, literal binds and args
 }
