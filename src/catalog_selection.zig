@@ -10,6 +10,15 @@ const pricing = @import("pricing.zig");
 const provider = @import("provider.zig");
 const serde = @import("serde.zig");
 
+/// Account-backed catalogs are discovery snapshots, not availability gates.
+/// Like a saved selection, an explicit model must reach the selected backend;
+/// credentials are still checked by providerById. API-key-only providers keep
+/// exact-row validation; callers retain their local-server exceptions.
+pub fn acceptsExplicitModel(spec: provider.ProviderSpec, model: []const u8) bool {
+    if (std.mem.trim(u8, model, " \t").len == 0) return false;
+    return spec.login != .api_key or pricing.providerModelInTable(spec.id, model);
+}
+
 pub fn explicitProvider(query: []const u8) ?[]const u8 {
     const trimmed = std.mem.trim(u8, query, " \t");
     const end = std.mem.indexOfAny(u8, trimmed, " /\t") orelse trimmed.len;

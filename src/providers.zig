@@ -276,7 +276,7 @@ pub fn resolveProviderControlRequest(
     if (provider_id.len != 0) {
         if (provider_mod.specFor(provider_id)) |spec| {
             const selected_model = if (model.len == 0) pricing.providerDefaultModel(spec.id, spec.default_model) else try arena.dupe(u8, model);
-            if (model.len != 0 and !localProviderUrl(spec.url) and !pricing.providerModelInTable(spec.id, selected_model)) return error.InvalidModel;
+            if (model.len != 0 and !localProviderUrl(spec.url) and !catalog_selection.acceptsExplicitModel(spec, selected_model)) return error.InvalidModel;
             return keys.providerById(spec.id, selected_model);
         }
         return error.InvalidProvider;
@@ -341,7 +341,7 @@ fn resolveProviderRequest(keys: *Keys, arena: Allocator, query: []const u8) !Pro
         const mdl = std.mem.trim(u8, arg[i + 1 ..], " \t");
         if (provider_mod.specFor(pid)) |spec| {
             if (mdl.len == 0) return error.InvalidModel;
-            if (!localProviderUrl(spec.url) and !pricing.providerModelInTable(pid, mdl)) return error.InvalidModel;
+            if (!localProviderUrl(spec.url) and !catalog_selection.acceptsExplicitModel(spec, mdl)) return error.InvalidModel;
             const m = try arena.dupe(u8, mdl);
             return keys.providerById(pid, m);
         }

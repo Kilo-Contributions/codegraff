@@ -17,6 +17,7 @@ const RecordJson = struct {
     identity: []const u8 = "",
     goal: []const u8 = "",
     last_seen_ms: i64 = 0,
+    last_activity_ms: i64 = 0,
     activity: []const u8 = "connected",
     title: []const u8 = "",
     session_base: []const u8 = "",
@@ -32,6 +33,7 @@ pub fn formatRecord(arena: Allocator, owner: Owner) ![]const u8 {
         .identity = owner.identity,
         .goal = owner.goal,
         .last_seen_ms = owner.last_seen_ms,
+        .last_activity_ms = owner.last_activity_ms,
         .activity = owner.activity,
         .title = owner.title,
         .session_base = owner.session_base,
@@ -49,6 +51,7 @@ pub fn parseRecord(arena: Allocator, text: []const u8) ?Owner {
         .identity = rec.identity,
         .goal = rec.goal,
         .last_seen_ms = rec.last_seen_ms,
+        .last_activity_ms = rec.last_activity_ms,
         .activity = rec.activity,
         .title = rec.title,
         .session_base = rec.session_base,
@@ -66,6 +69,7 @@ test "presence record round-trips pid, identity, goal, title, and base" {
         .identity = "/repo/.git",
         .goal = "agent-inbox redesign",
         .last_seen_ms = 123456,
+        .last_activity_ms = 120000,
         .title = "Fixing login recovery",
         .session_base = "fixing-login-recovery",
     };
@@ -77,6 +81,7 @@ test "presence record round-trips pid, identity, goal, title, and base" {
     try std.testing.expectEqualStrings(owner.identity, back.identity);
     try std.testing.expectEqualStrings(owner.goal, back.goal);
     try std.testing.expectEqual(owner.last_seen_ms, back.last_seen_ms);
+    try std.testing.expectEqual(owner.last_activity_ms, back.last_activity_ms);
     try std.testing.expectEqualStrings(owner.title, back.title);
     try std.testing.expectEqualStrings(owner.session_base, back.session_base);
 }
@@ -89,6 +94,7 @@ test "parseRecord: rejects garbage and pid-less records, tolerates extra fields"
     try std.testing.expect(parseRecord(arena, "{\"goal\":\"x\"}") == null);
     const forward = parseRecord(arena, "{\"pid\":7,\"start_id\":3,\"future\":\"field\"}") orelse return error.ExpectedRecord;
     try std.testing.expectEqual(7, forward.pid);
+    try std.testing.expectEqual(@as(i64, 0), forward.last_activity_ms);
     try std.testing.expectEqualStrings("", forward.title);
     try std.testing.expectEqualStrings("", forward.session_base);
 }

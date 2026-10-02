@@ -10,6 +10,20 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.18
+
+### Sessions
+
+- Live sessions show meaningful activity age, deterministic recent-first ordering, and separated rows without repeated identifiers. Resume errors distinguish live identifiers from saved keys. (#1459–#1464)
+- Saved workspaces remain discoverable after their processes exit. Workspace-qualified targets distinguish same-named conversations, and cross-project resume enters the selected workspace before restoring history. (#1457, #1458)
+
+### Recovery
+
+- Empty or format-only terminal pastes recover an available clipboard image or show a warning instead of a misleading pasted-text chip. (#1468)
+- Explicit account-backed model selections tolerate omissions from dynamic catalogs while preserving credential validation. (#1466)
+- Stale MCP registrations and closed connections return recovery guidance; disconnected tools are withdrawn from the next catalog without automatically replaying calls. (#1465, #1467)
+- Added screen-level coverage for long blockquotes; the published reproduction already renders correctly. (#1470)
+
 ## v0.0.302.17
 
 ### Code mode

@@ -58,6 +58,60 @@ test "saved startup pair survives a transient catalog omission and reaches the r
     try std.testing.expect(std.mem.indexOf(u8, body, "\"model\":\"gpt-6-astra\"") == null);
 }
 
+test "#1466 explicit account model survives an incomplete catalog on startup and ACP" {
+    const original = pricing.active_model_table;
+    defer pricing.active_model_table = original;
+    const snapshot = [_]pricing.ModelInfo{.{ .provider = "codex", .name = "gpt-6-astra", .context = 272_000 }};
+    pricing.active_model_table = &snapshot;
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const providers = @import("providers.zig");
+    var keys: provider_mod.Keys = .{ .values = @splat(null) };
+    for (provider_mod.provider_specs) |spec| {
+        if (spec.login == .api_key) continue;
+        try std.testing.expect(keys.set(spec.id, "test-token", .session));
+        const model = "future-account-model";
+        const query = try std.fmt.allocPrint(arena, "{s}/{s}", .{ spec.id, model });
+        const saved = try savedProvider(keys, .{ .pid = spec.id, .model = model });
+        const selections = [_]provider_mod.Provider{
+            (try qualifiedProvider(keys, query)).?,
+            try providers.resolveProviderControlRequest(&keys, arena, spec.id, model, ""),
+            try providers.resolveProviderControlRequest(&keys, arena, "", "", query),
+        };
+        for (selections) |selected| {
+            try std.testing.expectEqualStrings(saved.id, selected.id);
+            try std.testing.expectEqualStrings(saved.model, selected.model);
+            try std.testing.expectEqual(saved.kind, selected.kind);
+            if (std.mem.eql(u8, spec.id, "codex")) {
+                var agent = try @import("agent_request_body_responses.zig").testAgentFor(arena, "codex", .responses, "placeholder");
+                agent.provider = selected;
+                const body = try agent.buildBody(null, false, true, true);
+                defer std.testing.allocator.free(body);
+                try std.testing.expect(std.mem.indexOf(u8, body, "\"model\":\"future-account-model\"") != null);
+            }
+        }
+    }
+}
+
+test "#1466 explicit account model still requires its own credential and nonempty model" {
+    var keys: provider_mod.Keys = .{ .values = @splat(null) };
+    try std.testing.expect(keys.set("codegraff", "unrelated-key", .session));
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const providers = @import("providers.zig");
+    try std.testing.expectError(error.MissingKey, qualifiedProvider(keys, "codex/future-account-model"));
+    try std.testing.expectError(error.MissingKey, providers.resolveProviderControlRequest(&keys, arena, "codex", "future-account-model", ""));
+    try std.testing.expectError(error.MissingKey, providers.resolveProviderControlRequest(&keys, arena, "", "", "codex/future-account-model"));
+    try std.testing.expectError(error.UnknownModel, qualifiedProvider(keys, "codex/"));
+    try std.testing.expectError(error.UnknownModel, qualifiedProvider(keys, "codex/ \t"));
+    try std.testing.expectError(error.InvalidModel, providers.resolveProviderControlRequest(&keys, arena, "", "", "codex/"));
+    try std.testing.expectError(error.InvalidProvider, providers.resolveProviderControlRequest(&keys, arena, "unknown-provider", "future-account-model", ""));
+    try std.testing.expectError(error.InvalidModel, providers.resolveProviderControlRequest(&keys, arena, "", "future-account-model", ""));
+    try std.testing.expectError(error.InvalidModel, providers.resolveProviderControlRequest(&keys, arena, "xiaomi", "future-account-model", ""));
+}
+
 test "saved startup pair does not borrow another provider credential" {
     var keys: provider_mod.Keys = .{ .values = @splat(null) };
     try std.testing.expect(keys.set("codegraff", "unrelated-key", .session));
@@ -74,12 +128,12 @@ pub fn qualifiedProvider(keys: provider_mod.Keys, query: []const u8) error{ Miss
     const pid = query[0..slash];
     const spec = provider_mod.specFor(pid) orelse return null;
     const model = query[slash + 1 ..];
-    if (model.len == 0) return error.UnknownModel;
+    if (std.mem.trim(u8, model, " \t").len == 0) return error.UnknownModel;
     // Key first: a dynamic router's rows are only in the table once its
     // catalog loaded, which needs the key, so a missing credential would
     // otherwise surface as an unknown model.
     const p = try keys.providerById(pid, model);
-    if (!keys_cli.isLocalUrl(spec.url) and !pricing.providerModelInTable(pid, model)) return error.UnknownModel;
+    if (!keys_cli.isLocalUrl(spec.url) and !catalog_selection.acceptsExplicitModel(spec, model)) return error.UnknownModel;
     return p;
 }
 

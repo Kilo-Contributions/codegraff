@@ -47,6 +47,7 @@ fn writeRows(root: *Agent, arena: Allocator, out: *Io.Writer, entries: []const s
         } else {
             try out.print("  {s}{s}{s}{s}{s}{s}{s}{s}\n", .{ e.base, parent, style.dim, if (age.len > 0) "  " else "", age, where, style.reset, cur });
         }
+        if (!local) try out.print("    /resume {s}\n", .{try @import("session_workspaces.zig").target(arena, e)});
     }
 }
 

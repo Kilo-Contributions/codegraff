@@ -265,6 +265,7 @@ record only when you need the evidence or the edge cases.
 | [0236](0236-rlm-takes-json-literals-and-each-maps-plain-values.md) | `rlm` takes JSON array/object literals as arguments and binds (`name = [...]`, bound names allowed inside); its splitters nest `[]`/`{}`; `each(arr, tool[, field])` passes plain items as is, picks `field` from objects (default: an MCP tool's first parameter) and names the fields it found; an unsupported statement lists the forms that work. |
 | [0237](0237-deepseek-thinks-at-its-low-level-by-default.md) | DeepSeek's default effort (`medium`) sends `reasoning_effort: low` with thinking enabled; `/effort low` still turns thinking off (ADR 0054), and `high` and above are unchanged. |
 | [0238](0238-rlm-binds-keep-the-whole-mcp-result.md) | An MCP call inside an rlm script binds the whole result; `print()` shows the slim view (each item of an `each()` bind cut on its own), `project(x, field)` reads any field (`n`/`latest_author` through a comment list's fold), and `write_file` saves the whole result; inside rlm, `read_tool_result("tr_N")` with no range binds a stored result whole. |
+| [0239](0239-saved-workspaces-have-durable-discovery.md) | Remember saved workspace roots locally; remote picker targets are workspace-qualified, and resume must enter the selected tree before restoring it. |
 
 ## When to write one
 

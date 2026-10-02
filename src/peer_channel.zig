@@ -468,29 +468,11 @@ pub fn peekCommand(root: *Agent, arena: Allocator, line: []const u8, out: *Io.Wr
 /// The "live now" section /sessions appends under the saved-session list:
 /// this worktree first, then the rest of the device.
 pub fn writeLiveSection(root: *Agent, arena: Allocator, out: *Io.Writer) !void {
-    const everyone = presence.liveAllPeers(root.io, arena);
-    if (everyone.len == 0) return;
-    const mine = presence.ownIdentity();
-    var wrote_local = false;
-    var wrote_remote = false;
-    for (everyone) |p| {
-        const local = std.mem.eql(u8, p.identity, mine);
-        if (local and !wrote_local) {
-            try out.writeAll("  live now in this worktree:\n");
-            wrote_local = true;
-        }
-        if (!local and !wrote_remote) {
-            try out.writeAll("  live elsewhere on this device:\n");
-            wrote_remote = true;
-        }
-        const goal = if (p.goal.len > 0) p.goal else "?";
-        const shown = if (p.title.len > 0) p.title else p.session_id;
-        const base = if (p.session_base.len > 0) p.session_base else p.session_id;
-        if (local)
-            try out.print("  ⚡ {s} · {s} · {s} · pid {d} · goal: {s}\n", .{ shown, base, p.session_id, p.pid, goal })
-        else
-            try out.print("  ⚡ {s} · {s} · {s} · pid {d} · {s} · goal: {s}\n", .{ shown, base, p.session_id, p.pid, p.identity, goal });
-    }
+    try @import("peer_live.zig").write(arena, out, presence.liveAllPeers(root.io, arena), presence.ownIdentity(), @import("util.zig").unixMs(root.io));
+}
+
+test {
+    _ = @import("peer_live.zig");
 }
 
 test "summarizeTranscript: last prompt, last words, last tool, from complete lines only" {

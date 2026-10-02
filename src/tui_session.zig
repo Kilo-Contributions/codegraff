@@ -78,7 +78,14 @@ pub fn resumeCb(ctx_ptr: ?*anyopaque, gpa: Allocator, raw: []const u8, out: *tui
         syncRoot(convo, root) catch |err| return failure(gpa, out, err);
         session.saveSession(root, root.arena, root.session_name) catch |err| return failure(gpa, out, err);
     }
-    const resumed = session_branch.restore(root, &ctx.keys, root.arena, spec.source, spec.branch, null) catch |err| return failure(gpa, out, err);
+    const resumed = session_branch.restore(root, &ctx.keys, root.arena, spec.source, spec.branch, null) catch |err| {
+        if (err == error.FileNotFound) {
+            const note = @import("commands_resume.zig").missingMessage(root, root.arena, spec.source) catch return failure(gpa, out, err);
+            out.note = gpa.dupe(u8, note) catch &.{};
+            return false;
+        }
+        return failure(gpa, out, err);
+    };
     if (ctx.convo) |convo| seed(convo, root) catch |err| return failure(gpa, out, err);
     ctx.provider = root.provider;
     ctx.last_context_tokens = root.last_context_tokens;
@@ -136,7 +143,8 @@ pub fn sessionsCb(ctx_ptr: ?*anyopaque, gpa: Allocator) ?[]const u8 {
             if (age.len > 0) break :blk std.fmt.allocPrint(arena, "{s} · {s}", .{ age, e.base }) catch e.base;
             break :blk e.base;
         };
-        const line = std.fmt.allocPrint(arena, "{s}\t{s}\t{s}", .{ e.base, title, desc }) catch continue;
+        const target = @import("session_workspaces.zig").target(arena, e) catch continue;
+        const line = std.fmt.allocPrint(arena, "{s}\t{s}\t{s}", .{ target, title, desc }) catch continue;
         out.appendSlice(gpa, line) catch {
             out.deinit(gpa);
             return null;

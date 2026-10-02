@@ -12,6 +12,7 @@ const session_index = @import("session_index.zig");
 const workspace_switch = @import("workspace_switch.zig");
 
 const Agent = agent_mod.Agent;
+const workspaces = @import("session_workspaces.zig");
 
 pub const Located = struct {
     path: []const u8,
@@ -93,10 +94,27 @@ fn extraWorktrees(root: *Agent, arena: Allocator) []const []const u8 {
         if (t.path.len == 0) continue;
         paths.append(arena, t.path) catch {};
     }
+    // Migrate workspaces advertised by older live processes into durable discovery.
+    for (@import("presence.zig").liveAllPeers(root.io, arena)) |peer| {
+        const path = workspaces.fromIdentity(root.io, arena, peer.identity) orelse continue;
+        workspaces.remember(root.io, arena, root.home, path);
+    }
+    for (workspaces.list(root.io, arena, root.home)) |path| {
+        var seen = false;
+        for (paths.items) |p| if (session_index.sameWorkspace(p, path)) {
+            seen = true;
+            break;
+        };
+        if (!seen) paths.append(arena, path) catch {};
+    }
     return paths.items;
 }
 
 pub fn locate(root: *Agent, arena: Allocator, name: []const u8) ?Located {
+    if (workspaces.parseTarget(name)) |target| {
+        if (!exists(root.io, name)) return null;
+        return .{ .path = name, .workspace = target.workspace, .local = session_index.sameWorkspace(target.workspace, cwdDisplay()) };
+    }
     return locateIn(root.io, arena, name, cwdDisplay(), root.home, extraWorktrees(root, arena));
 }
 
@@ -183,7 +201,7 @@ test "locateIn prefers cwd then a linked worktree then home (#1151)" {
     try std.testing.expect(!notes.local);
 }
 
-test "appendWorkspaceSessions skips names already listed (#1151)" {
+test "appendWorkspaceSessions preserves same-named saves from different workspaces" {
     const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
@@ -205,9 +223,10 @@ test "appendWorkspaceSessions skips names already listed (#1151)" {
     var entries: std.ArrayList(session_index.SessionEntry) = .empty;
     try entries.append(arena, .{ .base = "shared", .title = "Cwd", .updated_ms = 1, .workspace = "/cwd", .local = true });
     session_index.appendWorkspaceSessions(io, arena, &entries, wt, false);
-    try std.testing.expectEqual(@as(usize, 2), entries.items.len);
+    try std.testing.expectEqual(@as(usize, 3), entries.items.len);
     try std.testing.expectEqualStrings("shared", entries.items[0].base);
     try std.testing.expect(entries.items[0].local);
-    try std.testing.expectEqualStrings("only", entries.items[1].base);
     try std.testing.expect(!entries.items[1].local);
+    session_index.appendWorkspaceSessions(io, arena, &entries, wt, false);
+    try std.testing.expectEqual(@as(usize, 3), entries.items.len);
 }

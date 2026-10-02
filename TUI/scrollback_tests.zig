@@ -244,6 +244,29 @@ test "a long system row breaks on a space, never through a token" {
     }
 }
 
+test "long blockquote completion keeps every word after terminal wrapping" {
+    const quote = "This is a deliberately long copy-ready sentence that should continue across multiple terminal rows without losing any words from the completion.";
+    const source = "> " ++ quote ++ "\n\nFollowing section.";
+    for ([_]theme_mod.Id{ .night, .day }) |id| {
+        for ([_]usize{ 40, 60, 80 }) |width| {
+            var term: @import("sim.zig").Term = undefined;
+            term.init(std.testing.allocator, width, 30);
+            defer term.deinit();
+            term.model.theme_id = id;
+            try term.model.push(.assistant, source);
+            const screen = try term.screen();
+            defer std.testing.allocator.free(screen);
+            var words = std.mem.tokenizeScalar(u8, quote, ' ');
+            var pos: usize = 0;
+            while (words.next()) |word| {
+                const at = std.mem.indexOfPos(u8, screen, pos, word) orelse return error.MissingQuoteWord;
+                pos = at + word.len;
+            }
+            try std.testing.expect(std.mem.indexOfPos(u8, screen, pos, "Following section.") != null);
+        }
+    }
+}
+
 test "live prose tail paints markdown; raw bash stays plain" {
     const engine = @import("engine.zig");
     var m: Model = undefined;

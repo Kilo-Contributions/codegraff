@@ -23,6 +23,10 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.18
+    \\  • clearer session lists and cross-project resume
+    \\  • paste warnings, MCP recovery, and catalog-tolerant model selection
+    \\
     \\0.0.302.17
     \\  • rlm scripts keep whole MCP results; print() still shows the slim view
     \\
