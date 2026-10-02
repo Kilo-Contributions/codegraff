@@ -10,6 +10,16 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.17
+
+### Code mode
+
+- An MCP call inside an rlm script binds the tool's whole result (ADR 0238). Before, a script bound the slimmed cut and could not reach a field it dropped, such as a priority or an estimate; the model had to leave the script and page the stored result back in. `print()` still shows the slim view and now says so, `project(x, field)` reads any field (over an `each()` bind of comment lists, `n` and `latest_author` still read the fold), `write_file` saves the whole result for a script, and inside rlm `read_tool_result("tr_N")` binds a stored result whole. Direct calls are slimmed as before. (#1473)
+
+### Evals
+
+- `evals/graff-vs-pi-codemode`: graff and Pi 1.0, each with its code mode on and off, on harder tasks, with new `mcp-hard` and `aggregate` suites, a Pi 1.0 wrapper (`pi1`, `pi1-codemode`, `pi1-direct`) and an rlm-off arm (`graff-gateway-repl-norlm`). (#1475)
+
 ## v0.0.302.16
 
 ### License
