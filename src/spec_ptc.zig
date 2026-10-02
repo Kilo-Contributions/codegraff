@@ -203,6 +203,7 @@ const Value = union(enum) {
     string: []const u8,
     int: i64,
     bool: bool,
+    json: []const u8, // ADR 0236: a JSON array/object literal, canonical text
 };
 
 fn parseArgs(arena: Allocator, tool: []const u8, inner: []const u8, binds: []const Bound) !?[]const u8 {
@@ -246,6 +247,13 @@ fn parseValue(arena: Allocator, src: []const u8, i: *usize, binds: []const Bound
     if (c == '-' or (c >= '0' and c <= '9')) return parseInt(src, i);
     if (takeWord(src, i, "true")) return .{ .bool = true };
     if (takeWord(src, i, "false")) return .{ .bool = false };
+    if (c == '[' or c == '{') {
+        const literal = @import("rlm_literal.zig");
+        const end = literal.scan(src, i.*) orelse return null;
+        const json = literal.render(arena, src[i.*..end], binds) catch return null;
+        i.* = end;
+        return .{ .json = json };
+    }
     if (!identStart(c)) return null;
     var end = i.* + 1;
     while (end < src.len and identCont(src[end])) end += 1;
@@ -331,9 +339,18 @@ fn canonicalize(arena: Allocator, tool: []const u8, args: []const Arg) ![]const 
     // how a script saves a bound result for the shell to compute over.
     if (positional and args.len == 2 and std.mem.eql(u8, tool, "write_file")) {
         try putValue(arena, &obj, field, args[0].value);
-        try putValue(arena, &obj, "content", args[1].value);
+        // The file holds the literal's JSON text.
+        try putValue(arena, &obj, "content", switch (args[1].value) {
+            .json => |j| .{ .string = j },
+            else => |v| v,
+        });
     } else if (args.len == 1 and args[0].key == null) {
-        try putValue(arena, &obj, field, args[0].value);
+        // ADR 0236: `tool({"id": "x"})` is `tool(id="x")`, not an object for the first parameter.
+        const kw: ?std.json.Value = switch (args[0].value) {
+            .json => |j| try std.json.parseFromSliceLeaky(std.json.Value, arena, j, .{}),
+            else => null,
+        };
+        if (kw != null and kw.? == .object) obj = kw.?.object else try putValue(arena, &obj, field, args[0].value);
     } else {
         for (args) |a| {
             const k = a.key orelse return error.NeedKeywords;
@@ -387,11 +404,11 @@ pub fn splitStatements(arena: Allocator, src: []const u8) ![][]const u8 {
             in_str = c;
             continue;
         }
-        if (c == '(') {
+        if (c == '(' or c == '[' or c == '{') {
             depth += 1;
             continue;
         }
-        if (c == ')' and depth > 0) {
+        if ((c == ')' or c == ']' or c == '}') and depth > 0) {
             depth -= 1;
             continue;
         }
@@ -432,11 +449,11 @@ pub fn splitTopLevel(arena: Allocator, src: []const u8, sep: u8) ![][]const u8 {
             in_str = c;
             continue;
         }
-        if (c == '(') {
+        if (c == '(' or c == '[' or c == '{') {
             depth += 1;
             continue;
         }
-        if (c == ')' and depth > 0) {
+        if ((c == ')' or c == ']' or c == '}') and depth > 0) {
             depth -= 1;
             continue;
         }
@@ -456,6 +473,7 @@ fn putValue(arena: Allocator, obj: *std.json.ObjectMap, key: []const u8, v: Valu
         .string => |s| .{ .string = s },
         .int => |n| .{ .integer = n },
         .bool => |b| .{ .bool = b },
+        .json => |j| try std.json.parseFromSliceLeaky(std.json.Value, arena, j, .{}),
     };
     try obj.put(arena, key, jv);
 }
