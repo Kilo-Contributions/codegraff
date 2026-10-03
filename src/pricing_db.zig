@@ -443,7 +443,7 @@ fn fetch(io: Io, gpa: Allocator, arena: Allocator) ?[]const u8 {
         .response_writer = &aw.writer,
         .extra_headers = &extra,
     }) catch return null;
-    if (@intFromEnum(res.status) != 200) return null;
+    if (@backingInt(res.status) != 200) return null;
     const body = aw.writer.buffered();
     return if (body.len == 0 or body.len > max_bytes) null else body;
 }

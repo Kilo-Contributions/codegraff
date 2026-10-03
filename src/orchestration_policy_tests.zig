@@ -294,7 +294,7 @@ test "rows: the pending stratum survives the arena the decision was made in" {
 test "rows: a model-authored stratum cannot turn a row into a megabyte" {
     rows.clearPending();
     defer rows.clearPending();
-    // Built with @splat: Zig 0.17.0-dev (what CI pins) rejects the `"m" ** N`
+    // Built with @splat: Zig Zig 0.17 (what CI pins) rejects the `"m" ** N`
     // repeat form, and @splat over an array compiles on both compilers.
     const huge: [4096]u8 = @splat('m');
     rows.setPending(.{ .task_class = .other, .budget_band = .b15, .stratum = &huge }, .R0, .bootstrap, 0);

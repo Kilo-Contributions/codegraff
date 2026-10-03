@@ -126,7 +126,7 @@ pub fn run(arena: Allocator, st: State) Allocator.Error![]const Check {
 pub fn worst(checks: []const Check) Severity {
     var top: Severity = .info;
     for (checks) |c| {
-        if (@intFromEnum(c.severity) > @intFromEnum(top)) top = c.severity;
+        if (@backingInt(c.severity) > @backingInt(top)) top = c.severity;
     }
     return top;
 }

@@ -192,7 +192,7 @@ pub fn postStreamWithClient(self: *Agent, client: *std.http.Client, body: []cons
 
     // 429/5xx before any body: a retryable throttle — request() backs
     // off and retries (surfaced in the trace as a "retry" note).
-    const status_code = @intFromEnum(response.head.status);
+    const status_code = @backingInt(response.head.status);
     if (status_code == 429 or status_code >= 500) {
         http.captureRetryAfter(&response); // #retry-after: honor the provider's requested backoff
         // Drain a snippet for quota classifiers. Do not echo it on the REPL

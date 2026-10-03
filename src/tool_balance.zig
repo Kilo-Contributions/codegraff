@@ -40,7 +40,7 @@ pub const Class = enum {
     }
 };
 
-const class_count = @as(usize, @intFromEnum(Class.other)) + 1; // `other` must stay LAST (std.meta.fields is deprecated in this std)
+const class_count = @as(usize, @backingInt(Class.other)) + 1; // `other` must stay LAST (std.meta.fields is deprecated in this std)
 var g_counts: [class_count]u64 = @splat(0);
 var g_refused: u64 = 0;
 var g_errors: u64 = 0;
@@ -112,7 +112,7 @@ pub fn skewClass(snap: *const Snapshot) ?Class {
 /// result so the model hears it, not just /tools) — null otherwise.
 pub fn record(gpa: Allocator, call: tools.ToolCall, is_error: bool) ?[]u8 {
     const class = classOf(call);
-    bump(&g_counts[@intFromEnum(class)]);
+    bump(&g_counts[@backingInt(class)]);
     if (is_error) bump(&g_errors);
     if (!isSuite(class)) return null;
     var snap = snapshot();
@@ -120,7 +120,7 @@ pub fn record(gpa: Allocator, call: tools.ToolCall, is_error: bool) ?[]u8 {
         g_last_skew.store(0, .release);
         return null;
     };
-    const marker: u8 = @intCast(@intFromEnum(top) + 1);
+    const marker: u8 = @intCast(@backingInt(top) + 1);
     if (g_last_skew.swap(marker, .acq_rel) == marker) return null;
     return std.fmt.allocPrint(gpa, "tool balance: {d}/{d} suite calls were {s} — read (outline-first), search and batch are all available; balance them", .{ snap.get(top), snap.suiteTotal(), top.label() }) catch null;
 }
@@ -138,7 +138,7 @@ pub const Snapshot = struct {
     errors: u64 = 0,
 
     pub fn get(self: *const Snapshot, class: Class) u64 {
-        return self.counts[@intFromEnum(class)];
+        return self.counts[@backingInt(class)];
     }
 
     /// Every read/search the licensed suite owns: pro tools plus zigrep.

@@ -7,8 +7,8 @@
 set -euo pipefail
 
 # Keep these two in lockstep with scripts/install-zig-ci.py.
-ZIG_VERSION="0.17.0-dev.813+2153f8143"
-ZIG_LINUX_X86_64_SHA256="b0d46ffc4587b9e8dd0b524ee5bc4da1e67f28bba55e7c534cec64af2f2d7a74"
+ZIG_VERSION="0.17.0"
+ZIG_LINUX_X86_64_SHA256="1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
 
 ZIG_ARCHIVE="zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
 ZIG_PREFIX="/opt/codegraff-zig"

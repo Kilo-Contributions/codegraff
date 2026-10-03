@@ -131,7 +131,7 @@ pub fn fetch(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, access:
         .headers = .{ .user_agent = .{ .override = user_agent } },
         .extra_headers = &extra,
     }) catch return .{};
-    if (@intFromEnum(response.status) != 200) return .{};
+    if (@backingInt(response.status) != 200) return .{};
     const rows = parseModels(arena, aw.writer.buffered()) orelse
         return .{ .source = "baked fallback — invalid live catalog" };
     return .{ .rows = rows, .source = "live account catalog" };

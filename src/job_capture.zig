@@ -178,7 +178,7 @@ pub fn reported(io: Io, dir: []const u8) bool {
 /// the newest `keep` bytes of a larger burst and returns true when it skipped
 /// older ones.
 pub fn readNew(io: Io, gpa: Allocator, capture: *Capture, which: Stream, keep: usize, out: *std.ArrayList(u8)) bool {
-    const i = @intFromEnum(which);
+    const i = @backingInt(which);
     const f = capture.readers[i] orelse blk: {
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const opened = Io.Dir.cwd().openFile(io, capture.path(&buf, @tagName(which)), .{ .mode = .read_write }) catch return false;

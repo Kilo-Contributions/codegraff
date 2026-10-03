@@ -23,8 +23,8 @@ var device_model_buf: [128]u8 = undefined;
 var os_version_buf: [128]u8 = undefined;
 var host_fields_ready = false;
 
-const private_file_permissions: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @enumFromInt(0o600) else .default_file;
-const private_dir_permissions: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @enumFromInt(0o700) else .default_dir;
+const private_file_permissions: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @fromBackingInt(@intCast(0o600)) else .default_file;
+const private_dir_permissions: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @fromBackingInt(@intCast(0o700)) else .default_dir;
 
 /// Node `os.arch()` names. kimi-code puts these in `X-Msh-Device-Model`.
 pub fn nodeArch(tag: std.Target.Cpu.Arch) []const u8 {

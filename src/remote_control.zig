@@ -268,7 +268,7 @@ fn runCommand(self: *State, arena: Allocator, cmd: Command) void {
             serve.serveLog(io, "remote-control: create failed ({t})", .{err});
             return sendResult(self, client, arena, cmd.id, null, 500, "{\"error\":\"failed to create session\"}");
         };
-        return sendResult(self, client, arena, cmd.id, null, @intFromEnum(made.status), made.body);
+        return sendResult(self, client, arena, cmd.id, null, @backingInt(made.status), made.body);
     }
     const sid = cmd.session_id orelse return sendResult(self, client, arena, cmd.id, null, 400, "{\"error\":\"session_id required\"}");
     if (std.mem.eql(u8, cmd.kind, "close")) return spawn(self, .close, null, cmd.id, sid, "", null);

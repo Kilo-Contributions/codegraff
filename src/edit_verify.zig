@@ -481,7 +481,7 @@ test "#337: a companion that lies about success returns a LOUD error, never the 
         \\exit 0
         \\
         ,
-        .flags = .{ .permissions = @enumFromInt(0o755) },
+        .flags = .{ .permissions = @fromBackingInt(@intCast(0o755)) },
     });
 
     const dir = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
@@ -534,7 +534,7 @@ test "#337: two edits to one file in the same turn both survive" {
         \\exit 1
         \\
         ,
-        .flags = .{ .permissions = @enumFromInt(0o755) },
+        .flags = .{ .permissions = @fromBackingInt(@intCast(0o755)) },
     });
     var real_buf: [std.fs.max_path_bytes]u8 = undefined;
     const real_len = try tmp.dir.realPath(io, &real_buf);

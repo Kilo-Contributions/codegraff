@@ -50,7 +50,7 @@ pub fn post(link: Link, arena: Allocator, path: []const u8, payload: []const u8)
             .user_agent = .{ .override = "simple-harness/" ++ harness_version },
         },
     });
-    return .{ .code = @intFromEnum(res.status), .body = aw.writer.buffered() };
+    return .{ .code = @backingInt(res.status), .body = aw.writer.buffered() };
 }
 
 /// The gateway's error message out of a non-2xx body, or the raw body.

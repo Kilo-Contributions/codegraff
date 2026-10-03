@@ -245,7 +245,7 @@ fn fetchCodexSnapshot(io: Io, gpa: Allocator, arena: Allocator, token: []const u
         .response_writer = &aw.writer,
         .extra_headers = &headers,
     }) catch return null;
-    if (@intFromEnum(res.status) != 200) return null;
+    if (@backingInt(res.status) != 200) return null;
     return parseCodexSnapshot(arena, aw.writer.buffered());
 }
 
@@ -348,7 +348,7 @@ fn fetchModelsDev(io: Io, gpa: Allocator, arena: Allocator) ?Value {
         .response_writer = &aw.writer,
         .extra_headers = &extra,
     }) catch return null;
-    if (@intFromEnum(res.status) != 200) return null;
+    if (@backingInt(res.status) != 200) return null;
     const v = std.json.parseFromSliceLeaky(Value, arena, aw.writer.buffered(), .{ .allocate = .alloc_always }) catch return null;
     if (v != .object) return null;
     return v;

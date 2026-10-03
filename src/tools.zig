@@ -447,7 +447,7 @@ pub fn rawFetch(gpa: Allocator, client: *std.http.Client, url: []const u8) ToolO
     }
     const body = w.buffered();
     if (status) |st| {
-        const code = @intFromEnum(st);
+        const code = @backingInt(st);
         if (code < 200 or code >= 300) return .{
             .text = std.fmt.allocPrint(gpa, "HTTP {d} {s}", .{ code, st.phrase() orelse "" }) catch return .{ .is_error = true },
             .is_error = true,

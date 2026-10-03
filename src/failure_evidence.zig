@@ -38,13 +38,13 @@ var g_len: [n_classes]usize = @splat(0);
 pub fn note(tc: TaskClass, text: []const u8) void {
     const trimmed = std.mem.trim(u8, text, " \t\r\n");
     const head = util.utf8Prefix(trimmed, evidence_cap);
-    const slot = &g_evidence[@intFromEnum(tc)];
+    const slot = &g_evidence[@backingInt(tc)];
     for (slot[0..head.len], head) |*d, s| d.* = if (s == '\n' or s == '\r' or s == '\t') ' ' else s;
-    g_len[@intFromEnum(tc)] = head.len;
+    g_len[@backingInt(tc)] = head.len;
 }
 
 pub fn evidence(tc: TaskClass) []const u8 {
-    return g_evidence[@intFromEnum(tc)][0..g_len[@intFromEnum(tc)]];
+    return g_evidence[@backingInt(tc)][0..g_len[@backingInt(tc)]];
 }
 
 /// Session reset — escalation.resetSession forwards here so one call clears

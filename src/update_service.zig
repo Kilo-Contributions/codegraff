@@ -342,7 +342,7 @@ pub const HttpFetch = struct {
             .headers = .{ .user_agent = .{ .override = self.user_agent } },
             .extra_headers = &extra,
         }) catch return error.Offline;
-        if (@intFromEnum(res.status) != 200) return error.Offline;
+        if (@backingInt(res.status) != 200) return error.Offline;
         if (aw.writer.buffered().len > self.max_bytes) return error.Malformed;
         return aw.toOwnedSlice() catch return error.OutOfMemory;
     }

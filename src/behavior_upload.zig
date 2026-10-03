@@ -496,7 +496,7 @@ pub fn postBatch(client: *std.http.Client, url: []const u8, payload: []const u8,
         .headers = .{ .content_type = .{ .override = "application/json" } },
         .extra_headers = extra_headers,
     }) catch return false;
-    const status = @intFromEnum(response.status);
+    const status = @backingInt(response.status);
     return status >= 200 and status < 300;
 }
 

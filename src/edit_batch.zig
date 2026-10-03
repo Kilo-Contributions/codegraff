@@ -222,7 +222,7 @@ test "execBatch uses selected worktree, replace_all, one snapshot, and preserves
     try selected.dir.writeFile(io, .{
         .sub_path = "task.sh",
         .data = "old old\n",
-        .flags = .{ .permissions = @enumFromInt(0o755) },
+        .flags = .{ .permissions = @fromBackingInt(@intCast(0o755)) },
     });
     var root_buf: [std.fs.max_path_bytes]u8 = undefined;
     const root_len = try selected.dir.realPath(io, &root_buf);
@@ -316,7 +316,7 @@ test "execBatch and single edit share the same-file write lock" {
     try tmp.dir.writeFile(io, .{
         .sub_path = "slow",
         .data = "#!/bin/sh\ndir=$(dirname \"$0\")\n: > \"$dir/entered\"\nwhile [ ! -e \"$dir/release\" ]; do /bin/sleep 0.01; done\nexit 1\n",
-        .flags = .{ .permissions = @enumFromInt(0o755) },
+        .flags = .{ .permissions = @fromBackingInt(@intCast(0o755)) },
     });
     var real_buf: [std.fs.max_path_bytes]u8 = undefined;
     const real_len = try tmp.dir.realPath(io, &real_buf);

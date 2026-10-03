@@ -19,8 +19,8 @@ const Value = std.json.Value;
 const Allocator = std.mem.Allocator;
 
 /// 0600 / 0700 on platforms that have permission bits at all.
-pub const private_file: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @enumFromInt(0o600) else .default_file;
-pub const private_dir: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @enumFromInt(0o700) else .default_dir;
+pub const private_file: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @fromBackingInt(@intCast(0o600)) else .default_file;
+pub const private_dir: Io.File.Permissions = if (Io.File.Permissions.has_executable_bit) @fromBackingInt(@intCast(0o700)) else .default_dir;
 
 const max_symlink_hops = 40;
 

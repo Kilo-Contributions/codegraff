@@ -153,7 +153,7 @@ fn countWindowUpdates(bytes: []const u8) usize {
     while (i + 9 <= bytes.len) {
         const len = (@as(usize, bytes[i]) << 16) | (@as(usize, bytes[i + 1]) << 8) | bytes[i + 2];
         if (i + 9 + len > bytes.len) break;
-        if (bytes[i + 3] == @intFromEnum(frame.Type.window_update)) n += 1;
+        if (bytes[i + 3] == @backingInt(frame.Type.window_update)) n += 1;
         i += 9 + len;
     }
     return n;

@@ -196,7 +196,7 @@ fn httpPostUnwatched(http: *HttpTransport, body: []const u8, meta: RequestMeta, 
     try req.connection.?.flush();
     var response = try req.receiveHead(&.{});
 
-    const status = @intFromEnum(response.head.status);
+    const status = @backingInt(response.head.status);
     if (status == 401 or status == 403) {
         if (req.connection) |connection| connection.closing = true;
         return error.McpAuthenticationRequired;
@@ -261,7 +261,7 @@ fn resumeStream(http: *HttpTransport, meta: RequestMeta, id: i64) !?[]u8 {
         }
         try req.sendBodiless();
         var response = try req.receiveHead(&.{});
-        const status = @intFromEnum(response.head.status);
+        const status = @backingInt(response.head.status);
         if (status < 200 or status >= 300) {
             if (req.connection) |connection| connection.closing = true;
             return null;
@@ -395,7 +395,7 @@ fn probeUnwatched(http: *HttpTransport, body: []const u8, meta: RequestMeta) !Pr
     try req.connection.?.flush();
     var response = try req.receiveHead(&.{});
 
-    const status = @intFromEnum(response.head.status);
+    const status = @backingInt(response.head.status);
     // Auth failures aren't a version signal either way — surface them exactly
     // like `post` does so the existing OAuth flow still triggers.
     if (status == 401 or status == 403) {

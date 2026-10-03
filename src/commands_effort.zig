@@ -18,7 +18,7 @@ const reasoning_levels = [_]pickers.PickItem{
 
 fn display(root: *Agent, effort: ReasoningEffort) []const u8 {
     if (er.mimoRoute(root.provider.id, root.provider.model) and effort == .high) return "On";
-    return reasoning_levels[@intFromEnum(effort)].name;
+    return reasoning_levels[@backingInt(effort)].name;
 }
 
 fn normalized(root: *Agent, requested: []const u8) ?ReasoningEffort {
@@ -44,7 +44,7 @@ pub fn handle(root: *Agent, arena: std.mem.Allocator, line: []const u8, out: *st
             rows[i] = if (er.mimoRoute(root.provider.id, root.provider.model) and effort == .high)
                 .{ .name = "On", .desc = "Enable model reasoning" }
             else
-                reasoning_levels[@intFromEnum(effort)];
+                reasoning_levels[@backingInt(effort)];
             if (effort == current) cur = i;
         }
         const idx = pickers.listPickerAt(root, arena, out, title, rows[0..levels.len], cur) orelse return true;

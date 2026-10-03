@@ -222,8 +222,8 @@ pub const tty = struct {
             raw.lflag.ISIG = false;
             raw.lflag.IEXTEN = false; // so Ctrl-V (0x16) reaches us, not the tty's lnext
         }
-        raw.cc[@intFromEnum(std.posix.V.MIN)] = if (blocking) 1 else 0;
-        raw.cc[@intFromEnum(std.posix.V.TIME)] = 0;
+        raw.cc[@backingInt(std.posix.V.MIN)] = if (blocking) 1 else 0;
+        raw.cc[@backingInt(std.posix.V.TIME)] = 0;
         var job_control = JobControlGuard.init(.output);
         defer job_control.deinit();
         std.posix.tcsetattr(fd, .NOW, raw) catch return null;
