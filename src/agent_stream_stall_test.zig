@@ -304,3 +304,81 @@ test "Chat terminal marker keeps delayed usage and completes silent trailer; non
         try std.testing.expectEqual(@as(u64, 0), child.stall.tripped_ms);
     }
 }
+
+/// ADR 0241 on SSE: a Responses stream whose prose item closes, then thinks in
+/// silence past the tightened budget before it completes.
+const ResponsesSrv = struct {
+    const delta = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n";
+    const item_done = "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"message\"}}\n\n";
+    const completed = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r1\",\"output\":[]}}\n\n";
+    const think_ms = 1000;
+    fn run(io: Io, server: *std.Io.net.Server, done: *std.atomic.Value(bool)) void {
+        const c = while (true) {
+            const conn = server.accept(io) catch return;
+            if (takePostHead(io, conn)) break conn;
+            conn.close(io);
+        };
+        defer c.close(io);
+        var wbuf: [1024]u8 = undefined;
+        var sw = std.Io.net.Stream.Writer.init(c, io, &wbuf);
+        sw.interface.writeAll("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n" ++ delta ++ item_done) catch return;
+        sw.interface.flush() catch return;
+        io.sleep(.fromMilliseconds(think_ms), .awake) catch return;
+        sw.interface.writeAll(completed) catch return;
+        sw.interface.flush() catch return;
+        while (!done.load(.acquire)) io.sleep(.fromMilliseconds(10), .awake) catch return;
+    }
+};
+
+test "ADR 0241: on the Responses SSE wire a closed prose item gets the full budget back" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+
+    var addr = try std.Io.net.IpAddress.parseLiteral("127.0.0.1:0");
+    var server = try std.Io.net.IpAddress.listen(&addr, io, .{});
+    defer server.deinit(io);
+    var done: std.atomic.Value(bool) = .init(false);
+    var fut = io.async(ResponsesSrv.run, .{ io, &server, &done });
+    defer fut.await(io);
+    defer done.store(true, .release);
+
+    // 2000ms full, 500ms tightened: the think sits between the two.
+    const saved_stream = http.stream_stall_ms;
+    const saved_floor = http_stall.idle_floor_ms;
+    http.stream_stall_ms = 2000;
+    http_stall.idle_floor_ms = 100;
+    defer http.stream_stall_ms = saved_stream;
+    defer http_stall.idle_floor_ms = saved_floor;
+    try std.testing.expect(ResponsesSrv.think_ms > http_stall.budgetMs(http.stream_stall_ms, true));
+
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var out: Io.Writer.Allocating = .init(gpa); // printDelta grows partial_text only with a frontend
+    defer out.deinit();
+    var client: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer client.deinit();
+
+    var url_buf: [64]u8 = undefined;
+    const url = try std.fmt.bufPrint(&url_buf, "http://127.0.0.1:{d}/v1/responses", .{server.socket.address.getPort()});
+    var agent: Agent = .{
+        .gpa = gpa,
+        .arena = arena,
+        .io = io,
+        .client = &client,
+        .provider = .{ .id = "test", .kind = .responses, .auth = .bearer, .url = url, .api_key = "k", .model = "m", .context = 0 },
+        .messages = std.json.Array.init(arena),
+        .sub = false,
+        .label = "",
+        .out = &out.writer,
+    };
+    defer deinitMarkdown(&agent);
+
+    const t0 = nowMs(io);
+    const body = try agent_stream.postStreamWithClient(&agent, &client, "{}");
+    defer gpa.free(body);
+    try std.testing.expect(nowMs(io) - t0 >= ResponsesSrv.think_ms - 100); // the think really happened
+    try std.testing.expect(std.mem.indexOf(u8, body, "response.completed") != null);
+    try std.testing.expect(agent.partial_text.items.len != 0); // prose did flow, so the budget had tightened
+}
