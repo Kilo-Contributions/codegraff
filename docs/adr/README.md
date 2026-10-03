@@ -269,6 +269,7 @@ record only when you need the evidence or the edge cases.
 | [0240](0240-a-slim-view-names-its-fields-and-one-script-fetches-and-computes.md) | A slim view names the whole value's fields (`; fields: ...` on rlm print and direct-call handle markers); the slim rule says to compute over results inside the same rlm script; an unbound host call or `each()` in rlm prints its result. |
 | [0241](0241-prose-tightens-the-stall-budget-only-until-its-item-closes.md) | On the Responses wire, prose tightens the stall budget only while its output item is open; `response.output_item.done` restores the full budget for the next item (WS and SSE alike). |
 | [0242](0242-the-shell-tool-names-python3s-version.md) | The `shell` tool's OS clause names python3's version, read at startup from where `python3` on PATH resolves (never by running it); unknown versions leave the description unchanged. |
+| [0243](0243-repo-context-rides-as-an-input-item-on-responses.md) | On the Responses wire for codex, chatgpt-new and openai, root turns send the project-instructions section and the layout as one developer input item ahead of the conversation, so the instructions are byte-identical across repos and cache on turn 1. |
 
 ## When to write one
 
