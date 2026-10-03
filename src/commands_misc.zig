@@ -366,7 +366,7 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
                 .response_writer = &aw.writer,
                 .headers = .{ .user_agent = .{ .override = "simple-harness/" ++ harness_version } },
             }) catch break :lmstudio; // server not running → skip silently
-            if (@intFromEnum(res.status) != 200) break :lmstudio;
+            if (@backingInt(res.status) != 200) break :lmstudio;
             if (aw.writer.buffered().len > 256 * 1024) break :lmstudio;
             const parsed = std.json.parseFromSliceLeaky(Value, arena, aw.writer.buffered(), .{ .allocate = .alloc_always }) catch break :lmstudio;
             if (parsed != .object) break :lmstudio;

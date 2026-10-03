@@ -34,13 +34,13 @@ var source: std.atomic.Value(u8) = .init(0);
 
 /// Raise the flag and remember who did.
 pub fn cancel(s: Source) void {
-    source.store(@intFromEnum(s), .release);
+    source.store(@backingInt(s), .release);
     Agent.esc_cancel.store(true, .release);
 }
 
 /// A deadline must not replace an already recorded user cancellation.
 pub fn cancelIfIdle(s: Source) void {
-    if (source.cmpxchgStrong(0, @intFromEnum(s), .acq_rel, .acquire) == null)
+    if (source.cmpxchgStrong(0, @backingInt(s), .acq_rel, .acquire) == null)
         Agent.esc_cancel.store(true, .release);
 }
 
@@ -59,7 +59,7 @@ pub fn clear() void {
 /// The source of the cancel that just ended a turn; consumed, and traced
 /// (`interrupted source=…`) so the next false interrupt can be attributed.
 pub fn take(tracer: ?*Tracer) Source {
-    const s: Source = @enumFromInt(source.swap(0, .acq_rel));
+    const s: Source = @fromBackingInt(@intCast(source.swap(0, .acq_rel)));
     if (tracer) |tr| {
         var buf: [48]u8 = undefined;
         tr.note("turn", note(&buf, s));

@@ -16,7 +16,7 @@ set -euo pipefail
 REPO="${HARNESS_REPO:-https://github.com/justrach/codegraff}"
 INSTALL_DIR="${HARNESS_DIR:-$HOME/bin}"
 BIN="graff"
-ZIG_VERSION="0.17.0-dev.813+2153f8143"
+ZIG_VERSION="0.17.0"
 
 # Colors
 R='\033[0;31m' G='\033[0;32m' Y='\033[0;33m' C='\033[0;36m' W='\033[1;37m' D='\033[0;90m' N='\033[0m'

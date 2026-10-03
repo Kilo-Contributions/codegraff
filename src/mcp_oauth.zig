@@ -101,7 +101,7 @@ fn fetchJson(io: Io, gpa: Allocator, arena: Allocator, url: []const u8) !std.jso
         .redirect_behavior = .not_allowed,
         .extra_headers = &headers,
     });
-    if (@intFromEnum(res.status) < 200 or @intFromEnum(res.status) >= 300) return error.OAuthHttpFailure;
+    if (@backingInt(res.status) < 200 or @backingInt(res.status) >= 300) return error.OAuthHttpFailure;
     return jsonObject(writer.buffered(), arena);
 }
 
@@ -121,7 +121,7 @@ fn postJson(io: Io, gpa: Allocator, arena: Allocator, url: []const u8, payload: 
         .headers = .{ .content_type = .{ .override = "application/json" } },
         .extra_headers = &headers,
     });
-    if (@intFromEnum(res.status) < 200 or @intFromEnum(res.status) >= 300) return error.OAuthHttpFailure;
+    if (@backingInt(res.status) < 200 or @backingInt(res.status) >= 300) return error.OAuthHttpFailure;
     return jsonObject(writer.buffered(), arena);
 }
 
@@ -141,7 +141,7 @@ fn postForm(io: Io, gpa: Allocator, arena: Allocator, url: []const u8, payload: 
         .headers = .{ .content_type = .{ .override = "application/x-www-form-urlencoded" } },
         .extra_headers = &headers,
     });
-    if (@intFromEnum(res.status) < 200 or @intFromEnum(res.status) >= 300) return error.OAuthHttpFailure;
+    if (@backingInt(res.status) < 200 or @backingInt(res.status) >= 300) return error.OAuthHttpFailure;
     return jsonObject(writer.buffered(), arena);
 }
 
@@ -370,7 +370,7 @@ fn writeCredentials(io: Io, arena: Allocator, home: []const u8, resource_url: []
     var aw: Io.Writer.Allocating = .init(arena);
     var stringify: std.json.Stringify = .{ .writer = &aw.writer };
     try stringify.write(Value{ .object = obj });
-    const user_only: Io.Dir.Permissions = @enumFromInt(0o600);
+    const user_only: Io.Dir.Permissions = @fromBackingInt(@intCast(0o600));
     // Atomic: this file is the only copy of the client_secret + refresh token,
     // so a truncate-in-place that dies mid-write logs the user out of the MCP
     // server with nothing left to recover from.

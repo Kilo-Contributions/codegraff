@@ -92,7 +92,7 @@ pub const Native = struct {
         try std.posix.kill(-pid, if (sig == .term) .TERM else .KILL);
     }
     pub fn groupGone(self: Native, pid: i32) ?bool {
-        std.posix.kill(-pid, @enumFromInt(0)) catch |err| switch (err) {
+        std.posix.kill(-pid, @fromBackingInt(@intCast(0))) catch |err| switch (err) {
             error.ProcessNotFound => return true,
             // Darwin can report EPERM for a zombie-only group. This is not
             // absence evidence: require the independent process inventory.

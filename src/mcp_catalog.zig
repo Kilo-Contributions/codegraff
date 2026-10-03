@@ -219,7 +219,7 @@ fn fetchJson(io: Io, gpa: Allocator, arena: Allocator, url: []const u8) !Value {
         .response_writer = &body.writer,
         .extra_headers = &headers,
     });
-    if (@intFromEnum(res.status) < 200 or @intFromEnum(res.status) >= 300) return error.HttpFailure;
+    if (@backingInt(res.status) < 200 or @backingInt(res.status) >= 300) return error.HttpFailure;
     return std.json.parseFromSliceLeaky(Value, arena, body.writer.buffered(), .{ .allocate = .alloc_always });
 }
 

@@ -74,12 +74,12 @@ pub fn snapshot(io: Io, a: Allocator, home: []const u8, server: *rpc.Server, uri
     const html = try std.mem.concat(a, u8, &.{ template[0..split], encoded, template[split + marker.len ..] });
     const dir = try std.fmt.allocPrint(a, "{s}/.graff/mcp-apps", .{home});
     try Io.Dir.cwd().createDirPath(io, dir);
-    try Io.Dir.cwd().setFilePermissions(io, dir, @enumFromInt(0o700), .{});
+    try Io.Dir.cwd().setFilePermissions(io, dir, @fromBackingInt(@intCast(0o700)), .{});
     var random: [16]u8 = undefined;
     io.random(&random);
     const id = std.fmt.bytesToHex(random, .lower);
     const path = try std.fmt.allocPrint(a, "{s}/{s}.html", .{ dir, id });
-    try @import("credential_store.zig").replaceFile(io, Io.Dir.cwd(), path, html, @enumFromInt(0o600));
+    try @import("credential_store.zig").replaceFile(io, Io.Dir.cwd(), path, html, @fromBackingInt(@intCast(0o600)));
     return path;
 }
 

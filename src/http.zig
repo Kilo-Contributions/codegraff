@@ -153,7 +153,7 @@ fn post(gpa: Allocator, client: *std.http.Client, provider: Provider, body: []co
     var response: std.http.Client.Response = undefined;
     try sendHeadTask(&req, body, &response);
 
-    const code = @intFromEnum(response.head.status);
+    const code = @backingInt(response.head.status);
     if (code == 429 or code >= 500) {
         // Drain a snippet for quota classifiers, then poison: the connection
         // still holds unread body bytes.

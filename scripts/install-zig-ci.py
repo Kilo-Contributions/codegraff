@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install Codegraff's exact Zig nightly after SHA-256 verification."""
+"""Install Codegraff's exact Zig release after SHA-256 verification."""
 
 from __future__ import annotations
 
@@ -16,25 +16,25 @@ import urllib.request
 import zipfile
 
 
-PINNED_VERSION = "0.17.0-dev.813+2153f8143"
+PINNED_VERSION = "0.17.0"
 ASSETS = {
     ("Darwin", "aarch64"): (
         "zig-aarch64-macos-{version}.tar.xz",
-        "36673d2513afa4a96c86780648ba504beedd7f0451389091cf9d53e38d5b4840",
-        "08abf236d78c05b8520431fbca99903ff98653b2f1cd1c3665a7f8c91247421c",
-        "14a2d724c45db74ba6ef33c5d6c467dde1f6689349009b78d086df426866db09",
+        "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a",
+        "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523",
+        "b983da8def266bff611c1dbf4e1298cce60de215b4c0a56a049349f9eae4bf94",
     ),
     ("Linux", "x86_64"): (
         "zig-x86_64-linux-{version}.tar.xz",
-        "b0d46ffc4587b9e8dd0b524ee5bc4da1e67f28bba55e7c534cec64af2f2d7a74",
-        "08241893d9dad32a3d0e71937d6f659e8fba4598ca29b8c9eaa75ee31c9edb4c",
-        "e75b3cba834758312b1ac4c1fcf10301851bc05ca53386ed6956c84fcd48ec77",
+        "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026",
+        "7c61539af19fa4082c94848f1c2b57b89e76dc6cfd5bd4c57764c3caf8f82272",
+        "9f3dc17f2e18a697d8e1a1a81eb0479b82e108ddbafd6fa6c9f325a635b8528b",
     ),
     ("Windows", "x86_64"): (
         "zig-x86_64-windows-{version}.zip",
-        "2a8f1a34402076ab7931e4535bd379b20c83fc263d1387cb3f70cb2e397f9ebe",
-        "ba08d13e71268f7305887293bf6726f2effa0b6b3b9b4169be45f34cc7730c73",
-        "364e24705f60cc8a7433c8002ebf0d9dd0be40a4b0a183447112795afe35813d",
+        "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428",
+        "f54b14f02a4d7d8ac62a94a0663486eb166bba3745d85b466238c1b93e723d46",
+        "d259bdc19c8e407a1653d4474d36429523a828f5cf89c7b10909bea073cafae8",
     ),
 }
 MIRRORS = (

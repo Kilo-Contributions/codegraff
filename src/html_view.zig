@@ -70,11 +70,11 @@ pub fn write(io: Io, a: Allocator, home: []const u8, html: []const u8) ![]const 
     try Io.Dir.cwd().createDirPath(io, dir);
     // Windows inherits the user profile ACL; Zig does not implement POSIX chmod there.
     if (@import("builtin").os.tag != .windows)
-        try Io.Dir.cwd().setFilePermissions(io, dir, @enumFromInt(0o700), .{});
+        try Io.Dir.cwd().setFilePermissions(io, dir, @fromBackingInt(@intCast(0o700)), .{});
     var random: [16]u8 = undefined;
     io.random(&random);
     const path = try std.fmt.allocPrint(scratch.allocator(), "{s}/{s}.html", .{ dir, std.fmt.bytesToHex(random, .lower) });
-    try @import("credential_store.zig").replaceFile(io, Io.Dir.cwd(), path, html, @enumFromInt(0o600));
+    try @import("credential_store.zig").replaceFile(io, Io.Dir.cwd(), path, html, @fromBackingInt(@intCast(0o600)));
     return try a.dupe(u8, path);
 }
 

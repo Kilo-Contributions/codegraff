@@ -35,7 +35,7 @@ fn deleteRequest(client: *std.http.Client, url: []const u8, token: []const u8) u
         .method = .DELETE,
         .extra_headers = &headers,
     }) catch return 0;
-    return @intFromEnum(response.status);
+    return @backingInt(response.status);
 }
 
 /// One DELETE plus every byte it touches, in heap state the caller does not

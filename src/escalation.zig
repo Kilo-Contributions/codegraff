@@ -318,15 +318,15 @@ fn learnedVerdict(rung: Rung, o: Observables, phases: []const Value) Verdict {
 var g_declined: [std.enums.values(shapes.TaskClass).len]u8 = @splat(0);
 
 pub fn priorAttemptFailed(tc: shapes.TaskClass) bool {
-    return g_declined[@intFromEnum(tc)] > 0;
+    return g_declined[@backingInt(tc)] > 0;
 }
 
 pub fn declineCount(tc: shapes.TaskClass) u8 {
-    return g_declined[@intFromEnum(tc)];
+    return g_declined[@backingInt(tc)];
 }
 
 pub fn noteDeclined(tc: shapes.TaskClass) void {
-    const i = @intFromEnum(tc);
+    const i = @backingInt(tc);
     if (g_declined[i] < 255) g_declined[i] += 1;
 }
 

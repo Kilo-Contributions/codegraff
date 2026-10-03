@@ -63,7 +63,7 @@ pub fn fetchOpenAIModels(io: Io, gpa: Allocator, arena: Allocator, models_url: [
         .response_writer = &aw.writer,
         .extra_headers = &extra,
     }) catch return list.items;
-    if (@intFromEnum(res.status) != 200) return list.items;
+    if (@backingInt(res.status) != 200) return list.items;
     const v = std.json.parseFromSliceLeaky(Value, arena, aw.writer.buffered(), .{ .allocate = .alloc_always }) catch return list.items;
     if (v != .object) return list.items;
     const data = v.object.get("data") orelse return list.items;

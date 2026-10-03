@@ -135,7 +135,7 @@ pub fn probe(io: Io, pid: i32) Probe {
 fn probePidOnly(io: Io, pid: i32) Probe {
     _ = io;
     if (builtin.os.tag == .windows) return .unknown;
-    std.posix.kill(@intCast(pid), @enumFromInt(0)) catch |err| switch (err) {
+    std.posix.kill(@intCast(pid), @fromBackingInt(@intCast(0))) catch |err| switch (err) {
         error.ProcessNotFound => return .gone,
         // PermissionDenied means alive and owned by someone else.
         else => return .unknown,

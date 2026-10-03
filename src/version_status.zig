@@ -145,7 +145,7 @@ pub fn fetchLatestReleaseTag(io: Io, gpa: Allocator, arena: Allocator, running_v
         .headers = .{ .user_agent = .{ .override = user_agent } },
         .extra_headers = &extra,
     }) catch return null;
-    if (@intFromEnum(res.status) != 200 or aw.writer.buffered().len > 64 * 1024) return null;
+    if (@backingInt(res.status) != 200 or aw.writer.buffered().len > 64 * 1024) return null;
     const parsed = std.json.parseFromSliceLeaky(Value, arena, aw.writer.buffered(), .{ .allocate = .alloc_always }) catch return null;
     if (parsed != .object) return null;
     const tag = parsed.object.get("tag_name") orelse return null;

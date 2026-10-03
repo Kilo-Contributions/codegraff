@@ -1,10 +1,10 @@
 name: Setup pinned Codegraff Zig
-description: Restore or install Codegraff's checksum-pinned Zig nightly without a JavaScript runtime
+description: Restore or install Codegraff's checksum-pinned Zig release without a JavaScript runtime
 
 inputs:
   version:
-    description: Exact Zig nightly used by Codegraff
-    default: 0.17.0-dev.813+2153f8143
+    description: Exact Zig release used by Codegraff
+    default: 0.17.0
 
 runs:
   using: composite

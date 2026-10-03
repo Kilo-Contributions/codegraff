@@ -54,7 +54,7 @@ pub const DeviceKeys = struct {
         const box_secret = raw[0..X25519.secret_length].*;
         const seed = raw[X25519.secret_length..].*;
         return .{
-            .box = .{ .secret_key = box_secret, .public_key = try X25519.recoverPublicKey(box_secret) },
+            .box = .{ .secret_key = box_secret, .public_key = X25519.recoverPublicKey(box_secret) },
             .sign = try Ed25519.KeyPair.generateDeterministic(seed),
         };
     }

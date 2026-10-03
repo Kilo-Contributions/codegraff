@@ -48,7 +48,7 @@ const Client = struct {
                 .user_agent = .{ .override = "simple-harness/" ++ harness_version },
             },
         });
-        return .{ .code = @intFromEnum(res.status), .body = aw.writer.buffered() };
+        return .{ .code = @backingInt(res.status), .body = aw.writer.buffered() };
     }
 
     /// Non-2xx is fatal with the gateway's message: every subcommand here is

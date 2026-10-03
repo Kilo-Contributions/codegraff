@@ -1,15 +1,15 @@
 .{
     .name = .codegraff,
     .version = "0.17.0",
-    .minimum_zig_version = "0.17.0-dev.813+2153f8143",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .accord = .{
-            .url = "git+https://github.com/justrach/accord#c053e17295cb7ad8c0fb284d7d7748aad4aeeeea",
-            .hash = "accord-0.0.0-aQy1J3iBAgADDHWM0hIAXhISKtQ0zasFN7TyLhI_tkI8",
+            .url = "git+https://github.com/justrach/accord#24b83a12ae750ecd9952c1a601f0c242cfddcd00",
+            .hash = "accord-0.0.0-aQy1J7aBAgC94tkQM7Y_ee6ILQq8Pu59Vaq-2onJ42K6",
         },
         .http_zig = .{
-            .url = "git+https://github.com/justrach/http-zig#b875fed4741b947e731b86f430f532895f13c1de",
-            .hash = "http_zig-0.1.0-2CB7E-ERAwBIvemDRdHHwUIk68jZJY0rlfQgNoi8rnqX",
+            .url = "git+https://github.com/justrach/http-zig#5b0324bb3ab49fe18947b2f17fe7649760e1540a",
+            .hash = "http_zig-0.1.0-2CB7E00SAwAnwnBkJDgCDm3zLwrCmZZkHNSw5t7X9Vbf",
         },
     },
     .paths = .{""},

@@ -38,7 +38,7 @@ pub const Fingerprint = struct {
     /// formatted. Object fields are hashed in insertion order, which is the
     /// order they are serialized in.
     pub fn json(self: *Fingerprint, v: Value) void {
-        self.h.update(&[_]u8{@intFromEnum(std.meta.activeTag(v))});
+        self.h.update(&[_]u8{@backingInt(std.meta.activeTag(v))});
         switch (v) {
             .null => {},
             .bool => |b| self.flag(b),

@@ -42,7 +42,7 @@ fn gatewayFetch(io: Io, gpa: Allocator, arena: Allocator, method: std.http.Metho
             .user_agent = .{ .override = "simple-harness/" ++ harness_version },
         },
     });
-    return .{ .code = @intFromEnum(res.status), .body = aw.writer.buffered() };
+    return .{ .code = @backingInt(res.status), .body = aw.writer.buffered() };
 }
 
 fn gatewayJson(io: Io, gpa: Allocator, arena: Allocator, method: std.http.Method, url: []const u8, key: []const u8, payload: ?[]const u8) !Value {
@@ -228,7 +228,7 @@ fn cubePipeProbe(io: Io, gpa: Allocator, arena: Allocator, base: []const u8, ser
         },
         .extra_headers = extra[0..n],
     }) catch return 0;
-    return @intFromEnum(res.status);
+    return @backingInt(res.status);
 }
 
 fn cubeNew(io: Io, gpa: Allocator, arena: Allocator, key: []const u8, out: *Io.Writer, minutes: i64) !void {

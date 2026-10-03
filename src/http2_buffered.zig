@@ -153,7 +153,7 @@ const Exchange = struct {
             };
             try req.sendBodiless();
             var response = try req.receiveHead(&.{});
-            self.status = @intFromEnum(response.head.status);
+            self.status = @backingInt(response.head.status);
             if (self.status != 200) {
                 if (redirects(self.status)) {
                     if (response.head.location) |location|
@@ -178,7 +178,7 @@ const Exchange = struct {
         }
         var response: std.http.Client.Response = undefined;
         try @import("http.zig").sendHeadTask(&req, self.body, &response);
-        self.status = @intFromEnum(response.head.status);
+        self.status = @backingInt(response.head.status);
         if (self.status != 200) {
             // Error bodies may contain private details. Close without reading.
             if (req.connection) |conn| conn.closing = true;

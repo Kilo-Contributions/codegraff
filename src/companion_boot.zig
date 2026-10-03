@@ -110,6 +110,6 @@ test "a licensed companion is pinned eager, once, so no discovery round-trip is 
 
 test "ACP companion startup stays deferred despite JSON stdout discipline" {
     const positionals = [_][]const u8{"acp"};
-    const flags: args.Flags = .{ .yolo_flag = true, .positionals = .{ .items = @constCast(&positionals), .capacity = 0 } };
+    const flags: args.Flags = .{ .yolo_flag = true, .positionals = .fromOwnedSlice(@constCast(&positionals)) };
     try std.testing.expect(deferCompanion(flags, true));
 }

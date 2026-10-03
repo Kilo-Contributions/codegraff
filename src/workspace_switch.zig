@@ -154,7 +154,7 @@ pub fn resolve(arena: Allocator, entries: []const Entry, want: []const u8, curre
     var hits: std.ArrayList(Entry) = .empty;
     for (entries) |e| {
         const rank = matchRank(io, e, needle) orelse continue;
-        if (best == null or @intFromEnum(rank) > @intFromEnum(best.?)) {
+        if (best == null or @backingInt(rank) > @backingInt(best.?)) {
             best = rank;
             hits.clearRetainingCapacity();
             hits.append(arena, e) catch {};

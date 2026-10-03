@@ -57,7 +57,7 @@ pub fn verifyWithKey(arena: Allocator, token: []const u8, n_b64: []const u8, e_b
     switch (n.len) {
         inline 256, 384, 512 => |len| {
             if (sig.len != len) return error.BadSignature;
-            rsa.PKCS1v1_5Signature.verify(len, sig[0..len].*, token[0..dot2], key, Sha256) catch return error.BadSignature;
+            rsa.PKCS1v1_5Signature.verify(len, sig[0..len], token[0..dot2], key, Sha256) catch return error.BadSignature;
         },
         else => return error.UnknownSigningKey,
     }

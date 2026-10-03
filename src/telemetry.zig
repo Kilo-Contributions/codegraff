@@ -229,7 +229,7 @@ pub const Telemetry = struct {
         // asserts on exactly what will be sent: oversized proposes returned
         // above, so the utf8Prefix cap below can no longer truncate a genome.
         // The backend independently recomputes and rejects mismatches.
-        if (builtin.mode == .Debug and std.mem.eql(u8, signal, "propose") and admitted_text.len > 0 and prompt_sha.len > 0) {
+        if (builtin.mode == .debug and std.mem.eql(u8, signal, "propose") and admitted_text.len > 0 and prompt_sha.len > 0) {
             const fp = scoring.promptFingerprint(admitted_text);
             std.debug.assert(std.mem.eql(u8, &fp, prompt_sha));
         }
@@ -402,7 +402,7 @@ pub const Telemetry = struct {
             .headers = .{ .content_type = .{ .override = "application/json" } },
             .extra_headers = extra_headers,
         }) catch return false;
-        const status = @intFromEnum(response.status);
+        const status = @backingInt(response.status);
         return status >= 200 and status < 300;
     }
 

@@ -184,7 +184,7 @@ pub const WsClient = struct {
         while (true) {
             const h = try r.takeArray(2);
             const fin = (h[0] & 0x80) != 0;
-            const op: Opcode = @enumFromInt(@as(u4, @truncate(h[0] & 0x0f)));
+            const op: Opcode = @fromBackingInt(@intCast(@as(u4, @truncate(h[0] & 0x0f))));
             const masked = (h[1] & 0x80) != 0;
             var len: u64 = @as(u64, h[1] & 0x7f);
             if (len == 126) {
@@ -266,7 +266,7 @@ pub const WsClient = struct {
 
     fn sendFrame(self: *WsClient, op: Opcode, payload: []const u8) Error!void {
         var hdr: [14]u8 = undefined;
-        hdr[0] = 0x80 | @as(u8, @intFromEnum(op)); // FIN + opcode
+        hdr[0] = 0x80 | @as(u8, @backingInt(op)); // FIN + opcode
         var n: usize = 2;
         if (payload.len < 126) {
             hdr[1] = 0x80 | @as(u8, @intCast(payload.len));

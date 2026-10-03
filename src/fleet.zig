@@ -376,7 +376,7 @@ fn eliteGetTask(client: *std.http.Client, url: []const u8, aw: *Io.Writer.Alloca
         .response_writer = &aw.writer,
         .headers = .{ .user_agent = .{ .override = "simple-harness" } },
     }) catch return;
-    ok.* = @intFromEnum(res.status) == 200;
+    ok.* = @backingInt(res.status) == 200;
 }
 
 /// Select-arm deadline: bounds a best-effort HTTP GET (mirrors flushDeadline).

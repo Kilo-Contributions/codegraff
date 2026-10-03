@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const lean_release = optimize == .ReleaseFast or optimize == .ReleaseSmall;
+    const lean_release = optimize == .fast or optimize == .small;
 
     // `--version` string: stamped from `git describe` at build time so every
     // binary says which commit built it; `-Dversion=X.Y.Z` overrides (the
@@ -281,7 +281,7 @@ pub fn build(b: *std.Build) void {
                 .cpu_arch = .wasm32,
                 .os_tag = .freestanding,
             }),
-            .optimize = if (optimize == .Debug) .ReleaseSmall else optimize,
+            .optimize = if (optimize == .debug) .small else optimize,
             .strip = true,
         }),
     });

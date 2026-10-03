@@ -1,21 +1,39 @@
-# Zig 0.17 development-toolchain migration
+# Zig 0.17 migration
 
-**Status: implemented for v0.0.210.** CodeGraff is pinned to
-`0.17.0-dev.813+2153f8143` until a stable Zig 0.17 release is available. The
-full version is intentional: a moving `master` pin would make CI and releases
-non-reproducible.
+**Status: on the stable Zig 0.17.0 release.** CodeGraff moved to the
+development build `0.17.0-dev.813+2153f8143` for v0.0.210 and to the stable
+`0.17.0` release once it shipped. The exact version is pinned: a moving pin
+would make CI and releases non-reproducible.
 
 ## Select the toolchain
 
 ```sh
-zigup 0.17.0-dev.813+2153f8143
+zigup 0.17.0
 zig version
 ```
 
-The second command must print `0.17.0-dev.813+2153f8143`. The same exact value
-is used by `build.zig.zon`, the installer, CI, Windows CI, and release builds.
+The second command must print `0.17.0`. The same exact value is used by
+`build.zig.zon`, the installers, CI, Windows CI, and release builds. The CI
+installer (`scripts/install-zig-ci.py`) pins each platform's archive, `zig`
+binary and extracted-tree SHA-256.
 
-## Migration changes
+## From the development build to 0.17.0
+
+- The optimize modes are lowercase fields (`.debug`, `.safe`, `.fast`,
+  `.small`); `build.zig` and `builtin.mode` checks use them. The old names
+  remain only as deprecated declarations, and `-Doptimize=ReleaseFast` still
+  parses.
+- `zig fmt` rewrites renamed builtins, for example `@intFromEnum` to
+  `@backingInt`; the reformatted files are part of the move.
+- `std.crypto`: `X25519.KeyPair.generateDeterministic` and
+  `X25519.recoverPublicKey` no longer return error unions, and RSA PKCS#1 v1.5
+  `verify`/`concatVerify` take the signature by pointer.
+- The unmanaged `ArrayList` has a `pointer_stability` field, so tests build a
+  list from a slice with `.fromOwnedSlice`.
+- The `accord` and `http-zig` dependencies are pinned to their `zig-0.17.0`
+  branches, which carry the same changes.
+
+## From Zig 0.16 to the development build
 
 - Replaced the removed `b.build_root` Build API field.
 - Replaced the removed `**` array/string repetition operator with `@splat` and
@@ -52,6 +70,6 @@ trading away runtime speed.
 
 ## Rollback
 
-`zigup` keeps Zig 0.16 installed, so historical builds can still run with
-`zigup run 0.16.0 build`. Current development and releases must use the pinned
-Zig 0.17 development build above.
+`zigup` keeps older toolchains installed, so historical builds can still run
+with `zigup run 0.17.0-dev.813+2153f8143 build` (or `zigup run 0.16.0 build`
+for older tags). Current development and releases must use Zig 0.17.0.

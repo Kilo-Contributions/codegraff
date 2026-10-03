@@ -185,7 +185,7 @@ test "canonicalSlot: exact, first-word, and miss" {
 
 test "canonicalSlot: a word longer than the scratch buffer cannot match or overflow" {
     // Built with @splat rather than the `"a" ** 200` repeat operator: Zig
-    // 0.17.0-dev (what CI pins) rejects that form with "binary operator '*' has
+    // Zig 0.17 (what CI pins) rejects that form with "binary operator '*' has
     // whitespace on one side, but not the other", while 0.16 accepts it. @splat
     // over an array is already used elsewhere in this tree and compiles on both.
     const long: [200]u8 = @splat('a');

@@ -41,7 +41,7 @@ pub const Mode = enum(u8) {
 /// an explicit per-artifact approval, and `--learning-privacy local`,
 /// `GRAFF_LEARNING_PRIVACY=local`, `/privacy local`, `GRAFF_FLEET=off`, or
 /// `--no-telemetry` each turn contribution off.
-var mode_value: std.atomic.Value(u8) = .init(@intFromEnum(Mode.aggregate));
+var mode_value: std.atomic.Value(u8) = .init(@backingInt(Mode.aggregate));
 var approvals_mu: Io.Mutex = .init;
 const max_approved_templates = 64;
 var approved_hashes: [max_approved_templates][32]u8 = undefined;
@@ -64,7 +64,7 @@ pub const default_mode: Mode = .aggregate;
 
 pub fn init(cli_mode: ?Mode, env_value: ?[]const u8) void {
     const selected = cli_mode orelse if (env_value) |value| parse(value) orelse .local else default_mode;
-    mode_value.store(@intFromEnum(selected), .release);
+    mode_value.store(@backingInt(selected), .release);
     // Startup is single-threaded. Artifact approvals never persist between
     // processes, and a repo-controlled file cannot silently grant them.
     approved_len = 0;
@@ -72,13 +72,13 @@ pub fn init(cli_mode: ?Mode, env_value: ?[]const u8) void {
 }
 
 pub fn current() Mode {
-    return @enumFromInt(mode_value.load(.acquire));
+    return @fromBackingInt(@intCast(mode_value.load(.acquire)));
 }
 
 pub fn setMode(io: Io, mode: Mode) void {
     approvals_mu.lockUncancelable(io);
     defer approvals_mu.unlock(io);
-    mode_value.store(@intFromEnum(mode), .release);
+    mode_value.store(@backingInt(mode), .release);
     // A mode change invalidates content approvals. Raising the ceiling must
     // still ask for each artifact; lowering it revokes them immediately.
     approved_len = 0;
@@ -86,11 +86,11 @@ pub fn setMode(io: Io, mode: Mode) void {
 }
 
 pub fn allowsAggregate() bool {
-    return @intFromEnum(current()) >= @intFromEnum(Mode.aggregate);
+    return @backingInt(current()) >= @backingInt(Mode.aggregate);
 }
 
 pub fn allowsTemplateReview() bool {
-    return @intFromEnum(current()) >= @intFromEnum(Mode.templates);
+    return @backingInt(current()) >= @backingInt(Mode.templates);
 }
 
 pub fn allowsExamples() bool {
