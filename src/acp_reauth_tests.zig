@@ -18,7 +18,6 @@ fn root(a: std.mem.Allocator) Agent {
 
 fn parsedFailure(ctx: *anyopaque, a: std.mem.Allocator, text: []const u8) anyerror![]const u8 {
     const live: *LiveTurn = @ptrCast(@alignCast(ctx));
-    live.root.last_api_reauth = null;
     if (std.mem.eql(u8, text, "ok")) return "recovered";
     const parsed = try live.root.parseResponses(text);
     const failure = parsed.err;
@@ -37,7 +36,7 @@ fn prompt(a: std.mem.Allocator, text: []const u8) ![]const u8 {
 }
 
 fn dispatch(live: *LiveTurn) engine.Dispatch {
-    return .{ .turn = parsedFailure, .ctx = live, .error_message = LiveTurn.errorMessage, .error_recovery = LiveTurn.errorRecovery };
+    return .{ .turn = parsedFailure, .ctx = live, .bind_session = LiveTurn.bindSession, .error_message = LiveTurn.errorMessage, .error_recovery = LiveTurn.errorRecovery };
 }
 
 fn assertLogin(data: std.json.ObjectMap, id: []const u8, command: []const u8) !void {
@@ -112,7 +111,9 @@ test "typed reauth: v1 parsed HTTP and stream auth errors carry route-specific l
         try std.testing.expect(err.get("data") == null);
     }
     out.clearRetainingCapacity();
+    agent.last_api_reauth = recovery.forFailure(agent.provider, "invalid_token", "Unauthorized");
     try engine.handleLine(&d, a, &out.writer, try prompt(a, "ok"));
+    try std.testing.expect(agent.last_api_reauth == null);
     try std.testing.expect(std.mem.indexOf(u8, out.writer.buffered(), "end_turn") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.writer.buffered(), "reauth_required") == null);
 }
