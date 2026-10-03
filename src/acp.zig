@@ -99,6 +99,7 @@ fn liveAfter(ctx: *anyopaque, arena: Allocator, text: []const u8, prompt: ?std.j
 fn liveBind(ctx: *anyopaque, session_id: []const u8) void {
     const live: *LiveTurn = @ptrCast(@alignCast(ctx));
     live.session_id = session_id;
+    live.root.last_api_reauth = null;
 }
 
 /// Per-turn context meter: the live occupancy estimate against the model's
@@ -243,6 +244,7 @@ pub fn runAcpCommand(gpa: Allocator, io: Io, environ_map: anytype, root: *agent_
     var d: Dispatch = .{
         .turn = LiveTurn.run,
         .error_message = LiveTurn.errorMessage,
+        .error_recovery = LiveTurn.errorRecovery,
         .ctx = &live,
         .seed = @bitCast(util.unixMs(io)),
         .slash = liveSlash,
