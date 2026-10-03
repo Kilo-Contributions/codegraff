@@ -81,6 +81,42 @@ pub fn closesItem(gpa: std.mem.Allocator, frame: []const u8) bool {
     return ty == .string and std.mem.eql(u8, ty.string, ev);
 }
 
+/// ADR 0248: is the open output item a COMMENTARY message — the heads-up the
+/// model writes before its tool calls? The server holds that message open
+/// (no output_text.done, no output_item.done) until it releases the calls,
+/// which it sends together once all of them are composed. Silence after
+/// commentary is that composition, not a dead stream, so commentary prose
+/// must not tighten the budget. A final answer (or a message with no phase)
+/// still does. Fed WS frames and SSE `data:` lines alike.
+pub const Phase = struct {
+    commentary: bool = false,
+
+    pub fn feed(self: *Phase, gpa: std.mem.Allocator, frame: []const u8) void {
+        if (std.mem.indexOf(u8, frame, "response.output_item.") == null) return;
+        if (closesItem(gpa, frame)) {
+            self.commentary = false;
+            return;
+        }
+        var payload = std.mem.trim(u8, frame, " \t\r\n");
+        if (std.mem.startsWith(u8, payload, "data:")) payload = std.mem.trim(u8, payload["data:".len..], " \t");
+        var scratch = std.heap.ArenaAllocator.init(gpa);
+        defer scratch.deinit();
+        const v = std.json.parseFromSliceLeaky(std.json.Value, scratch.allocator(), payload, .{ .allocate = .alloc_always }) catch return;
+        if (v != .object) return;
+        const ty = v.object.get("type") orelse return;
+        if (ty != .string or !std.mem.eql(u8, ty.string, "response.output_item.added")) return;
+        const item = v.object.get("item") orelse return;
+        if (item != .object) return;
+        const it = item.object.get("type") orelse return;
+        const phase = item.object.get("phase") orelse {
+            self.commentary = false;
+            return;
+        };
+        self.commentary = it == .string and std.mem.eql(u8, it.string, "message") and
+            phase == .string and std.mem.eql(u8, phase.string, "commentary");
+    }
+};
+
 /// The turn's tokens-flowing signal: both producers, and the little bit of
 /// state producer 2 needs (which output item is the open whitelisted call).
 ///
@@ -98,6 +134,8 @@ pub const TokenSignal = struct {
     /// ADR 0241: prose is streaming in an item that has not closed yet. The WS
     /// read budget is tightened only while this holds.
     open: bool = false,
+    /// ADR 0248: commentary prose flows without tightening (see Phase).
+    phase: Phase = .{},
 
     /// True when a frame proves visible prose is flowing.
     pub fn flowing(self: *TokenSignal, gpa: std.mem.Allocator, frame: []const u8) bool {
@@ -105,11 +143,13 @@ pub const TokenSignal = struct {
         return self.argProse(gpa, frame);
     }
 
-    /// Fed every frame. True when this frame is prose, which opens the gate;
-    /// a frame that closes an output item shuts it again (ADR 0241).
+    /// Fed every frame. True when this frame is prose, which opens the gate
+    /// unless it is commentary (ADR 0248); a frame that closes an output item
+    /// shuts it again (ADR 0241).
     pub fn step(self: *TokenSignal, gpa: std.mem.Allocator, frame: []const u8) bool {
+        self.phase.feed(gpa, frame);
         if (self.flowing(gpa, frame)) {
-            self.open = true;
+            if (!self.phase.commentary) self.open = true;
             return true;
         }
         if (closesItem(gpa, frame)) self.open = false;
@@ -252,4 +292,45 @@ test "ADR 0241: closesItem reads WS frames and SSE lines, not prose that quotes 
     try std.testing.expect(!closesItem(gpa, "{\"type\":\"response.output_text.delta\",\"delta\":\"response.output_item.done\"}"));
     try std.testing.expect(!closesItem(gpa, "event: response.output_text.delta"));
     try std.testing.expect(!closesItem(gpa, "event: content_block_stop"));
+}
+
+test "ADR 0248: commentary prose flows without tightening; a final answer still tightens" {
+    const gpa = std.testing.allocator;
+    var sig: TokenSignal = .{};
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.output_item.added\",\"output_index\":1,\"item\":{\"type\":\"message\",\"phase\":\"commentary\"}}"));
+    try std.testing.expect(sig.phase.commentary);
+    // Visible prose (TTFT and the trace still see it) but the gate stays shut.
+    try std.testing.expect(sig.step(gpa, "{\"type\":\"response.output_text.delta\",\"output_index\":1,\"delta\":\"Found the bugs; fixing them.\"}"));
+    try std.testing.expect(!sig.open);
+    // The server closes the message only when it releases the composed calls.
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.output_item.done\",\"output_index\":1,\"item\":{\"type\":\"message\",\"phase\":\"commentary\"}}"));
+    try std.testing.expect(!sig.phase.commentary);
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.output_item.added\",\"output_index\":2,\"item\":{\"type\":\"message\",\"phase\":\"final_answer\"}}"));
+    try std.testing.expect(sig.step(gpa, "{\"type\":\"response.output_text.delta\",\"output_index\":2,\"delta\":\"Done.\"}"));
+    try std.testing.expect(sig.open);
+}
+
+test "ADR 0248: a message without a phase, and attempt_completion prose, tighten as before" {
+    const gpa = std.testing.allocator;
+    var sig: TokenSignal = .{};
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"message\"}}"));
+    try std.testing.expect(sig.step(gpa, "{\"type\":\"response.output_text.delta\",\"output_index\":0,\"delta\":\"hi\"}"));
+    try std.testing.expect(sig.open);
+    var arg: TokenSignal = .{};
+    try std.testing.expect(!arg.step(gpa, "{\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"name\":\"attempt_completion\"}}"));
+    try std.testing.expect(arg.step(gpa, "{\"type\":\"response.function_call_arguments.delta\",\"output_index\":0,\"delta\":\"{\\\"result\\\":\\\"ok\"}"));
+    try std.testing.expect(arg.open);
+}
+
+test "ADR 0248: Phase reads SSE data lines and ignores prose that quotes the phase" {
+    const gpa = std.testing.allocator;
+    var ph: Phase = .{};
+    ph.feed(gpa, "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"message\",\"phase\":\"commentary\"}}");
+    try std.testing.expect(ph.commentary);
+    ph.feed(gpa, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"response.output_item.added commentary\"}");
+    try std.testing.expect(ph.commentary);
+    ph.feed(gpa, "data: {\"type\":\"response.output_item.done\",\"output_index\":0}");
+    try std.testing.expect(!ph.commentary);
+    ph.feed(gpa, "data: {\"type\":\"response.output_item.added\",\"output_index\":1,\"item\":{\"type\":\"function_call\",\"name\":\"edit_file\"}}");
+    try std.testing.expect(!ph.commentary);
 }
