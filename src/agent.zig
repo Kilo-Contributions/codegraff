@@ -327,6 +327,7 @@ pub const Agent = struct {
     pub fn runTurn(self: *Agent) anyerror![]const u8 {
         defer @import("jev_effort_state.zig").finishTurn(self);
         errdefer self.jev_effort_pending.invalidate(self.io);
+        @import("jev_auto.zig").beginTurn(self); // ADR 0246: Jev picks this turn's effort; finishTurn puts it back
         self.async_tools_armed = !self.sub and self.eval_cmd == null;
         defer self.async_tools_armed = false;
         defer @import("agent_async_tools.zig").reset(self);

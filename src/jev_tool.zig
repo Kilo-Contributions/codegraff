@@ -39,6 +39,7 @@ const State = struct {
 var state: State = .{};
 
 pub fn configure(env: anytype) void {
+    @import("jev_auto.zig").setEnabled(env.get("GRAFF_JEV_AUTO"));
     // Only a persisted Codegraff login may supply the gateway credential.
     // The provider's own key and any upstream-specific environment key are ignored.
     state.key = "";
@@ -209,10 +210,14 @@ fn noteGatewayUsage(io: Io, tally: *pricing.CostTally, arena: Allocator, raw: []
 }
 
 fn fetch(ctx: ToolCtx, arena: Allocator, body: []const u8) ![]const u8 {
+    return fetchWithin(ctx.gpa, ctx.io, ctx.client, arena, body, 10_000);
+}
+
+fn fetchWithin(gpa: Allocator, io: Io, client: *std.http.Client, arena: Allocator, body: []const u8, timeout_ms: u32) ![]const u8 {
     const bearer = try gatewayBearer(arena, state.key);
     var completed = false;
-    defer if (!completed) pricing.g_cost.failedWithoutUsage(ctx.io, 1);
-    const res = try buffered_https.post(ctx.gpa, arena, ctx.io, ctx.client, endpoint, bearer, body, 10_000);
+    defer if (!completed) pricing.g_cost.failedWithoutUsage(io, 1);
+    const res = try buffered_https.post(gpa, arena, io, client, endpoint, bearer, body, timeout_ms);
     switch (res.status) {
         200 => {},
         401, 403 => return error.JevUnauthorized,
@@ -220,9 +225,44 @@ fn fetch(ctx: ToolCtx, arena: Allocator, body: []const u8) ![]const u8 {
         429 => return error.JevRateLimited,
         else => return error.JevUnavailable,
     }
-    noteGatewayUsage(ctx.io, &pricing.g_cost, arena, res.body);
+    noteGatewayUsage(io, &pricing.g_cost, arena, res.body);
     completed = true;
     return res.body;
+}
+
+/// ADR 0246: the turn-level selection jev_auto.zig makes before a root turn's
+/// first request. Same login, circuit and billing as the tool; the summary is
+/// built locally and redacted. Null when Jev is unavailable or fails, which
+/// opens the circuit like a failed tool call.
+pub fn chooseForTurn(gpa: Allocator, io: Io, client: *std.http.Client, provider: Provider, task: []const u8, timeout_ms: u32) ?ReasoningEffort {
+    if (!available(provider) or task.len == 0) return null;
+    var temp = std.heap.ArenaAllocator.init(gpa);
+    defer temp.deinit();
+    const arena = temp.allocator();
+    var obj: std.json.ObjectMap = .empty;
+    obj.put(arena, "task", .{ .string = task[0..@min(task.len, 512)] }) catch return null;
+    const body = makeBody(arena, .{ .object = obj }, provider) catch return null;
+    state.mu.lockUncancelable(io);
+    defer state.mu.unlock(io);
+    if (state.key.len == 0 or state.down.load(.acquire)) return null;
+    _ = state.attempts.fetchAdd(1, .acq_rel);
+    const raw = switch (state.backend) {
+        .mock => mockResponse(arena),
+        .mock_fail => error.JevUnavailable,
+        .gateway => fetchWithin(gpa, io, client, arena, body, timeout_ms),
+    } catch |err| {
+        // A turn that ended first cancels its pick; that is not Jev failing.
+        if (!std.mem.eql(u8, @errorName(err), "Canceled")) {
+            state.down.store(true, .release);
+            state.refresh.store(true, .release);
+        }
+        return null;
+    };
+    return selectedEffort(arena, provider, raw) catch {
+        state.down.store(true, .release);
+        state.refresh.store(true, .release);
+        return null;
+    };
 }
 
 fn selectedEffort(arena: Allocator, provider: Provider, raw: []const u8) !ReasoningEffort {
