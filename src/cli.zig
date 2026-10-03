@@ -24,6 +24,9 @@ pub const changelog_text =
     \\What's new
     \\──────────
     \\0.0.302.18
+    \\  • graff tui launches the separate fullscreen client; terminals get the line REPL
+    \\  • shorter turns: one-line heads-ups, no recomputed answers, fewer false stalls
+    \\  • instructions cache across repos; the shell names python3's version
     \\  • clearer session lists and cross-project resume
     \\  • paste warnings, MCP recovery, and catalog-tolerant model selection
     \\
