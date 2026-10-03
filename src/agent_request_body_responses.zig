@@ -20,8 +20,9 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     // stream is required (we buffer + parse the SSE); reasoning items return
     // encrypted and are passed back per turn.
     const is_codex = std.mem.eql(u8, self.provider.id, "codex");
+    const repo = try @import("repo_context.zig").split(self, try schemaAwarePrompt(self)); // ADR 0243
     try s.objectField("instructions");
-    try s.write(try schemaAwarePrompt(self));
+    try s.write(repo.instructions);
     // Sticky cache partition from the first request. xAI's key is a true
     // per-conversation routing id. OpenAI/Codex instead share deterministic
     // prefix lanes so repeated workflow roles can reuse the stable prompt.
@@ -57,6 +58,7 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
     // this item server-side, so only a full anchor writes it.
     if (!chain and explicit_cache) try writeCacheAnchor(s);
     const from = if (chain) self.codex_sent_upto else 0;
+    if (from == 0 and !self.ws_prewarm and repo.context.len != 0) try @import("repo_context.zig").writeItem(s, repo.context);
     if (!self.ws_prewarm) for (self.messages.items[from..]) |m| try @import("session_wake.zig").writeWireInput(s, m, self.provider.model); // prewarm: NO input items; turn 1 chains onto the warmup id
     try s.endArray();
     if (tools) |t| {
