@@ -81,7 +81,7 @@ pub fn ensureRootTools(self: *Agent, kind: Provider.Kind) !void {
         const snapshot = try registry.snapshotTools(self.arena);
         break :blk if (self.sub) try surface.filterWorkerMcp(self.arena, snapshot) else snapshot;
     } else &.{};
-    dest.* = try schema.renderRootTools(self.arena, kind, specs, connected);
+    dest.* = try @import("shell_tool.zig").withPython(self.arena, try schema.renderRootTools(self.arena, kind, specs, connected)); // ADR 0242
 }
 
 test "invalidate without ensure leaves toolsJson empty; rebuild is a JSON array" {
