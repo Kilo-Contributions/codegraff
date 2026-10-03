@@ -266,6 +266,7 @@ record only when you need the evidence or the edge cases.
 | [0237](0237-deepseek-thinks-at-its-low-level-by-default.md) | DeepSeek's default effort (`medium`) sends `reasoning_effort: low` with thinking enabled; `/effort low` still turns thinking off (ADR 0054), and `high` and above are unchanged. |
 | [0238](0238-rlm-binds-keep-the-whole-mcp-result.md) | An MCP call inside an rlm script binds the whole result; `print()` shows the slim view (each item of an `each()` bind cut on its own), `project(x, field)` reads any field (`n`/`latest_author` through a comment list's fold), and `write_file` saves the whole result; inside rlm, `read_tool_result("tr_N")` with no range binds a stored result whole. |
 | [0239](0239-heads-ups-are-one-line-and-a-computed-answer-is-its-own-proof.md) | Heads-ups are one short line in the same response as their tool calls; a script that computes an answer is its own proof (no second derivation); `read_file` is required only before editing an existing file. |
+| [0240](0240-a-slim-view-names-its-fields-and-one-script-fetches-and-computes.md) | A slim view names the whole value's fields (`; fields: ...` on rlm print and direct-call handle markers); the slim rule says to compute over results inside the same rlm script; an unbound host call or `each()` in rlm prints its result. |
 
 ## When to write one
 
