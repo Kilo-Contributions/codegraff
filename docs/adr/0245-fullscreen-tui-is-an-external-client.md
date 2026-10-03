@@ -1,4 +1,4 @@
-# 0240. Fullscreen TUI is an external client
+# 0245. Fullscreen TUI is an external client
 
 Status: accepted 2026-10-02
 

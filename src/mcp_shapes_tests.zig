@@ -60,6 +60,7 @@ test "a direct call's slim result names a handle holding the full payload; with 
     defer gpa.free(kept);
     try std.testing.expect(std.mem.indexOf(u8, kept, "ISS-1") != null);
     try std.testing.expect(std.mem.indexOf(u8, kept, "\"state\"") == null); // dropped from the slim view...
+    try std.testing.expect(std.mem.indexOf(u8, kept, "; fields: id, title, description, state;") != null); // ...but named (ADR 0240)
     const at = std.mem.indexOf(u8, kept, "handle tr_") orelse return error.MissingHandle;
     const id_end = std.mem.indexOfScalarPos(u8, kept, at + 7, ' ') orelse return error.MissingHandle;
     const rel = try std.fmt.allocPrint(gpa, ".graff/tool-results/{s}.txt", .{kept[at + 7 .. id_end]});
@@ -184,4 +185,20 @@ test "the slim rule says an rlm bind keeps every field (ADR 0238)" {
     try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "keeps every field") != null);
     try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "binds stay slimmed") == null);
     try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "write_file") != null);
+}
+
+test "fieldList names a list result's fields, and an each() bind's inner rows (ADR 0240)" {
+    const gpa = std.testing.allocator;
+    const rows = shapes.fieldList(gpa, "[{\"id\":\"ISS-1\",\"priority\":2,\"estimate\":3}]") orelse return error.NoFields;
+    defer gpa.free(rows);
+    try std.testing.expectEqualStrings("id, priority, estimate", rows);
+    const nested = shapes.fieldList(gpa, "[[{\"body\":\"b\",\"author\":{\"name\":\"ada\"}}],[]]") orelse return error.NoFields;
+    defer gpa.free(nested);
+    try std.testing.expectEqualStrings("body, author", nested);
+    try std.testing.expect(shapes.fieldList(gpa, "[1,2,3]") == null);
+}
+
+test "the slim rule says to compute inside the same script (ADR 0240)" {
+    try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "run the computation inside the script") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "write_file(\"issues.json\", issues)") != null);
 }

@@ -358,6 +358,30 @@ pub fn foldField(item: Value, field: []const u8) ?Value {
     return .{ .string = authorName(items[latestIndex(items)]) orelse "" };
 }
 
+/// ADR 0240: the field names of a list result's first row (or of an each()
+/// bind's first item's first row), comma-separated and capped, so a slim view
+/// names what the whole value holds. Null when the payload has no object rows.
+pub fn fieldList(alloc: Allocator, payload: []const u8) ?[]u8 {
+    const parsed = std.json.parseFromSlice(Value, alloc, std.mem.trim(u8, payload, " \t\r\n"), .{}) catch return null;
+    defer parsed.deinit();
+    var items = arrayItems(parsed.value) orelse return null;
+    if (items.len > 0 and items[0] != .object) items = arrayItems(items[0]) orelse return null;
+    if (items.len == 0 or items[0] != .object) return null;
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    var it = items[0].object.iterator();
+    var n: usize = 0;
+    while (it.next()) |e| : (n += 1) {
+        if (n == 24 or aw.writer.buffered().len > 280) {
+            aw.writer.writeAll(", ...") catch return null;
+            break;
+        }
+        if (n > 0) aw.writer.writeAll(", ") catch return null;
+        aw.writer.writeAll(e.key_ptr.*) catch return null;
+    }
+    return aw.toOwnedSlice() catch null;
+}
+
 /// Remember the fat payload, then replace it with the learnt cut when one
 /// exists. `text` is owned by `gpa`.
 pub fn takeSlim(gpa: Allocator, text: []u8) []u8 {
@@ -377,7 +401,9 @@ pub fn takeSlimKept(gpa: Allocator, keep_in: ?tool_handle.Target, text: []u8) []
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
     const path = tool_handle.keep(arena_state.allocator(), target, text) orelse return cut;
-    const out = std.fmt.allocPrint(gpa, "{s}\n[slimmed from {d} bytes; the full result is handle {s} (read_tool_result reads any dropped field; in rlm, x = read_tool_result(\"{s}\") binds it whole for project() or write_file())]", .{ cut, text.len, tool_handle.idOf(path), tool_handle.idOf(path) }) catch return cut;
+    const fields = fieldList(gpa, text);
+    defer if (fields) |f| gpa.free(f);
+    const out = std.fmt.allocPrint(gpa, "{s}\n[slimmed from {d} bytes{s}{s}; the full result is handle {s} (read_tool_result reads any dropped field; in rlm, x = read_tool_result(\"{s}\") binds it whole for project() or write_file())]", .{ cut, text.len, if (fields != null) "; fields: " else "", fields orelse "", tool_handle.idOf(path), tool_handle.idOf(path) }) catch return cut;
     gpa.free(cut);
     return out;
 }
@@ -520,7 +546,8 @@ pub fn annotate(gpa: Allocator, arena: Allocator, io: Io, cwd: ?[]const u8, text
 /// where the model first meets the tools. Unsaid, the model wrote code for
 /// the full rows, failed on the first missing field, and spent calls finding
 /// the real shape. ADR 0238: rlm binds keep every field; only print() slims.
-pub const slim_rule = "\nLarge list results from these tools are shown slimmed: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. A direct call's result names a handle holding the full result. In rlm a bind keeps every field: print() shows the slim view, project(x, field) reads any field, and write_file(\"f.json\", x) saves the whole result for a script.";
+/// ADR 0240: computing over the results happens in the same script.
+pub const slim_rule = "\nLarge list results from these tools are shown slimmed: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. A direct call's result names a handle holding the full result. In rlm a bind keeps every field: print() shows the slim view, project(x, field) reads any field, and write_file(\"f.json\", x) saves the whole result for a script. To compute over results in the same call, save them and run the computation inside the script: issues = tool(); write_file(\"issues.json\", issues); r = bash(\"python3 - <<'EOF'\\n...\\nEOF\"); print(r).";
 
 pub fn lookup(io: Io, name: []const u8) ?[]const u8 {
     store.mu.lockUncancelable(io);

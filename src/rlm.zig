@@ -296,9 +296,16 @@ fn evalStmt(
     printed: *std.ArrayList(u8),
     bind_out: *std.ArrayList(Binding),
 ) !?ToolOutput {
-    switch (try rlm_mcp.evalEach(ctx, arena, stmt, binds, bind_out, runHost)) {
+    // ADR 0240: an each() with no name to bind prints its result.
+    const trimmed = std.mem.trim(u8, stmt, " \t");
+    const bare_each = std.mem.startsWith(u8, trimmed, "each(");
+    const each_stmt = if (bare_each) try std.fmt.allocPrint(arena, "_ = {s}", .{trimmed}) else stmt;
+    switch (try rlm_mcp.evalEach(ctx, arena, each_stmt, binds, bind_out, runHost)) {
         .miss => {},
-        .ok => return null,
+        .ok => {
+            if (bare_each) try echoText(ctx, printed, maybeSlim(arena, bind_out.items[bind_out.items.len - 1].text));
+            return null;
+        },
         .fail => |e| return e,
     }
     switch (try rlm_reduce.evalStmt(arena, ctx.gpa, stmt, binds, bind_out)) {
@@ -313,7 +320,9 @@ fn evalStmt(
         const out = cached orelse runHost(ctx, c);
         defer if (cached == null) ctx.gpa.free(out.text);
         if (order.stopped(out)) return try order.copy(ctx.gpa, out);
-        if (assignName(stmt)) |nm| try bind_out.append(arena, .{ .name = try arena.dupe(u8, nm), .text = try arena.dupe(u8, out.text) });
+        if (assignName(stmt)) |nm| {
+            try bind_out.append(arena, .{ .name = try arena.dupe(u8, nm), .text = try arena.dupe(u8, out.text) });
+        } else try echoText(ctx, printed, maybeSlim(arena, out.text)); // ADR 0240: an unbound call prints its result
         return null;
     }
     if (printArgs(stmt)) |inner| {
@@ -330,6 +339,11 @@ fn evalStmt(
         return null;
     }
     return .{ .text = try std.fmt.allocPrint(ctx.gpa, "rlm: unsupported statement: {s}\n{s}", .{ stmt, statement_forms }), .is_error = true };
+}
+
+fn echoText(ctx: ToolCtx, printed: *std.ArrayList(u8), text: []const u8) !void {
+    if (printed.items.len > 0) try printed.append(ctx.gpa, '\n');
+    try printed.appendSlice(ctx.gpa, text);
 }
 
 /// What an unsupported statement could have been (ADR 0236).
@@ -381,7 +395,7 @@ fn renderPrintPart(ctx: ToolCtx, arena: Allocator, inner: []const u8, binds: []c
             status.* = try order.copy(ctx.gpa, out);
             return "";
         }
-        if (mcp_shapes.slim(arena, out.text)) |s| return slimNote(arena, s, out.text.len);
+        if (mcp_shapes.slim(arena, out.text)) |s| return slimNote(arena, s, out.text);
         return try arena.dupe(u8, out.text);
     }
     // Preserve the historical missing-bind echo, but do not pretend an
@@ -398,13 +412,15 @@ fn unsupportedPrint(ctx: ToolCtx, status: *?ToolOutput) ![]const u8 {
 
 fn maybeSlim(arena: Allocator, payload: []const u8) []const u8 {
     const cut = mcp_shapes.slim(arena, payload) orelse return payload;
-    return slimNote(arena, cut, payload.len);
+    return slimNote(arena, cut, payload);
 }
 
 /// ADR 0238: a printed cut says it is one. Unsaid, a model that printed a
-/// file it had just saved took the view for the file's contents.
-pub fn slimNote(arena: Allocator, cut: []const u8, full: usize) []const u8 {
-    return std.fmt.allocPrint(arena, "{s}\n[slim view of a {d}-byte value; the value keeps every field: project(x, field) reads one, write_file saves it whole]", .{ cut, full }) catch cut;
+/// file it had just saved took the view for the file's contents. ADR 0240:
+/// it names the fields the whole value has, so project() needs no probe.
+pub fn slimNote(arena: Allocator, cut: []const u8, full: []const u8) []const u8 {
+    const fields = mcp_shapes.fieldList(arena, full);
+    return std.fmt.allocPrint(arena, "{s}\n[slim view of a {d}-byte value{s}{s}; the value keeps every field: project(x, field) reads one, write_file saves it whole]", .{ cut, full.len, if (fields != null) "; fields: " else "", fields orelse "" }) catch cut;
 }
 
 fn observe(ctx: ToolCtx, call: spec_ptc.Call, out: ToolOutput) !void {

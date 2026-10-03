@@ -386,6 +386,16 @@ def run_scenario(
         return ctx_k * 1000
 
 
+def is_repo_context(item: object) -> bool:
+    """ADR 0243's developer item: the repo's instructions section and layout."""
+    if not (isinstance(item, dict) and item.get("role") == "developer"):
+        return False
+    content = item.get("content")
+    first = content[0] if isinstance(content, list) and content else None
+    text = first.get("text", "") if isinstance(first, dict) else ""
+    return isinstance(text, str) and text.startswith(("# Project instructions (from ", "# Project layout ("))
+
+
 def assert_midturn_requests(mock: CodexMock) -> None:
     requests = mock.recorded_requests()
     # Four, since #391: the real turn, the pre-compaction note-to-self, the
@@ -527,12 +537,20 @@ def assert_midturn_requests(mock: CodexMock) -> None:
 
     final_input = final.body.get("input")
     # ADR 0221: where loaded tools ride additional_tools items, a compacted
-    # history re-announces them next to the handoff; nothing else may ride along.
+    # history re-announces them next to the handoff. ADR 0243: a full
+    # re-anchor leads with the repo context (project instructions, layout) as
+    # one developer item. Nothing else may ride along.
     handoff_items = (
-        [item for item in final_input if not (isinstance(item, dict) and item.get("type") == "additional_tools")]
+        [
+            item
+            for item in final_input
+            if not (isinstance(item, dict) and (item.get("type") == "additional_tools" or is_repo_context(item)))
+        ]
         if isinstance(final_input, list)
         else []
     )
+    if isinstance(final_input, list) and any(is_repo_context(item) for item in final_input[1:]):
+        raise AssertionError(f"midturn: the repo context item must lead the re-anchor: {final_input!r}")
     final_texts = (
         [text for item in final_input if (text := user_text(item)) is not None]
         if isinstance(final_input, list)

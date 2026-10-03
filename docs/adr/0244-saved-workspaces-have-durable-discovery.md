@@ -1,4 +1,4 @@
-# 0239. Saved workspaces have durable device-local discovery
+# 0244. Saved workspaces have durable device-local discovery
 
 Status: accepted 2026-10-02
 
