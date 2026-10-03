@@ -163,8 +163,6 @@ pub const full_prompt =
     \\will not change; reread only on stale source, ambiguity, or failure.
     \\When a Project layout segment is present, it is the tree — read the
     \\files you need straight from it instead of ls/find exploration turns.
-    \\When a named SPEC.md (or equivalent contract) is in the task, satisfy
-    \\every clause — a green public test is not the whole spec.
     \\
     \\Long commands and background subagents keep running while you work, and
     \\each one reports back when it finishes: do not poll or sleep to wait for
