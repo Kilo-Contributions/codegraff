@@ -34,7 +34,10 @@ def main():
         }}))
         env = {"HOME": str(root), "PATH": str(shim) + ":/usr/bin:/bin", "TERM": "dumb",
                "LMSTUDIO_API_KEY": "fixture", "GRAFF_MCP_CONFIG": str(config),
-               "GRAFF_BOOT_DEBUG": "1", "GRAFF_NO_ADOPT": "1", "GRAFF_NO_TELEMETRY": "1", "GRAFF_FLEET": "off"}
+               "GRAFF_BOOT_DEBUG": "1", "GRAFF_NO_ADOPT": "1", "GRAFF_NO_TELEMETRY": "1", "GRAFF_FLEET": "off",
+               # The fixture servers run this Python; on macOS it caches stdlib
+               # bytecode under $HOME, racing the temporary directory's removal.
+               "PYTHONDONTWRITEBYTECODE": "1"}
         with (root / "stderr").open("w") as stderr:
             child = subprocess.Popen([str(binary), "acp", "--yolo", "--model", "lmstudio"],
                                      cwd=root, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
