@@ -306,12 +306,16 @@ test "Chat terminal marker keeps delayed usage and completes silent trailer; non
 }
 
 /// ADR 0241 on SSE: a Responses stream whose prose item closes, then thinks in
-/// silence past the tightened budget before it completes.
+/// silence past the tightened budget before it completes. ADR 0248 reuses it
+/// with a commentary heads-up the server holds open through the think.
 const ResponsesSrv = struct {
     const delta = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n";
     const item_done = "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"message\"}}\n\n";
+    const commentary_added = "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"message\",\"phase\":\"commentary\"}}\n\n";
     const completed = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r1\",\"output\":[]}}\n\n";
     const think_ms = 1000;
+    var head: []const u8 = delta ++ item_done;
+    var tail: []const u8 = completed;
     fn run(io: Io, server: *std.Io.net.Server, done: *std.atomic.Value(bool)) void {
         const c = while (true) {
             const conn = server.accept(io) catch return;
@@ -321,17 +325,20 @@ const ResponsesSrv = struct {
         defer c.close(io);
         var wbuf: [1024]u8 = undefined;
         var sw = std.Io.net.Stream.Writer.init(c, io, &wbuf);
-        sw.interface.writeAll("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n" ++ delta ++ item_done) catch return;
+        sw.interface.writeAll("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n") catch return;
+        sw.interface.writeAll(head) catch return;
         sw.interface.flush() catch return;
         io.sleep(.fromMilliseconds(think_ms), .awake) catch return;
-        sw.interface.writeAll(completed) catch return;
+        sw.interface.writeAll(tail) catch return;
         sw.interface.flush() catch return;
         while (!done.load(.acquire)) io.sleep(.fromMilliseconds(10), .awake) catch return;
     }
 };
 
-test "ADR 0241: on the Responses SSE wire a closed prose item gets the full budget back" {
+fn thinkPastTightenedBudget(head: []const u8, tail: []const u8) !void {
     if (builtin.os.tag == .windows) return error.SkipZigTest;
+    ResponsesSrv.head = head;
+    ResponsesSrv.tail = tail;
     const gpa = std.testing.allocator;
     const io = std.testing.io;
 
@@ -380,5 +387,15 @@ test "ADR 0241: on the Responses SSE wire a closed prose item gets the full budg
     defer gpa.free(body);
     try std.testing.expect(nowMs(io) - t0 >= ResponsesSrv.think_ms - 100); // the think really happened
     try std.testing.expect(std.mem.indexOf(u8, body, "response.completed") != null);
-    try std.testing.expect(agent.partial_text.items.len != 0); // prose did flow, so the budget had tightened
+    try std.testing.expect(agent.partial_text.items.len != 0); // prose did flow
+}
+
+test "ADR 0241: on the Responses SSE wire a closed prose item gets the full budget back" {
+    try thinkPastTightenedBudget(ResponsesSrv.delta ++ ResponsesSrv.item_done, ResponsesSrv.completed);
+}
+
+// ADR 0248 on SSE: the server holds a commentary heads-up open through the
+// compose; commentary prose must not tighten, so the think finishes.
+test "ADR 0248: on the Responses SSE wire a commentary heads-up held open keeps the full budget" {
+    try thinkPastTightenedBudget(ResponsesSrv.commentary_added ++ ResponsesSrv.delta, ResponsesSrv.item_done ++ ResponsesSrv.completed);
 }

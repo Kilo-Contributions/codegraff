@@ -563,7 +563,7 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
         if (sig.step(gpa, fbuf.items) and !text_seen) {
             text_seen = true;
             self.traceFirstToken();
-            if (self.tracer) |tr| tr.note("ws", "first output text — tightening stall budget");
+            if (self.tracer) |tr| tr.note("ws", if (sig.open) "first output text — tightening stall budget" else "first output text — commentary, budget unchanged");
         }
 
         // Wrap the ws frame as an SSE data: line so parseResponses/isStreamEnd

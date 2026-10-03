@@ -233,6 +233,7 @@ pub fn postStreamWithClient(self: *Agent, client: *std.http.Client, body: []cons
     var got_body = false; // #134: true once response bytes have been received (gates the post-completion read-error handling)
     var saw_done = false; // #133: true only once the provider's terminal event landed — a close before this is a drop, not a clean end
     var prose_open = false; // #56/ADR 0241: prose is streaming in an item that has not closed
+    var phase: @import("agent_ws_signal.zig").Phase = .{}; // ADR 0248: commentary does not tighten
     defer line.deinit();
 
     stream: while (true) {
@@ -316,7 +317,8 @@ pub fn postStreamWithClient(self: *Agent, client: *std.http.Client, body: []cons
         try full.writer.writeByte('\n');
         got_body = true; // #134: response bytes are in `full`; a later read error is a clean close
         self.printDelta(line.writer.buffered());
-        if (self.partial_text.items.len > prose_len) prose_open = true else if (@import("agent_ws_signal.zig").closesItem(gpa, line.writer.buffered())) prose_open = false;
+        phase.feed(gpa, line.writer.buffered());
+        if (self.partial_text.items.len > prose_len) prose_open = !phase.commentary else if (@import("agent_ws_signal.zig").closesItem(gpa, line.writer.buffered())) prose_open = false;
         if (main_mod.g_thinking_fold_request) {
             main_mod.g_thinking_fold_request = false;
             sink.emit(self.io, .thinking_fold_toggle);
