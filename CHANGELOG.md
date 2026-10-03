@@ -10,6 +10,29 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.19
+
+### Speed and cost
+
+- Tool results come back inline up to 64 KiB instead of 16 KiB, so a whole-file read of an ordinary module arrives in one piece instead of as a handle preview the model pages through. The threshold is still clamped to half the context window, `GRAFF_TOOL_HANDLE_BYTES` still overrides it, and the codedb small-read exemption follows the same number (ADR 0251, #1502).
+- A commentary heads-up no longer tightens the stall budget. The server holds such a heads-up open while the model composes a batch of tool calls and releases the calls together, so a long compose was cut off as a stall and generated again. Final-answer prose still tightens the budget, on the WebSocket and SSE readers alike (ADR 0248, #1497).
+- A spec task ends at its own tests. The work note no longer says a green public test is not the whole spec, a sentence that made the model write a second, ad-hoc check script after the task's tests passed (ADR 0249, #1498).
+- Logged in to Codegraff, graff asks Jev for a turn's effort itself, alongside the turn's first request, when the turn starts at the session's default effort on a model Jev serves; GPT-6 on the ChatGPT-plan sign-in is now one of them. The pick applies from the turn's next request, holds for that turn only, and never overrides an effort you chose. Jev sees a summary built locally with code, paths, file names and identifiers removed. `GRAFF_JEV_AUTO=0` turns it off (ADR 0246, #1494).
+
+### Terminal
+
+- Parked background work is named above the prompt: `↻ waiting on <work> — graff continues when it finishes` while a shell command or agent whose exit wakes the session runs, and `↻ <command> exited 0 — continuing` when it resumes. Before, the yield printed a generic line and a parked turn read as graff stopping mid-task (ADR 0247, #1496).
+
+### Pull requests
+
+- PR publication is no longer gated. `gh pr create` and `gh pr ready` run like any other command: no local-check, head-CI or claim-review preflight, no wait on pending CI, and a draft completes like any other task. A mutation of a branch, issue or PR that another live session has claimed is still refused. Sessions saved by earlier versions still load, and their recorded publication state is ignored (ADR 0250, #1500).
+
+### Build and tests
+
+- graff builds with the stable Zig 0.17.0 release: build.zig.zon, CI, `install.sh` and the cloud-agent installer all pin it. `graff learn init` no longer hangs on Windows (#1493).
+- `graff learn init` pins evaluator programs up to 256 MiB, which leaves room for the Linux debug build (#1501).
+- Two integration tests no longer race the removal of their temporary directories (#1499).
+
 ## v0.0.302.18
 
 ### Terminal UI
