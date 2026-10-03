@@ -235,6 +235,7 @@ pub const StandingWork = struct {
     todos: []const StandingTodo = &.{},
     /// `/image` or Ctrl-V staged a picture for the next send.
     image: bool = false,
+    waiting: []const u8 = "", // ADR 0247: live work whose exit resumes the session
 };
 
 /// Everything the status line printed before a human turn actually says.

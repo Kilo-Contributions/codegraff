@@ -10,6 +10,7 @@ const Io = std.Io;
 
 const Agent = @import("agent.zig").Agent;
 const tool_pulse = @import("tool_pulse.zig");
+const style = &@import("ansi.zig").style;
 
 /// Per-turn inner-loop cap. 0 = unlimited (the production default).
 pub var max_turn_model_calls: u64 = 0;
@@ -54,7 +55,10 @@ pub fn shouldPulseTurn(unattended: bool, json_mode: bool, sub: bool, call_n: u64
 /// Call 2+ used to print an inner-loop counter; that line is gone (ADR 0021).
 pub fn beforeRequest(self: *Agent) !?[]const u8 {
     if (try @import("subagent_interactive.zig").beforeRequest(self)) |text| {
-        try self.say("{s}\n", .{text});
+        // ADR 0247: work that resumes the session is named above `›` by the
+        // standing block on every redraw; print only what that will not say.
+        if (!@import("subagent_interactive.zig").yield_wakes)
+            try self.say("{s}↻ {s}{s}\n", .{ style.accent, text, style.reset });
         return text;
     }
     self.model_calls_this_turn += 1;

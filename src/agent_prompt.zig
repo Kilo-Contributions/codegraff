@@ -99,6 +99,11 @@ fn standing(self: *const Agent) engine_events.StandingWork {
     }
     out.todos = items.items;
     out.image = self.pending_image != null;
+    // ADR 0247: a parked turn resumes when this work exits; say so above `›`.
+    if (self.arena.alloc(u8, 160)) |buf| {
+        const w = @import("background_wait.zig").describe(self.io, buf);
+        if (w.wakes) out.waiting = w.text;
+    } else |_| {}
     return out;
 }
 

@@ -44,6 +44,8 @@ pub fn write(w: *Io.Writer, title: []const u8, items: []const Item) void {
 }
 
 pub fn writeFromStanding(w: *Io.Writer, st: engine_events.StandingWork) void {
+    // Below the checklist, or alone: a parked turn is still working (ADR 0247).
+    defer writeWaiting(w, st.waiting);
     // Keep completed history, but do not redraw a finished checklist as WORKING.
     // Use the full counts: an open item may be beyond the displayed slice.
     if (st.todos_total > 0 and st.todos_done == st.todos_total) return;
@@ -53,6 +55,13 @@ pub fn writeFromStanding(w: *Io.Writer, st: engine_events.StandingWork) void {
         buf[i] = .{ .content = t.content, .done = t.done, .active = t.active };
     }
     write(w, st.goal, buf[0..n]);
+}
+
+/// ADR 0247: the prompt is back but the task is not over. Names the work the
+/// session waits on so the `›` below it does not read as graff having stopped.
+fn writeWaiting(w: *Io.Writer, waiting: []const u8) void {
+    if (waiting.len == 0) return;
+    w.print("↻ waiting on {s} — graff continues when it finishes\n", .{waiting}) catch return;
 }
 
 /// Parse the model's todo_write dump (`[x]` / `[~]` / `[ ]` lines) into the
@@ -138,4 +147,29 @@ test "writeFromStanding uses the goal title and active/done marks" {
             "└ ○ deploy\n",
         aw.writer.buffered(),
     );
+}
+
+test "ADR 0247: a parked turn says what it waits on, with or without a checklist" {
+    var aw: Io.Writer.Allocating = .init(std.testing.allocator);
+    defer aw.deinit();
+    const items = [_]engine_events.StandingTodo{
+        .{ .content = "inspect", .done = true },
+        .{ .content = "configure inbound replies", .active = true },
+    };
+    writeFromStanding(&aw.writer, .{ .todos = &items, .todos_done = 1, .todos_total = 2, .waiting = "terraform plan" });
+    try std.testing.expectEqualStrings(
+        "WORKING  work  1/2\n" ++
+            "├ ✓ inspect\n" ++
+            "└ ◌ configure inbound replies\n" ++
+            "↻ waiting on terraform plan — graff continues when it finishes\n",
+        aw.written(),
+    );
+    aw.clearRetainingCapacity();
+    // A finished checklist stays hidden, but the wait does not.
+    const finished = [_]engine_events.StandingTodo{.{ .content = "inspect", .done = true }};
+    writeFromStanding(&aw.writer, .{ .todos = &finished, .todos_done = 1, .todos_total = 1, .waiting = "zig build" });
+    try std.testing.expectEqualStrings("↻ waiting on zig build — graff continues when it finishes\n", aw.written());
+    aw.clearRetainingCapacity();
+    writeFromStanding(&aw.writer, .{ .waiting = "agent 4" });
+    try std.testing.expectEqualStrings("↻ waiting on agent 4 — graff continues when it finishes\n", aw.written());
 }
