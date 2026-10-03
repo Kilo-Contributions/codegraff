@@ -135,21 +135,14 @@ pub const public_write_note =
     \\through its orchestrator, not infer consent. Never disclose secrets.
 ;
 
-/// Always present (#840, #847): readiness and ownership gates for GitHub writes
-/// through bash, not merely disclosure policy.
-pub const publication_ready_note =
+/// Always present (#840): who may publish to a claimed target. PR readiness
+/// is not gated (ADR 0250); ownership of a claimed branch or issue still is.
+pub const claim_ownership_note =
     \\
     \\
-    \\A non-draft GitHub PR (`gh pr create` without --draft, or `gh pr ready`)
-    \\is blocked until the exact head SHA is ready: inspect already-running
-    \\or completed branch CI, disclose a failure that reproduces on the base
-    \\branch or create a draft. Include a Local: line with a backtick-quoted
-    \\command and observed result, plus Remote: CI status. Absolute claims (atomic,
-    \\preserved) need a regression on the changed dispatch path, not only a
-    \\helper or one-separator boundary. `gh pr checks --watch` after create
-    \\is not that gate. Publication work on a claimed branch, issue, commit,
-    \\or PR is owned by one live session — acknowledge a handoff with
-    \\peer_message action=handoff; polling for a missing PR does not transfer it.
+    \\Publication work on a claimed branch, issue, commit, or PR is owned by
+    \\one live session — acknowledge a handoff with peer_message action=handoff;
+    \\polling for a missing PR does not transfer it.
 ;
 
 /// Gate: `caps.git_repo`. Commit-identity and PR-description discipline only
@@ -303,14 +296,14 @@ pub const constraint_authority_note =
 pub fn withAuthority(arena: std.mem.Allocator, prompt: []const u8) []const u8 {
     const publication = std.mem.indexOf(u8, prompt, public_write_note) != null;
     const constraints = std.mem.indexOf(u8, prompt, constraint_authority_note) != null;
-    const ready = std.mem.indexOf(u8, prompt, publication_ready_note) != null;
-    if (publication and constraints and ready) return prompt;
+    const owned = std.mem.indexOf(u8, prompt, claim_ownership_note) != null;
+    if (publication and constraints and owned) return prompt;
     return std.fmt.allocPrint(arena, "{s}{s}{s}{s}", .{
         prompt,
         if (publication) "" else public_write_note,
         if (constraints) "" else constraint_authority_note,
-        if (ready) "" else publication_ready_note,
-    }) catch public_write_note ++ constraint_authority_note ++ publication_ready_note;
+        if (owned) "" else claim_ownership_note,
+    }) catch public_write_note ++ constraint_authority_note ++ claim_ownership_note;
 }
 
 /// Always present: how to write the final message.

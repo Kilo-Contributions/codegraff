@@ -79,7 +79,7 @@ jobs:
       - name: zig build test
         run: zig build test --summary all
 
-      - name: Publication, handoff, deferred MCP and legacy listener regressions
+      - name: Handoff, deferred MCP and legacy listener regressions
         run: |
           command -v lsof || (sudo apt-get update && sudo apt-get install -y lsof)
           python3 scripts/eval/test_tier1_count.py
@@ -87,11 +87,9 @@ jobs:
           python3 scripts/test-acp-failure.py
           python3 scripts/regression-release-297.py
           python3 scripts/test-server-retention.py --evidence "$RUNNER_TEMP/server-retention"
-          python3 scripts/test-pr-completion-acp.py
           python3 scripts/test-claim-repository.py
           python3 scripts/test-claim-lifecycle.py
           python3 scripts/eval-tier2.py --only repository-scoped-claim-release
-          python3 scripts/eval-tier2.py --only passing-draft-is-still-unverified --only base-failure-cannot-waive-pr-completion --only draft-handoff-needs-no-user-command --only ready-pr-failing-ci-defers --only legacy-pr-acceptance-option-is-ignored --only current-head-passing-pr-completes
 
       - name: Title command result contract
         run: python3 scripts/test-title-result.py
@@ -103,23 +101,6 @@ jobs:
           done
           python3 scripts/test-codedb-probe-deadline.py --nested --output "$RUNNER_TEMP/codedb-probe-nested"
           python3 scripts/test-codedb-probe-deadline.py --cancel --output "$RUNNER_TEMP/codedb-probe-cancel"
-
-      - name: Observed local checks before publication
-        run: python3 scripts/test-pr-local-checks.py --graff zig-out/bin/graff --evidence /tmp/pr-local-checks
-
-      - name: Committed claim review before publication
-        run: |
-          for verdict in unsupported unresolved invalid supported; do
-            python3 scripts/test-pr-claim-review.py --case "$verdict"
-          done
-          python3 scripts/test-pr-claim-review.py --case unsupported --plain
-          python3 scripts/test-pr-claim-review.py --case unsupported --oneshot
-          python3 scripts/test-pr-claim-review.py --case supported --budget-exhausted
-          python3 scripts/test-pr-claim-review.py --case supported --ready --repo
-          python3 scripts/test-pr-claim-review.py --case unsupported --ready --repo
-          python3 scripts/test-pr-review-cancel.py
-          python3 scripts/test-pr-claim-review.py --case supported --url
-          python3 scripts/test-pr-claim-review.py --case supported --changed-body
 
       - name: Multi-turn clarification, editing and recovery workflows
         run: python3 scripts/eval-tier2.py --only human-workflow-clarify-edit-recover-followup --only human-workflow-missing-config-clarify-followup --evidence-dir "$RUNNER_TEMP/interactive-workflows"

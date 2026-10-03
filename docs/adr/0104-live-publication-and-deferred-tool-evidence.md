@@ -1,6 +1,6 @@
 # 0104. Refresh evidence at the action boundary
 
-Status: accepted 2026-09-11
+Status: accepted 2026-09-11; publication head-evidence part superseded by 0250 (2026-10-03)
 
 ## Context
 

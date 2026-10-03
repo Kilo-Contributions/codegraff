@@ -413,8 +413,8 @@ pub fn gateTool(self: *Agent, call: ToolCall) !?ExecResult {
 /// thread, so it holds the lock that already guards this agent's arena there.
 pub fn hostGate(context: *anyopaque, call: ToolCall) ?tools_mod.ToolOutput {
     const self: *Agent = @ptrCast(@alignCast(context));
-    self.publication_checks.observation_mutex.lockUncancelable(self.io);
-    defer self.publication_checks.observation_mutex.unlock(self.io);
+    self.host_gate_mutex.lockUncancelable(self.io);
+    defer self.host_gate_mutex.unlock(self.io);
     const denied = (gateTool(self, call) catch
         return .{ .text = self.gpa.dupe(u8, "tool gate failed; the call was not run") catch &.{}, .is_error = true }) orelse return null;
     return .{ .text = self.gpa.dupe(u8, denied.text) catch &.{}, .is_error = true, .cancelled = denied.cancelled };

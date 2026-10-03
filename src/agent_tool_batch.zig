@@ -82,8 +82,6 @@ pub fn context(self: *Agent) ToolCtx {
         .plan_read_owner = self,
         .tracer = self.tracer,
         .run_budget = self.run_budget,
-        .publication_checks = self.publication_checks,
-        .publication_observer = .{ .context = self, .state = &self.publication_checks, .record = @import("pr_local_checks.zig").observeOutput },
         .host_gate = .{ .context = self, .check = @import("agent_tool_gate.zig").hostGate },
         .depth = self.depth,
         .snapshots = self.snapshots,
@@ -153,7 +151,6 @@ fn aborted() bool {
 
 pub fn takeOutput(self: *Agent, call: ToolCall, output: ToolOutput, handle_threshold: usize, handle_target: tool_handle.Target) !ExecResult {
     self.read_miss.noteOutput(call.name, call.input, output.text, output.is_error);
-    try @import("pr_local_checks.zig").record(self, call, .{ .text = output.text, .is_error = output.is_error, .cancelled = output.cancelled, .pending = output.pending });
     const handled = try tool_handle.forResult(self.gpa, self.arena, handle_target, output.text, handle_threshold);
     const text = try tool_handle.withFirstNote(self.arena, handled, &self.handle_note_shown);
     if (self.eval_cmd != null and eval_control.toolInvalidatesEval(call)) {

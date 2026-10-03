@@ -52,7 +52,7 @@ test {
     _ = .{ @import("http2_buffered.zig"), @import("clipboard_native.zig"), @import("clipboard_edge_tests.zig"), @import("clipboard_failure_tests.zig"), @import("process_runner_clipboard_tests.zig") };
     _ = @import("server_orphan.zig");
     _ = @import("repo_transaction.zig");
-    _ = .{ @import("pr_command.zig"), @import("pr_evidence.zig"), @import("pr_verify.zig"), @import("artifact_repository.zig"), @import("artifact_claim_ledger.zig"), @import("artifact_claim_store.zig"), @import("artifact_claim_stale.zig"), @import("pr_review_input_tests.zig"), @import("artifact_claim_unresolved.zig") };
+    _ = .{ @import("pr_command.zig"), @import("pr_evidence.zig"), @import("artifact_repository.zig"), @import("artifact_claim_ledger.zig"), @import("artifact_claim_store.zig"), @import("artifact_claim_stale.zig"), @import("artifact_claim_unresolved.zig") };
     _ = @import("argstream_citation_tests.zig"); // unit_tests' root is main.zig only, so reference every split-out module or its tests silently never run
     _ = @import("codex_node_repl.zig");
     _ = pricing;
@@ -560,7 +560,7 @@ const exec = @import("exec.zig");
 test { // ── Unit tests (`zig build test`): pull in tests from imported modules (mcp.zig)
     _ = .{ @import("beta_feed.zig"), @import("jev_tool.zig"), @import("jev_model_scope.zig"), @import("jev_provider_switch_tests.zig"), @import("jev_effort_state.zig") };
     _ = .{ @import("mcp_apps.zig"), @import("html_view.zig"), @import("usage_trace.zig"), @import("providers_confirmation_tests.zig"), @import("repl_model_confirmation_tests.zig"), @import("repl_model_pick_tests.zig"), @import("engine_sink_citation_tests.zig"), @import("cite_markup_stream_tests.zig"), @import("oneshot_citation_tests.zig"), @import("acp_permission.zig"), @import("acp_usage.zig") };
-    _ = .{ @import("mcp_server_tests.zig"), @import("main_test.zig"), @import("artifact_claim_command.zig"), @import("cli_path_hint.zig"), @import("run_budget.zig"), @import("pr_review_input.zig"), @import("pr_claim_review.zig") };
+    _ = .{ @import("mcp_server_tests.zig"), @import("main_test.zig"), @import("artifact_claim_command.zig"), @import("cli_path_hint.zig"), @import("run_budget.zig") };
     _ = .{ @import("session_catalog.zig"), @import("session_prompt.zig"), @import("session_discovery.zig"), @import("session_workspaces.zig"), @import("commands_resume.zig"), @import("peer_live.zig"), @import("presence_tests.zig"), @import("mcp_rpc_tests.zig") };
     _ = .{ @import("prompt_astra.zig"), @import("prompt_guidance.zig"), @import("oauth_chatgpt.zig") }; // per-model guidance (Astra, GPT-5.6); ChatGPT plan sign-in
     _ = .{ @import("agent_empty_completion.zig"), @import("agent_model_loop.zig"), @import("publication_policy_tests.zig"), @import("jobs_completion_tests.zig") };
@@ -595,5 +595,5 @@ test { // ── Unit tests (`zig build test`): pull in tests from imported modu
     _ = .{ @import("acp_agent_activity.zig"), @import("acp_subagent_live.zig"), @import("acp_line_writer.zig") };
     _ = .{ @import("acp_replay.zig"), @import("python_version.zig"), @import("jev_auto.zig"), @import("background_wait.zig") };
     _ = @import("read_image.zig");
-    _ = .{ @import("pr_local_checks.zig"), @import("mcp_names.zig"), @import("workspace_history.zig"), @import("file_worktree.zig"), @import("mcp_turn_context.zig"), @import("review_deadline.zig"), @import("issue_cmd.zig"), @import("shell_tool.zig"), @import("acp_ask.zig"), @import("side_steer.zig"), @import("task_workspace_tests.zig"), @import("workspace_prepare_tests.zig"), @import("worktree_reap.zig") };
+    _ = .{ @import("mcp_names.zig"), @import("workspace_history.zig"), @import("file_worktree.zig"), @import("mcp_turn_context.zig"), @import("review_deadline.zig"), @import("issue_cmd.zig"), @import("shell_tool.zig"), @import("acp_ask.zig"), @import("side_steer.zig"), @import("task_workspace_tests.zig"), @import("workspace_prepare_tests.zig"), @import("worktree_reap.zig") };
 }

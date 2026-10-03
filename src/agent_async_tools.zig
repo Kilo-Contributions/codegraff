@@ -158,7 +158,6 @@ fn onEvent(self: *Agent, event: std.json.Value) !void {
     var ctx = batch.context(self);
     // These fields are owner-thread state. webfetch does not need them.
     ctx.read_miss = null;
-    ctx.publication_observer = null;
     job.future = self.io.concurrent(execute, .{ job, ctx }) catch {
         job.result = .{ .text = "async tool worker unavailable", .is_error = true };
         return;

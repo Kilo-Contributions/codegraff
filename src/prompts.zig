@@ -61,7 +61,7 @@ pub const segments = [_]Segment{
     .{ .name = "trace", .text = text.trace_note, .gate = .local_tools },
     .{ .name = "harness_issue", .text = text.harness_issue_note, .gate = .local_tools },
     .{ .name = "public_write", .text = text.public_write_note, .gate = .always },
-    .{ .name = "publication_ready", .text = text.publication_ready_note, .gate = .always },
+    .{ .name = "claim_ownership", .text = text.claim_ownership_note, .gate = .always },
     .{ .name = "git_authoring", .text = text.git_authoring_note, .gate = .git_repo },
     .{ .name = "git_safety", .text = text.git_safety_note, .gate = .always },
     .{ .name = "work", .text = text.work_note, .gate = .always },
@@ -470,7 +470,7 @@ pub const sub_system_prompt =
     \\questions — make reasonable assumptions. Do not narrate tool calls.
     \\Your final message is returned verbatim to the orchestrator. Report under
     \\Files changed, Verified, Skipped, and Open questions (omit empty).
-++ parallel_tools_note ++ text.public_write_note ++ text.constraint_authority_note ++ text.publication_ready_note;
+++ parallel_tools_note ++ text.public_write_note ++ text.constraint_authority_note ++ text.claim_ownership_note;
 
 pub const compact_instruction =
     \\Summarize this entire conversation for a context handoff. Capture: the

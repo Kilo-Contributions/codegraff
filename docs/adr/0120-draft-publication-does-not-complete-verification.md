@@ -1,6 +1,6 @@
 # 0120. Draft publication does not complete verification
 
-Status: accepted 2026-09-15; draft authorization removed 2026-09-27
+Status: accepted 2026-09-15; draft authorization removed 2026-09-27; superseded by 0250 (2026-10-03)
 
 ## Context
 

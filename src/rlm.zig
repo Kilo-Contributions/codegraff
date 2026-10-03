@@ -218,12 +218,7 @@ fn pathValue(arena: Allocator, args_json: []const u8) Value {
 }
 
 fn runHost(ctx: ToolCtx, call: spec_ptc.Call) ToolOutput {
-    const out = runHostRaw(ctx, call);
-    observe(ctx, call, out) catch {
-        ctx.gpa.free(out.text);
-        return .{ .text = ctx.gpa.dupe(u8, "rlm: could not record host result") catch &.{}, .is_error = true };
-    };
-    return out;
+    return runHostRaw(ctx, call);
 }
 
 fn runHostRaw(ctx: ToolCtx, call: spec_ptc.Call) ToolOutput {
@@ -421,12 +416,4 @@ fn maybeSlim(arena: Allocator, payload: []const u8) []const u8 {
 pub fn slimNote(arena: Allocator, cut: []const u8, full: []const u8) []const u8 {
     const fields = mcp_shapes.fieldList(arena, full);
     return std.fmt.allocPrint(arena, "{s}\n[slim view of a {d}-byte value{s}{s}; the value keeps every field: project(x, field) reads one, write_file saves it whole]", .{ cut, full.len, if (fields != null) "; fields: " else "", fields orelse "" }) catch cut;
-}
-
-fn observe(ctx: ToolCtx, call: spec_ptc.Call, out: ToolOutput) !void {
-    if (ctx.publication_observer) |observer| {
-        var arena = std.heap.ArenaAllocator.init(ctx.gpa);
-        defer arena.deinit();
-        try observer.record(observer.context, .{ .id = "rlm", .name = call.name, .input = pathValue(arena.allocator(), call.args_json) }, .{ .text = out.text, .is_error = out.is_error, .cancelled = out.cancelled, .pending = out.pending });
-    }
 }

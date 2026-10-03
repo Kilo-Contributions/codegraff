@@ -80,7 +80,6 @@ fn ctxFromRoot(root: *Agent) ToolCtx {
         .approvals = root.approvals,
         .tracer = root.tracer,
         .run_budget = root.run_budget,
-        .publication_checks = root.publication_checks,
         .depth = root.depth,
         .snapshots = root.snapshots,
         .tools_used = &root.tools_used,

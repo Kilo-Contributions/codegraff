@@ -74,7 +74,6 @@ pub fn applyEnvKnobs(arena: Allocator, environ_map: anytype) !void {
     job_idle.applyEnv(environ_map); // #199: background-job idle warn/stop, minutes (0 = off)
     @import("run_idle.zig").applyEnv(environ_map); // GRAFF_HEARTBEAT_SECS: a waiting run's heartbeat (0 = off)
     main_mod.g_force_stall_once = environ_map.get("GRAFF_FORCE_STALL_ONCE") != null; // #134 test seam
-    if (environ_map.get("GRAFF_PUBLISH_PENDING_WAIT_MS")) |v| @import("publish_gate.zig").pending_wait_ms = std.fmt.parseInt(i64, v, 10) catch 60_000; // #1189 fixture seam
     main_mod.g_force_drop_once = environ_map.get("GRAFF_FORCE_DROP_ONCE") != null; // #132/#133 test seam
     main_mod.g_force_stall_always = environ_map.get("GRAFF_FORCE_STALL_ALWAYS") != null; // #56 test seam (exhaust the reconnect budget)
     main_mod.g_force_drop_always = environ_map.get("GRAFF_FORCE_DROP_ALWAYS") != null; // #56 test seam
