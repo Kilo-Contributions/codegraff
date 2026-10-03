@@ -49,6 +49,11 @@ pub const arg_prose_events = [_][]const u8{
 /// head budget, inside the pre-first-token budget.
 pub var slow_first_frame_ms: i64 = 700;
 
+/// ADR 0241: the item holding the prose closes, then `prose_close_then_think`
+/// thinks this long: past the tests' tightened 500ms, inside their full 2000ms.
+pub const item_done_event = "{\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"message\"}}";
+pub const think_after_prose_ms = 1000;
+
 /// A loopback WebSocket peer with a scripted failure mode.
 pub const Mock = struct {
     pub const Mode = enum {
@@ -82,6 +87,9 @@ pub const Mock = struct {
         /// Send a generic terminal API error and close immediately, matching
         /// Codex's failure sequence from issue #692.
         generic_error_then_close,
+        /// ADR 0241: a heads-up delta, its item closes, a silent think past the
+        /// tightened budget (a tool call being composed), then completion.
+        prose_close_then_think,
     };
 
     pub fn run(io: Io, server: *std.Io.net.Server, mode: Mode, done: *std.atomic.Value(bool)) void {
@@ -124,6 +132,13 @@ pub const Mock = struct {
                 readRealFrame(io, &sr.interface, &sw.interface) catch return idle(io, done);
                 for (arg_prose_events) |ev|
                     writeTextFrame(&sw.interface, ev) catch return idle(io, done);
+            },
+            .prose_close_then_think => {
+                readRealFrame(io, &sr.interface, &sw.interface) catch return idle(io, done);
+                writeTextFrame(&sw.interface, delta_event) catch return idle(io, done);
+                writeTextFrame(&sw.interface, item_done_event) catch return idle(io, done);
+                io.sleep(.fromMilliseconds(think_after_prose_ms), .awake) catch return idle(io, done);
+                writeTextFrame(&sw.interface, completed_event) catch return idle(io, done);
             },
             .generic_error_then_close => {
                 readRealFrame(io, &sr.interface, &sw.interface) catch return;

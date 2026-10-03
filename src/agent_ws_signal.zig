@@ -6,7 +6,7 @@
 //! stall (the round-2 regression), too tight and a mid-answer server death
 //! waits four times as long as it does on SSE (the round-4 finding).
 //!
-//! SSE passes `self.partial_text.items.len != 0`, and on the `.responses` path
+//! SSE reads partial_text growth (until an item closes, ADR 0241), and on the `.responses` path
 //! partial_text has TWO producers, both reached from agent_stream.streamSseLine:
 //!
 //!   1. the `response.output_text.delta` arm, whose `if (text.len == 0) return;`
@@ -60,6 +60,27 @@ pub fn frameHasOutputText(gpa: std.mem.Allocator, frame: []const u8) bool {
     return d == .string and d.string.len != 0;
 }
 
+/// ADR 0241: true for a Responses event that closes an output item, read off a
+/// WS frame or an SSE `data:`/`event:` line. Prose tightens the between-lines
+/// budget only until its item closes: the next item (a tool call composed
+/// after a heads-up, say) can follow a silent think, and a quarter budget
+/// there killed healthy turns as stalls and re-paid the whole generation.
+/// Same shape as frameHasOutputText: a substring candidate, then a parse, so
+/// prose that merely quotes the event name does not count.
+pub fn closesItem(gpa: std.mem.Allocator, frame: []const u8) bool {
+    const ev = "response.output_item.done";
+    if (std.mem.indexOf(u8, frame, ev) == null) return false;
+    var payload = std.mem.trim(u8, frame, " \t\r\n");
+    if (std.mem.startsWith(u8, payload, "event:")) return std.mem.eql(u8, std.mem.trim(u8, payload["event:".len..], " \t"), ev);
+    if (std.mem.startsWith(u8, payload, "data:")) payload = std.mem.trim(u8, payload["data:".len..], " \t");
+    var scratch = std.heap.ArenaAllocator.init(gpa);
+    defer scratch.deinit();
+    const v = std.json.parseFromSliceLeaky(std.json.Value, scratch.allocator(), payload, .{ .allocate = .alloc_always }) catch return false;
+    if (v != .object) return false;
+    const ty = v.object.get("type") orelse return false;
+    return ty == .string and std.mem.eql(u8, ty.string, ev);
+}
+
 /// The turn's tokens-flowing signal: both producers, and the little bit of
 /// state producer 2 needs (which output item is the open whitelisted call).
 ///
@@ -74,12 +95,25 @@ pub const TokenSignal = struct {
     /// function call; -1 for none. The mirror of ArgLive.index, opened and
     /// closed by the same events argLiveDelta uses.
     arg_ix: i64 = -1,
+    /// ADR 0241: prose is streaming in an item that has not closed yet. The WS
+    /// read budget is tightened only while this holds.
+    open: bool = false,
 
-    /// True the first time a frame proves visible prose is flowing. Called only
-    /// until it returns true — the budget never un-tightens.
+    /// True when a frame proves visible prose is flowing.
     pub fn flowing(self: *TokenSignal, gpa: std.mem.Allocator, frame: []const u8) bool {
         if (frameHasOutputText(gpa, frame)) return true;
         return self.argProse(gpa, frame);
+    }
+
+    /// Fed every frame. True when this frame is prose, which opens the gate;
+    /// a frame that closes an output item shuts it again (ADR 0241).
+    pub fn step(self: *TokenSignal, gpa: std.mem.Allocator, frame: []const u8) bool {
+        if (self.flowing(gpa, frame)) {
+            self.open = true;
+            return true;
+        }
+        if (closesItem(gpa, frame)) self.open = false;
+        return false;
     }
 
     /// Producer 2. Tracks response.output_item.added/done to know WHICH item is
@@ -192,4 +226,30 @@ test "shouldLatchSse: 426 and connect stall latch now; 500 handshake still retri
     try std.testing.expect(!shouldLatchSse(false, error.HungRequest, 1));
     try std.testing.expect(!shouldLatchSse(false, error.HandshakeFailed, 1));
     try std.testing.expect(shouldLatchSse(false, error.HandshakeFailed, 2));
+}
+
+test "ADR 0241: prose tightens until its item closes; an ordinary tool's arguments do not reopen it" {
+    const gpa = std.testing.allocator;
+    var sig: TokenSignal = .{};
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.created\"}"));
+    try std.testing.expect(!sig.open);
+    try std.testing.expect(sig.step(gpa, "{\"type\":\"response.output_text.delta\",\"delta\":\"Checking the logs.\"}"));
+    try std.testing.expect(sig.open);
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"message\"}}"));
+    try std.testing.expect(!sig.open);
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.output_item.added\",\"output_index\":1,\"item\":{\"type\":\"function_call\",\"name\":\"edit_file\"}}"));
+    try std.testing.expect(!sig.step(gpa, "{\"type\":\"response.function_call_arguments.delta\",\"output_index\":1,\"delta\":\"{\\\"path\\\":\"}"));
+    try std.testing.expect(!sig.open);
+    try std.testing.expect(sig.step(gpa, "{\"type\":\"response.output_text.delta\",\"delta\":\"Done.\"}"));
+    try std.testing.expect(sig.open);
+}
+
+test "ADR 0241: closesItem reads WS frames and SSE lines, not prose that quotes the event name" {
+    const gpa = std.testing.allocator;
+    try std.testing.expect(closesItem(gpa, "{\"type\":\"response.output_item.done\",\"output_index\":0}"));
+    try std.testing.expect(closesItem(gpa, "data: {\"type\":\"response.output_item.done\",\"output_index\":0}"));
+    try std.testing.expect(closesItem(gpa, "event: response.output_item.done"));
+    try std.testing.expect(!closesItem(gpa, "{\"type\":\"response.output_text.delta\",\"delta\":\"response.output_item.done\"}"));
+    try std.testing.expect(!closesItem(gpa, "event: response.output_text.delta"));
+    try std.testing.expect(!closesItem(gpa, "event: content_block_stop"));
 }
