@@ -33,6 +33,12 @@ pub const Outcome = enum { started, skipped, stuck };
 /// (learn-auto sends one prompt per model call).
 pub fn enqueue(root: *Agent, arena: Allocator, out: ?*Io.Writer, text: []const u8) !Outcome {
     if (@import("subagent_interactive.zig").line_notice) {
+        // ADR 0247: a parked session resuming on its own says what woke it.
+        if (out) |w| {
+            var buf: [160]u8 = undefined;
+            w.print("{s}↻ {s} — continuing{s}\n", .{ style.dim, @import("background_wait.zig").resumeLine(&buf, text), style.reset }) catch {};
+            w.flush() catch {};
+        }
         try root.messages.append(try @import("session_wake.zig").message(arena, text));
         return .started;
     }

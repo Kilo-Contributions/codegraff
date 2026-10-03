@@ -9,6 +9,9 @@ pub var enabled = std.atomic.Value(bool).init(false);
 var requested = std.atomic.Value(bool).init(false);
 pub var line_notice = false; // legacy line REPL provenance
 pub var yielded = false; // root thread only
+/// ADR 0247: the last yield's work resumes the session, so the standing
+/// block above `›` names it and the yield itself need not print.
+pub var yield_wakes = false;
 
 pub fn stealIdleLine(io: std.Io, owner: []const u8, gpa: std.mem.Allocator, buf: anytype, idle: bool) !?[]u8 {
     if (!idle or !enabled.load(.acquire) or buf.items.len != 0) return null;
@@ -48,8 +51,13 @@ pub fn beforeRequest(root: anytype) !?[]const u8 {
     if (root.sub or !enabled.load(.acquire)) return null;
     yielded = requested.swap(false, .acq_rel);
     if (!yielded) return null;
-    const text = "Background work continues separately. You can keep using the prompt; completed shell jobs and subagents will be surfaced automatically.";
-    return try root.arena.dupe(u8, text);
+    // ADR 0247: name what the session waits on and say it resumes on its own;
+    // a bare "keep using the prompt" read as graff stopping mid-task.
+    const bw = @import("background_wait.zig");
+    var buf: [160]u8 = undefined;
+    const waiting = bw.describe(root.io, &buf);
+    yield_wakes = waiting.wakes;
+    return try bw.yieldNotice(root.arena, waiting);
 }
 
 /// Consume only complete, previously unread jobs owned by this session. Full
@@ -137,8 +145,8 @@ test "beforeRequest yields so parked shell jobs free the prompt" {
     requested.store(true, .release);
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
-    const Fake = struct { sub: bool = false, arena: std.mem.Allocator };
+    const Fake = struct { sub: bool = false, arena: std.mem.Allocator, io: std.Io = std.testing.io };
     const text = (try beforeRequest(Fake{ .arena = arena_state.allocator() })) orelse return error.TestUnexpectedResult;
-    try std.testing.expect(std.mem.indexOf(u8, text, "keep using the prompt") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "shell jobs") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "graff continues") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "prompt is free") != null);
 }

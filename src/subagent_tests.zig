@@ -343,7 +343,7 @@ test "interactive children yield once without cancellation or a model request" {
     defer interactive.configure(false);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var root = .{ .sub = false, .arena = arena.allocator() };
+    var root = .{ .sub = false, .arena = arena.allocator(), .io = std.testing.io };
     var ctx: @import("tools.zig").ToolCtx = .{ .gpa = std.testing.allocator, .io = std.testing.io, .client = undefined, .provider = undefined, .registry = null, .from_sub = false, .approvals = null, .tracer = null };
     interactive.request(ctx); // headless callers retain wait-until-exit behavior
     try std.testing.expect((try interactive.beforeRequest(&root)) == null);
@@ -356,7 +356,7 @@ test "interactive children yield once without cancellation or a model request" {
     main_mod.unattended = saved_unattended;
     interactive.request(ctx);
     const text = (try interactive.beforeRequest(&root)).?;
-    try std.testing.expect(std.mem.indexOf(u8, text, "keep using the prompt") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "graff") != null);
     try std.testing.expect(interactive.yielded);
     try std.testing.expect(!@import("agent.zig").Agent.esc_cancel.load(.acquire));
     try std.testing.expect((try interactive.beforeRequest(&root)) == null);

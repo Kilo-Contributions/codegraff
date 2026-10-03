@@ -273,6 +273,7 @@ record only when you need the evidence or the edge cases.
 | [0244](0244-saved-workspaces-have-durable-discovery.md) | Remember saved workspace roots locally; remote picker targets are workspace-qualified, and resume must enter the selected tree before restoring it. |
 | [0245](0245-fullscreen-tui-is-an-external-client.md) | The fullscreen UI is maintained separately; `graff tui` launches installed `graff-tui` before engine startup, sibling first then PATH, without downloading. TTY `graff repl` uses the line REPL. Supersedes 0041, 0042 and the fullscreen portion of 0142. |
 | [0246](0246-jev-picks-each-turns-effort-alongside-the-first-request.md) | On an eligible model at the default effort, graff asks Jev for the turn's effort alongside the first request; the pick applies from the next request, holds for that turn, is never saved, and never overrides a user's effort. `chatgpt-new` GPT-6 models are eligible. |
+| [0247](0247-parked-work-is-named-above-the-prompt.md) | A parked turn names the work it waits on: the standing block draws `↻ waiting on <work> — graff continues when it finishes` while a job or agent that will wake the session runs, the yield prints only for a server, and a wake prints what finished before continuing. |
 
 ## When to write one
 
