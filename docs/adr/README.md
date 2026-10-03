@@ -272,6 +272,7 @@ record only when you need the evidence or the edge cases.
 | [0243](0243-repo-context-rides-as-an-input-item-on-responses.md) | On the Responses wire for codex, chatgpt-new and openai, root turns send the project-instructions section and the layout as one developer input item ahead of the conversation, so the instructions are byte-identical across repos and cache on turn 1. |
 | [0244](0244-saved-workspaces-have-durable-discovery.md) | Remember saved workspace roots locally; remote picker targets are workspace-qualified, and resume must enter the selected tree before restoring it. |
 | [0245](0245-fullscreen-tui-is-an-external-client.md) | The fullscreen UI is maintained separately; `graff tui` launches installed `graff-tui` before engine startup, sibling first then PATH, without downloading. TTY `graff repl` uses the line REPL. Supersedes 0041, 0042 and the fullscreen portion of 0142. |
+| [0246](0246-jev-picks-each-turns-effort-alongside-the-first-request.md) | On an eligible model at the default effort, graff asks Jev for the turn's effort alongside the first request; the pick applies from the next request, holds for that turn, is never saved, and never overrides a user's effort. `chatgpt-new` GPT-6 models are eligible. |
 
 ## When to write one
 

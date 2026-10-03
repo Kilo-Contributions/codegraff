@@ -16,11 +16,37 @@ pub const Pending = struct {
     provider: [64]u8 = undefined,
     model: [256]u8 = undefined,
     effort: ReasoningEffort = .medium,
+    /// ADR 0246: the selection in flight is jev_auto's turn pick, which applies
+    /// for one turn and is never saved; the jev_effort tool's is the session's.
+    turn_scoped: bool = false,
+    /// ADR 0246: this agent's turn pick, owned by jev_auto.zig.
+    auto: Auto = .{},
+
+    pub const Auto = struct {
+        future: ?Io.Future(void) = null,
+        task: []u8 = &.{}, // gpa-owned summary the pick reads
+        saved: ?ReasoningEffort = null, // the effort the turn started at
+        applied: ?ReasoningEffort = null, // the pick a request boundary applied
+        outcome: std.atomic.Value(u8) = .init(0), // 0 in flight, 1 picked, 2 unavailable
+        picked: ReasoningEffort = .medium,
+        ms: std.atomic.Value(u32) = .init(0),
+    };
+
+    pub const Taken = struct { effort: ReasoningEffort, turn: bool };
 
     pub fn begin(self: *Pending, io: Io, route: Provider) ?u64 {
+        return self.beginScoped(io, route, false);
+    }
+
+    pub fn beginTurn(self: *Pending, io: Io, route: Provider) ?u64 {
+        return self.beginScoped(io, route, true);
+    }
+
+    fn beginScoped(self: *Pending, io: Io, route: Provider, turn: bool) ?u64 {
         self.mu.lockUncancelable(io);
         defer self.mu.unlock(io);
         if (self.phase != .idle or route.id.len > self.provider.len or route.model.len > self.model.len) return null;
+        self.turn_scoped = turn;
         self.token +%= 1;
         @memcpy(self.provider[0..route.id.len], route.id);
         @memcpy(self.model[0..route.model.len], route.model);
@@ -46,13 +72,26 @@ pub const Pending = struct {
     }
 
     pub fn take(self: *Pending, io: Io, route: Provider) ?ReasoningEffort {
+        return if (self.takeScoped(io, route)) |t| t.effort else null;
+    }
+
+    pub fn takeScoped(self: *Pending, io: Io, route: Provider) ?Taken {
         self.mu.lockUncancelable(io);
         defer self.mu.unlock(io);
         if (self.phase != .selected) return null;
         self.phase = .idle;
         if (!std.mem.eql(u8, route.id, self.provider[0..self.provider_len]) or
             !std.mem.eql(u8, route.model, self.model[0..self.model_len])) return null;
-        return self.effort;
+        return .{ .effort = self.effort, .turn = self.turn_scoped };
+    }
+
+    /// Drop a turn pick no request has applied: it is neither applied nor saved.
+    pub fn dropTurn(self: *Pending, io: Io) void {
+        self.mu.lockUncancelable(io);
+        defer self.mu.unlock(io);
+        if (!self.turn_scoped or self.phase == .idle) return;
+        self.token +%= 1;
+        self.phase = .idle;
     }
 
     pub fn invalidate(self: *Pending, io: Io) void {
@@ -64,19 +103,28 @@ pub const Pending = struct {
 };
 
 pub fn applyToState(agent: anytype) bool {
-    const effort = agent.jev_effort_pending.take(agent.io, agent.provider) orelse return false;
-    if (!@import("effort_route.zig").allows(agent.provider.id, agent.provider.model, @tagName(effort))) return false;
-    agent.reasoning = effort;
-    return true;
+    return applyTaken(agent) != null;
+}
+
+fn applyTaken(agent: anytype) ?Pending.Taken {
+    const t = agent.jev_effort_pending.takeScoped(agent.io, agent.provider) orelse return null;
+    if (!@import("effort_route.zig").allows(agent.provider.id, agent.provider.model, @tagName(t.effort))) return null;
+    agent.reasoning = t.effort;
+    return t;
 }
 
 pub fn apply(agent: anytype) void {
-    if (!applyToState(agent)) return;
+    const t = applyTaken(agent) orelse return;
+    if (t.turn) {
+        agent.jev_effort_pending.auto.applied = t.effort; // ADR 0246: a turn pick holds for this turn, never saved
+        return;
+    }
     if (agent.sub) return; // ADR 0232: a child's selection is its own; the saved effort is the root's
     _ = @import("repl_glue.zig").saveThinkingSettings(agent.io, agent.gpa, agent.reasoning, agent.fast, agent.ultracode_mode, agent.show_thinking, agent.ai_title);
 }
 
 pub fn finishTurn(agent: anytype) void {
+    @import("jev_auto.zig").endTurn(agent); // ADR 0246: before apply(), so a turn's pick is never saved
     if (@TypeOf(agent.*).esc_cancel.load(.acquire) or @import("acp_engine.zig").cancel_flag.load(.acquire))
         agent.jev_effort_pending.invalidate(agent.io)
     else

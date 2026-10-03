@@ -15,7 +15,8 @@ fn mimoV26(model: []const u8) bool {
 
 pub fn eligible(provider: Provider) bool {
     const id = provider.id;
-    if (std.mem.eql(u8, id, "codex") or std.mem.eql(u8, id, "openai")) return gptSix(provider.model);
+    // chatgpt-new is the ChatGPT-plan sign-in every login name maps to (ADR 0229).
+    if (std.mem.eql(u8, id, "codex") or std.mem.eql(u8, id, "openai") or std.mem.eql(u8, id, "chatgpt-new")) return gptSix(provider.model);
     const mimo = mimoV26(provider.model);
     if (std.mem.eql(u8, id, "xiaomi")) return mimo;
     return std.mem.eql(u8, id, "codegraff") and (mimo or gptSix(provider.model));
@@ -24,7 +25,7 @@ pub fn eligible(provider: Provider) bool {
 test "native Jev eligibility requires GPT-6 or MiMo v2.6 on supported routes" {
     const base: Provider = .{ .id = "codex", .kind = .responses, .auth = .bearer, .url = "", .api_key = "", .model = "gpt-6-sol", .context = 100_000 };
     var p = base;
-    for ([_][]const u8{ "codex", "openai" }) |id| {
+    for ([_][]const u8{ "codex", "openai", "chatgpt-new" }) |id| {
         p.id = id;
         for ([_][]const u8{ "gpt-6", "gpt-6-sol", "gpt-6.1", "gpt-6.1-mini" }) |model| {
             p.model = model;
