@@ -577,8 +577,7 @@ pub fn goalCommandArgs(line: []const u8) ?[]const u8 {
     return std.mem.trim(u8, line[end..], " \t\r\n");
 }
 
-/// Scripted `graff repl` host commands. The TUI path wires the same actions
-/// through tui_launch; this bind is the scripted / headless equivalent.
+/// Host commands for scripted `graff repl`.
 pub fn bindHostCommands() void {
     repl.g_version_fn = versionCb;
     repl.g_update_fn = updateCb;

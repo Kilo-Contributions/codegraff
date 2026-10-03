@@ -18,6 +18,126 @@ const mcp_stdio = @import("mcp_stdio.zig");
 const modern_protocol = @import("mcp_protocol.zig").modern_protocol;
 const Server = mcp_rpc.Server;
 
+const Registry = @import("mcp.zig").Registry;
+
+fn fixtureRegistry(reg: *Registry, server: *Server) !void {
+    const a = reg.arena();
+    reg.servers = try a.dupe(*Server, &.{server});
+    reg.tools = try a.dupe(@import("mcp.zig").Tool, &.{.{
+        .server_index = 0,
+        .server_name = "fixture",
+        .original_name = "whoami",
+        .qualified_name = "mcp__fixture__whoami",
+        .description = "fixture identity",
+        .input_schema = try parse(a, "{\"type\":\"object\"}"),
+    }});
+}
+
+test "MCP recovery #1467: first call EOF returns restart guidance without replay" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    var reg = Registry.empty(std.testing.allocator, std.testing.io);
+    defer reg.deinit();
+    const spawned = try spawnReplying(reg.arena(), reg.io, "read line; exit 0");
+    try fixtureRegistry(&reg, spawned.server);
+    const gate = @import("mcp_schema_gate.zig");
+    gate.reset();
+    defer gate.reset();
+    _ = try gate.loadInto(reg.arena(), reg.tools, try parse(reg.arena(), "{\"tools\":[\"mcp__fixture__whoami\"]}"));
+    var agent: @import("agent.zig").Agent = undefined;
+    agent.arena = reg.arena();
+    agent.sub = false;
+    agent.registry = &reg;
+    agent.tools_responses = "";
+    agent.provider = .{ .id = "xai", .kind = .responses, .auth = .bearer, .url = "", .api_key = "fixture", .model = "grok-4.6", .context = 100_000 };
+    try agent.ensureRootTools(.responses);
+    try std.testing.expect(std.mem.indexOf(u8, agent.toolsJson(), "mcp__fixture__whoami") != null);
+    const result = try reg.call(std.testing.allocator, "mcp__fixture__whoami", try parse(reg.arena(), "{}"));
+    defer std.testing.allocator.free(result.text);
+    try std.testing.expect(result.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "McpClosed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "restart the service and this session") != null);
+    try std.testing.expectEqual(@as(i64, 2), spawned.server.next_id);
+    try std.testing.expectEqual(@as(usize, 0), (try reg.snapshotTools(reg.arena())).len);
+    try std.testing.expect(reg.catalog_dirty.load(.acquire));
+    try agent.ensureRootTools(.responses);
+    try std.testing.expect(std.mem.indexOf(u8, agent.toolsJson(), "mcp__fixture__whoami") == null);
+    try std.testing.expect(!reg.catalog_dirty.load(.acquire));
+}
+
+test "MCP recovery #1465: stale schema reports current registration and reload guidance" {
+    var reg = Registry.empty(std.testing.allocator, std.testing.io);
+    defer reg.deinit();
+    const result = try reg.call(std.testing.allocator, "mcp__fixture__whoami", .null);
+    defer std.testing.allocator.free(result.text);
+    try std.testing.expect(result.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "schema may be stale") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "reload its schema") != null);
+    try std.testing.expect(reg.catalog_dirty.load(.acquire));
+}
+
+test "MCP recovery #1465: advertised loaded schema dispatches across consecutive calls" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    const gate = @import("mcp_schema_gate.zig");
+    gate.reset();
+    defer gate.reset();
+    var reg = Registry.empty(std.testing.allocator, std.testing.io);
+    defer reg.deinit();
+    const spawned = try spawnReplying(reg.arena(), reg.io,
+        \\read line; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}]}}'
+        \\read line; printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"ok"}]}}'
+        \\cat >/dev/null
+    );
+    try fixtureRegistry(&reg, spawned.server);
+    const a = reg.arena();
+    const loaded = try gate.loadInto(a, try reg.snapshotTools(a), try parse(a, "{\"tools\":[\"mcp__fixture__whoami\"]}"));
+    try std.testing.expect(!loaded.is_error);
+    try std.testing.expectEqual(@as(usize, 1), loaded.loaded);
+    for (0..2) |_| {
+        const result = try reg.call(std.testing.allocator, "mcp__fixture__whoami", try parse(a, "{}"));
+        defer std.testing.allocator.free(result.text);
+        try std.testing.expect(!result.is_error);
+        try std.testing.expect(std.mem.indexOf(u8, result.text, "ok") != null);
+    }
+}
+
+test "MCP MRTR registry dispatch resolves input requests before rendering" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    var reg = Registry.empty(std.testing.allocator, std.testing.io);
+    defer reg.deinit();
+    const spawned = try spawnReplying(reg.arena(), reg.io,
+        \\read line; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"resultType":"input_required","inputRequests":{"roots":{"method":"roots/list"}},"requestState":"state"}}'
+        \\read line
+        \\case "$line" in *inputResponses*requestState*) ;; *) exit 1 ;; esac
+        \\printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"done"}]}}'
+        \\cat >/dev/null
+    );
+    try fixtureRegistry(&reg, spawned.server);
+    const result = try reg.call(std.testing.allocator, "mcp__fixture__whoami", try parse(reg.arena(), "{}"));
+    defer std.testing.allocator.free(result.text);
+    try std.testing.expect(!result.is_error);
+    try std.testing.expectEqualStrings("done", result.text);
+    try std.testing.expectEqual(@as(i64, 3), spawned.server.next_id);
+    try std.testing.expect(!reg.catalog_dirty.load(.acquire));
+}
+
+test "MCP recovery during MRTR withdraws tools without replay" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    var reg = Registry.empty(std.testing.allocator, std.testing.io);
+    defer reg.deinit();
+    const spawned = try spawnReplying(reg.arena(), reg.io,
+        \\read line; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"resultType":"input_required","inputRequests":{"roots":{"method":"roots/list"}}}}'
+        \\read line; exit 0
+    );
+    try fixtureRegistry(&reg, spawned.server);
+    const result = try reg.call(std.testing.allocator, "mcp__fixture__whoami", try parse(reg.arena(), "{}"));
+    defer std.testing.allocator.free(result.text);
+    try std.testing.expect(result.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "McpClosed") != null);
+    try std.testing.expectEqual(@as(i64, 3), spawned.server.next_id);
+    try std.testing.expectEqual(@as(usize, 0), (try reg.snapshotTools(reg.arena())).len);
+    try std.testing.expect(reg.catalog_dirty.load(.acquire));
+}
+
 fn parse(a: std.mem.Allocator, json: []const u8) !Value {
     return std.json.parseFromSliceLeaky(Value, a, json, .{ .allocate = .alloc_always });
 }

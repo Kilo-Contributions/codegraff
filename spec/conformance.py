@@ -68,10 +68,6 @@ from ref.bash_policy import check_properties as bash_check_properties
 from ref.bash_policy import payload as bash_model_payload
 from ref.structured_output import check_properties as sox_check_properties
 from ref.structured_output import payload as sox_model_payload
-from ref.terminal_modes import check_properties as term_check_properties
-from ref.terminal_modes import payload as term_model_payload
-from ref.terminal_modes import write_kernel_md as write_term_md
-from ref.terminal_modes import kernel_md as term_kernel_md
 
 ROOT = Path(__file__).resolve().parent
 KERNELS = ROOT / "kernels"
@@ -84,7 +80,6 @@ SHAPE_FIXTURE = KERNELS / "shape.json"
 SCORE_FIXTURE = KERNELS / "score.json"
 BASH_FIXTURE = KERNELS / "bash_policy.json"
 SOX_FIXTURE = KERNELS / "structured_output.json"
-TERM_FIXTURE = KERNELS / "terminal_modes.json"
 CACHE_FIXTURE = KERNELS / "prompt_cache.json"
 PREFIX_FIXTURE = KERNELS / "prompt_prefix.json"
 LEAN_DIR = ROOT.parent / "lean-proofs"
@@ -393,7 +388,6 @@ def check_bash() -> int: return _ref(bash_check_properties, "bash")
 
 
 def check_sox() -> int: return _ref(sox_check_properties, "sox")
-def check_term() -> int: return _ref(term_check_properties, "term")
 
 
 def prefixes_first(p: str) -> list[str]:
@@ -423,8 +417,6 @@ def export() -> list[Path]:
         write_score_md(KERNELS / "score.md"),
         _write(BASH_FIXTURE, bash_payload()),
         _write(SOX_FIXTURE, sox_model_payload()),
-        _write(TERM_FIXTURE, term_model_payload()),
-        write_term_md(KERNELS / "terminal_modes.md"),
         _write(CACHE_FIXTURE, cache_payload()),
         write_cache_md(KERNELS / "prompt_cache.md"),
         _write(PREFIX_FIXTURE, prefix_payload()),
@@ -451,7 +443,6 @@ def check_fixtures() -> None:
     _same(SCORE_FIXTURE, score_payload(), "score")
     _same(BASH_FIXTURE, bash_payload(), "bash_policy")
     _same(SOX_FIXTURE, sox_model_payload(), "structured_output")
-    _same(TERM_FIXTURE, term_model_payload(), "terminal_modes")
     _same(CACHE_FIXTURE, cache_payload(), "prompt_cache")
     _same(PREFIX_FIXTURE, prefix_payload(), "prompt_prefix")
     from ref.prompt_stable import payload as stable_payload, kernel_md as stable_kernel_md
@@ -462,7 +453,6 @@ def check_fixtures() -> None:
         ("prompt_cache.md", cache_kernel_md),
         ("prompt_prefix.md", prefix_kernel_md),
         ("prompt_stable.md", stable_kernel_md),
-        ("terminal_modes.md", term_kernel_md),
         ("path_confine.md", path_kernel_md),
         ("transport.md", transport_kernel_md),
         ("score.md", score_kernel_md),
@@ -543,7 +533,6 @@ def main() -> int:
         mods = {
             "goal_loop": "ref.goal_loop", "prompt_cache": "ref.prompt_cache",
             "prompt_prefix": "ref.prompt_prefix", "prompt_stable": "ref.prompt_stable",
-            "terminal_modes": "ref.terminal_modes",
             "path_confine": "ref.path_confine", "transport": "ref.transport", "score": "ref.score",
         }
         path = mods.get(args.diagram)
@@ -569,18 +558,17 @@ def main() -> int:
         n_sc = check_score()
         n_ba = check_bash()
         n_sx = check_sox()
-        n_tm = check_term()
         if args.export:
             paths = export()
             rel = ", ".join(p.relative_to(ROOT.parent).as_posix() for p in paths)
-            print(f"exported catalog={n_cat} transport={n_tr} provider={n_pr} goal={n_gl} cache={n_ck} prefix={n_px} stable={n_ps} path={n_pc} shape={n_sh} score={n_sc} bash={n_ba} sox={n_sx} term={n_tm} → {rel}")
+            print(f"exported catalog={n_cat} transport={n_tr} provider={n_pr} goal={n_gl} cache={n_ck} prefix={n_px} stable={n_ps} path={n_pc} shape={n_sh} score={n_sc} bash={n_ba} sox={n_sx} → {rel}")
         else:
             check_fixtures()
             print(
                 f"ok  tool_catalog {n_cat}  transport {n_tr} (1 ws)  "
                 f"provider {n_pr}  goal_loop {n_gl}  prompt_cache {n_ck}  prompt_prefix {n_px}  prompt_stable {n_ps}  path_confine {n_pc}  "
                 f"shape {n_sh}  score {n_sc}  bash {n_ba}  "
-                f"structured_output {n_sx}  terminal_modes {n_tm}"
+                f"structured_output {n_sx}"
             )
         if args.lean:
             try_lean()

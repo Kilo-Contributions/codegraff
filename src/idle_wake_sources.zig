@@ -1,5 +1,5 @@
-//! Idle auto-turn sources shared by the line REPL, TUI, and graff acp.
-//! Order matches the TUI poll: interactive-subagent, job idle-stop (#199),
+//! Idle auto-turn sources shared by the line REPL and graff acp.
+//! Poll order: interactive-subagent, job idle-stop (#199),
 //! schedule, channel-worker, then peer mail (#1001). Accord ping is a side
 //! drain, not a wake. `subagent_interactive.takeWake` is engine-side (job
 //! registry + session owner) — it does not need a TTY. The TTY-only path is
@@ -47,7 +47,7 @@ fn helperBody() []const u8 {
     return rest[0 .. end + 1];
 }
 
-test "idle wake helper polls sources in TUI order" {
+test "idle wake helper polls sources in priority order" {
     const body = helperBody();
     try expectBefore(body, "subagent_interactive.takeWake", "job_notify.takeIdleWake");
     try expectBefore(body, "job_notify.takeIdleWake", "schedule.takeWake");
@@ -56,26 +56,19 @@ test "idle wake helper polls sources in TUI order" {
     try expectBefore(body, "presence_accord.takePing", "peer_idle.takeIdleWake");
 }
 
-test "REPL TUI and ACP idle callbacks delegate to the shared helper" {
+test "REPL and ACP idle callbacks delegate to the shared helper" {
     const helper = "idle_wake_sources.zig";
-    const tui = @embedFile("tui_launch.zig");
     const repl = @embedFile("readline.zig");
     const acp = @embedFile("acp_idle.zig");
-    try std.testing.expect(std.mem.indexOf(u8, tui, helper) != null);
     try std.testing.expect(std.mem.indexOf(u8, repl, helper) != null);
     try std.testing.expect(std.mem.indexOf(u8, acp, helper) != null);
-    try std.testing.expect(std.mem.indexOf(u8, tui, "takeIdleWake(") != null);
     try std.testing.expect(std.mem.indexOf(u8, repl, "takeIdleWake(") != null);
     try std.testing.expect(std.mem.indexOf(u8, acp, "takeIdleWake(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, tui, "job_notify.takeIdleWake") == null);
-    try std.testing.expect(std.mem.indexOf(u8, tui, "schedule.takeWake") == null);
-    try std.testing.expect(std.mem.indexOf(u8, tui, "channel_worker.takeWake") == null);
-    try std.testing.expect(std.mem.indexOf(u8, tui, "peer_idle.takeIdleWake") == null);
     try std.testing.expect(std.mem.indexOf(u8, repl, "peer_idle.takeIdleWake") == null);
     try std.testing.expect(std.mem.indexOf(u8, acp, "peer_idle.takeIdleWake") == null);
 }
 
-test "ACP frontend exit runs finalizeSession like REPL and TUI" {
+test "ACP frontend exit runs finalizeSession like REPL" {
     const src = @embedFile("session_run.zig");
     const fn_start = std.mem.indexOf(u8, src, "pub fn runFrontendCommands").?;
     const body = src[fn_start..];
@@ -85,8 +78,6 @@ test "ACP frontend exit runs finalizeSession like REPL and TUI" {
     const ret = try sourcePin(after_acp, "return true;");
     try std.testing.expect(finalize < ret);
     try std.testing.expect(std.mem.indexOf(u8, body[0..acp], "finalizeSession(") != null);
-    const tui = try sourcePin(body, "tui_launch.maybeRun");
-    try std.testing.expect(std.mem.indexOf(u8, body[tui..], "finalizeSession(") != null);
 }
 
 test "job notify wins over parked peer mail" {

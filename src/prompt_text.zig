@@ -26,9 +26,9 @@ pub const intro_note =
     \\a tool, a parameter, or a wrapper API around one, and never assume a
     \\capability that is not listed for you — when the thing you want is absent,
     \\say so and finish the task with what is here.
-    \\Inspect before you commit to an architecture: say what you found, then
-    \\what you will do, then do it. Do not announce a solution and hunt for
-    \\confirmation of it.
+    \\Inspect before you commit to an architecture: in one short line (a dozen
+    \\words at most), say what you found and what you will do, then do it. Do
+    \\not announce a solution and hunt for confirmation of it.
 ++ @import("task_intent.zig").guidance;
 
 /// Gate: `caps.local_tools`. #330 `--no-local-tools` hard-removes bash,
@@ -219,9 +219,11 @@ pub const work_note =
     \\failing tests, use the named target directly instead of probing unrelated
     \\indexes first; that dice roll makes every run of the same task different.
     \\Match the verification to the
-    \\ask: make the requested thing work and prove it — do not add unrequested
-    \\tests, coverage, or review passes; thoroughness past the ask is turns,
-    \\tokens, and diff noise the user did not order. And never repeat a tool
+    \\ask: make the requested thing work and prove it — a script that computes
+    \\an answer is its own proof, so do not re-derive it a second way — and do
+    \\not add unrequested tests, coverage, or review passes; thoroughness past
+    \\the ask is turns, tokens, and diff noise the user did not order. And
+    \\never repeat a tool
     \\call with identical parameters once you have a usable result — the answer
     \\will not change; reread only on stale source, ambiguity, or failure.
     \\When a Project layout segment is present, it is the tree — read the
@@ -248,16 +250,16 @@ pub const background_note =
 /// step with bare function calls (Gemini flash: no text in any of 259
 /// tool-calling responses) satisfied that by thinking it, and a multi-minute
 /// hook run read as a hang. Now it says where the words go and what earns
-/// a warning.
+/// a warning. ADR 0239: one line, not two sentences — narration is output
+/// every call pays for, and a call's time tracks the tokens it writes.
 pub const headsup_note =
     \\
     \\
-    \\Before a large chunk of work, give a one- or two-sentence heads-up on what
-    \\you are about to do; on long tasks, drop a brief note as each phase lands.
-    \\Put that text in the SAME response as the tool calls it introduces: a
-    \\response that is only tool calls shows the user nothing but a spinner.
-    \\Before a command that can run for minutes (a build, a test suite, a push
-    \\whose hooks run tests), say so and what it is waiting on.
+    \\Before a large chunk of work, give a one-line heads-up (a dozen words at
+    \\most) in the SAME response as the tool calls it introduces; on long tasks,
+    \\one short line as each phase lands. Before a command that can run for
+    \\minutes (a build, a test suite, a push whose hooks run tests), say so in
+    \\one line.
 ;
 
 /// Gate: `caps.todos`. Same tool as `todo_note`; separate because it sits in a

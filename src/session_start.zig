@@ -204,9 +204,7 @@ pub fn setupWorktreeAndBanner(
         } });
     }
 
-    // The pager owns the screen. Dumping the line-REPL banner first makes
-    // `graff tui --yolo` look like bare `graff` never left.
-    if (!main_mod.json_mode and flags.oneshot_prompt == null and !flags.isPager()) {
+    if (!main_mod.json_mode and flags.oneshot_prompt == null) {
         sink.emit(io, .{ .session_banner = .{ .cwd = main_mod.g_cwd_display, .trace_path = trace_path } });
         if (environ_map.get("GRAFF_REPL_DEBUG") != null) if (codex_account) |acct| sink.emit(io, .{ .session_notice = .{
             .text = try std.fmt.allocPrint(arena, "logged into Codex (ChatGPT account {s}…) — /model codex", .{acct[0..@min(acct.len, 8)]}),

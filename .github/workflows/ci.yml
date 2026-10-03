@@ -24,8 +24,8 @@ jobs:
       - name: Zig source-size guard integrity tests
         run: python3 scripts/test-zig-lines.py
 
-      - name: Tuiguard pool deadline integrity (#704)
-        run: python3 scripts/eval/test_tier1_tuiguard.py
+      - name: PTY cleanup integrity
+        run: python3 scripts/eval/test_pty_cleanup.py
 
       - name: Behavioral outcome verifier integrity
         run: python3 scripts/eval/test_tier2_outcomes.py
@@ -226,11 +226,8 @@ jobs:
       - name: PTY a follow-up typed mid-reply supersedes it (line REPL)
         run: python3 scripts/test-pty-steer-mid-reply.py zig-out/bin/graff
 
-      - name: TUI a follow-up typed mid-reply joins the running turn
-        run: python3 scripts/test-tui-steer-mid-reply.py zig-out/bin/graff
-
-      - name: TUI GPT-6 follow-ups steer the running reply (ADR 0222)
-        run: python3 scripts/test-tui-steer-gpt6.py zig-out/bin/graff
+      - name: Line-REPL prompt reflow
+        run: python3 scripts/eval/process_guard.py --timeout 90 python3 scripts/test-repl-prompt-reflow.py zig-out/bin/graff
 
       - name: PTY peer-channel delivery smoke test (#469)
         run: python3 scripts/test-pty-peer-channel.py zig-out/bin/graff

@@ -65,6 +65,12 @@ fn section(a: Allocator, name: []const u8, body: []const u8) ![]const u8 {
     return std.fmt.allocPrint(a, "# Project instructions (from {s})\n{s}", .{ name, body });
 }
 
+/// The instructions section the prefix holds now (startup's, or the one the
+/// last compaction folded in); ADR 0243 lifts it out on Responses wires.
+pub fn bakedSection() []const u8 {
+    return g.baked_section;
+}
+
 /// startup.buildSystemPrompt: the instructions it baked into the prefix.
 pub fn noteBaked(name: []const u8, body: []const u8) void {
     g.baked_section = section(g_gpa, name, body) catch "";

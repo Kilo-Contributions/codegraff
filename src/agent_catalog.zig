@@ -64,8 +64,17 @@ pub fn invalidateRootTools(self: *Agent) void {
     self.tools_interactions = "";
 }
 
+pub fn refreshMcp(self: *Agent) bool {
+    if (self.sub) return false;
+    const registry = self.registry orelse return false;
+    if (!registry.catalog_dirty.swap(false, .acq_rel)) return false;
+    invalidateRootTools(self);
+    return true;
+}
+
 pub fn ensureRootTools(self: *Agent, kind: Provider.Kind) !void {
     if (self.sub and !main_mod.g_codedbpro_licensed) return;
+    _ = refreshMcp(self);
     const dest = switch (kind) {
         .anthropic => &self.tools_anthropic,
         .openai => &self.tools_openai,
@@ -81,7 +90,7 @@ pub fn ensureRootTools(self: *Agent, kind: Provider.Kind) !void {
         const snapshot = try registry.snapshotTools(self.arena);
         break :blk if (self.sub) try surface.filterWorkerMcp(self.arena, snapshot) else snapshot;
     } else &.{};
-    dest.* = try schema.renderRootTools(self.arena, kind, specs, connected);
+    dest.* = try @import("shell_tool.zig").withPython(self.arena, try schema.renderRootTools(self.arena, kind, specs, connected)); // ADR 0242
 }
 
 test "invalidate without ensure leaves toolsJson empty; rebuild is a JSON array" {

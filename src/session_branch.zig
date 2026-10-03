@@ -46,10 +46,13 @@ pub fn parseSpec(raw: []const u8) ?Spec {
 /// provider by startup: see the block after loadSession for why it wins.
 /// `/resume` has no such flag and passes null.
 pub fn restore(root: *agent_mod.Agent, keys: *provider_mod.Keys, arena: Allocator, source_raw: []const u8, branch_raw: ?[]const u8, model_override: ?provider_mod.Provider) !Result {
-    const source = try arena.dupe(u8, source_raw);
+    const selection = try arena.dupe(u8, source_raw);
+    const qualified = @import("session_workspaces.zig").parseTarget(selection);
+    const source = if (qualified) |q| q.base else selection;
     if (!session.validSessionName(source)) return Error.InvalidSessionName;
     const branch = if (branch_raw) |raw| try arena.dupe(u8, raw) else null;
-    const origin = session_discovery.enterOrigin(root, arena, source);
+    const origin = session_discovery.enterOrigin(root, arena, selection);
+    if (qualified != null and origin.kind == .failed) return error.WorkspaceUnavailable;
     var reserved_path: ?[]const u8 = null;
     if (branch) |dest| {
         if (!session.validSessionName(dest)) return Error.InvalidSessionName;
@@ -68,7 +71,7 @@ pub fn restore(root: *agent_mod.Agent, keys: *provider_mod.Keys, arena: Allocato
     errdefer if (reserved_path) |path| Io.Dir.cwd().deleteFile(root.io, path) catch {};
 
     root.ensureStoredKeys(keys);
-    try session.loadSession(root, keys, arena, source);
+    try session.loadSession(root, keys, arena, selection);
     // An explicit --model outranks the model the session file carries: the flag
     // is the user's live intent, the saved model is only what the conversation
     // last ran on. Without this the restore silently reverted the flag, so a

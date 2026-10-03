@@ -1,5 +1,5 @@
 //! Scripted `graff repl` entry: headless twin of the Model for CI and non-TTY
-//! stdin. TTY `graff repl` is `tui_launch`, not this file.
+//! stdin. TTY `graff repl` uses the ordinary line REPL, not this file.
 
 const std = @import("std");
 

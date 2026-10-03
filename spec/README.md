@@ -48,7 +48,6 @@ properties are load-bearing, and a missed combination is a real bug.
 | `prompt_cache` | live | Process kernel. 48 cells. Sub never spawns. Child key isolated. Join restores root. |
 | `prompt_prefix` | live | Process kernel. 6 cells. Names-only catalog, pin once. Skill events do not rewrite the prefix. |
 | `prompt_stable` | live | Process kernel. 20 cells. OpenGauss must-nots. 5 keep. Compact re-pins. |
-| `terminal_modes` | live | Process kernel. 14 sequences. Enable+restore returns to Idle. Pop floors. Alt last. |
 | `path_confine` | live | Process kernel. Component walk; Escaped/Absolute absorb. 80 leases. |
 | `shape` | live | 1728 cells. Hand ladder + explicit arm. Budget from remaining/cap/floor. |
 | `score` | live | Process kernel. 1210 cells, 240 filed. Attempt never files; capture after join does. |
@@ -65,7 +64,6 @@ python3 spec/conformance.py --diagram prompt_cache
 python3 spec/conformance.py --diagram prompt_prefix
 python3 spec/conformance.py --diagram prompt_stable
 python3 spec/conformance.py --showcase            # prefix cube + maximizing walk + key machine
-python3 spec/conformance.py --diagram terminal_modes
 python3 spec/conformance.py --diagram path_confine
 python3 spec/conformance.py --diagram transport
 python3 spec/conformance.py --diagram score
@@ -74,7 +72,7 @@ python3 spec/conformance.py --lean     # lake build, if installed
 zig build test --summary none -Dtest-filter="spec/tool_catalog"
 ```
 
-Process kernels (`GoalLoop`, `PromptCache`, `PromptPrefix`, `PromptStable`, `TerminalModes`,
+Process kernels (`GoalLoop`, `PromptCache`, `PromptPrefix`, `PromptStable`,
 `PathConfine`, `Transport`, `Score`) are finite `Event` / `step` diagrams,
 not Turing machines. Cube kernels (Shape, Provider, ToolCatalog) stay cubes.
 BashPolicy stays a command cube this turn. The shape of a subagent fleet

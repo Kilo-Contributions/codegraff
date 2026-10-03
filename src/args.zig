@@ -86,13 +86,6 @@ pub const Flags = struct {
     /// or `harness -p "..."`), or null when positionals[0] is a subcommand.
     oneshot_prompt: ?[]const u8 = null,
 
-    /// `graff tui` / `graff repl` — fullscreen pager, not the line REPL.
-    pub fn isPager(self: Flags) bool {
-        if (self.positionals.items.len == 0) return false;
-        const c = self.positionals.items[0];
-        return std.mem.eql(u8, c, "tui") or std.mem.eql(u8, c, "repl");
-    }
-
     /// One-shot is autonomous by default: -p implies --yolo — the typed-out
     /// invocation IS the consent, and a no-stdin approval prompt can only
     /// auto-decline (which stranded unattended coding runs on a policy
@@ -278,7 +271,7 @@ pub fn parse(init: std.process.Init) !Flags {
     // (`harness "say hi"`). Subcommands (login/key) are not prompts.
     flags.is_subcommand = flags.positionals.items.len > 0 and
         (std.mem.eql(u8, flags.positionals.items[0], "login") or std.mem.eql(u8, flags.positionals.items[0], "logout") or std.mem.eql(u8, flags.positionals.items[0], "key") or std.mem.eql(u8, flags.positionals.items[0], "mcp") or std.mem.eql(u8, flags.positionals.items[0], "learn") or
-            std.mem.eql(u8, flags.positionals.items[0], "serve") or std.mem.eql(u8, flags.positionals.items[0], "update") or std.mem.eql(u8, flags.positionals.items[0], "title") or std.mem.eql(u8, flags.positionals.items[0], "repl") or std.mem.eql(u8, flags.positionals.items[0], "tui") or
+            std.mem.eql(u8, flags.positionals.items[0], "serve") or std.mem.eql(u8, flags.positionals.items[0], "update") or std.mem.eql(u8, flags.positionals.items[0], "title") or std.mem.eql(u8, flags.positionals.items[0], "repl") or (!flags.print_flag and std.mem.eql(u8, flags.positionals.items[0], "tui")) or
             std.mem.eql(u8, flags.positionals.items[0], "worktree") or std.mem.eql(u8, flags.positionals.items[0], "sandboxes") or std.mem.eql(u8, flags.positionals.items[0], "cube") or std.mem.eql(u8, flags.positionals.items[0], "models") or
             std.mem.eql(u8, flags.positionals.items[0], "remote-control") or std.mem.eql(u8, flags.positionals.items[0], "remote") or @import("acp.zig").isAcpSubcommand(flags.positionals.items[0])); // `acp` also arms ACP's stdout discipline (json_mode) — see acp.isAcpSubcommand
     if (!flags.is_subcommand and flags.positionals.items.len > 0) {
@@ -345,12 +338,12 @@ test "loginTarget: every ChatGPT name, codex included, is the plan's sign-in; un
     try std.testing.expect(loginTarget("") == null);
 }
 
-test "tui and repl are pager subcommands, not one-shot prompts" {
+test "tui is a reserved subcommand, not a one-shot prompt" {
     var tui_pos = std.ArrayList([]const u8).empty;
     defer tui_pos.deinit(std.testing.allocator);
     try tui_pos.append(std.testing.allocator, "tui");
     const tui_flags = Flags{ .positionals = tui_pos, .yolo_flag = true, .is_subcommand = true };
-    try std.testing.expect(tui_flags.isPager());
+    try std.testing.expect(tui_flags.is_subcommand);
     try std.testing.expect(tui_flags.yolo_flag);
     try std.testing.expect(tui_flags.oneshot_prompt == null);
 }

@@ -23,6 +23,13 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.18
+    \\  • graff tui launches the separate fullscreen client; terminals get the line REPL
+    \\  • shorter turns: one-line heads-ups, no recomputed answers, fewer false stalls
+    \\  • instructions cache across repos; the shell names python3's version
+    \\  • clearer session lists and cross-project resume
+    \\  • paste warnings, MCP recovery, and catalog-tolerant model selection
+    \\
     \\0.0.302.17
     \\  • rlm scripts keep whole MCP results; print() still shows the slim view
     \\
@@ -103,7 +110,9 @@ pub const usage_text =
     \\graff — a minimal agentic coding harness in Zig (zero deps)
     \\
     \\usage:
-    \\  graff [flags]                    start the REPL
+    \\  graff [flags]                    start the line REPL
+    \\  graff repl                       line REPL (scripted when stdin is piped)
+    \\  graff tui [args...]               launch installed graff-tui (sibling binary, then PATH)
     \\  graff [-p] "prompt"              one-shot: run the prompt, print the answer, exit
     \\  graff login                      get a codegraff key (device-code OAuth)
     \\  graff login chatgpt              ChatGPT sign-in (also: codex, openai)

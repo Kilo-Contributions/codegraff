@@ -45,7 +45,6 @@ const engine_events = @import("engine_events.zig");
 const harness_policy = @import("harness_policy.zig");
 const title_mod = @import("title.zig");
 const repl = @import("repl.zig");
-const tui_launch = @import("tui_launch.zig");
 const shapes = @import("shapes.zig"); // applyUltracodeSteering lives here (#326)
 const repl_glue = @import("repl_glue.zig");
 const eval_memory = @import("eval_memory.zig");
@@ -66,8 +65,8 @@ const commands_privacy = @import("commands_privacy.zig");
 const prompts = @import("prompts.zig");
 const local_tools = @import("local_tools.zig");
 
-/// `graff repl`: interactive chat on the Grok-style TUI (same as `graff tui`).
-/// Piped/non-TTY stdin still drives the scripted Model so CI
+/// `graff repl`: TTY stdin falls through to the ordinary line REPL.
+/// Piped/non-TTY stdin drives the scripted Model so CI
 /// (`printf ... | graff repl`) keeps a stable headless path.
 /// Self-contained — exits after. Moved out of main() (600-line goal).
 /// `root` is already a stable, fully-constructed main()-owned Agent by the
@@ -75,10 +74,7 @@ const local_tools = @import("local_tools.zig");
 /// only reads through the pointer, it never owns or returns Agent storage).
 pub fn runReplCommand(gpa: Allocator, io: Io, environ_map: anytype, root: *agent_mod.Agent, keys: *provider_mod.Keys, client: *std.http.Client, in: *Io.Reader, out: *Io.Writer, arena: Allocator, flags: args.Flags) !bool {
     if (!(flags.positionals.items.len > 0 and std.mem.eql(u8, flags.positionals.items[0], "repl"))) return false;
-    if (Io.File.stdin().isTty(io) catch true) {
-        try tui_launch.run(gpa, io, environ_map, root, keys, client, arena, main_mod.g_cwd_display, flags.yolo_flag);
-        return true;
-    }
+    if (Io.File.stdin().isTty(io) catch true) return false;
     root.ensureStoredKeys(keys);
     providers.ensureModelQueryCatalogs(root, keys.*, "");
     // The standalone chat REPL can switch wire formats inside its own model
@@ -102,7 +98,7 @@ pub fn runReplCommand(gpa: Allocator, io: Io, environ_map: anytype, root: *agent
         .registry = root.registry,
         .tracer = root.tracer,
         .run_budget = root.run_budget,
-        // The base, as in tui_launch: each turn's setSystemPrompts composes the
+        // Use the base: each turn's setSystemPrompts composes the
         // constraint block onto it, so root.sys_normal would stack a second copy.
         .sys_normal = if (root.sys_base.len > 0) root.sys_base else root.sys_normal,
         .tools_anthropic = root.tools_anthropic,
@@ -125,23 +121,19 @@ pub fn runReplCommand(gpa: Allocator, io: Io, environ_map: anytype, root: *agent
     defer @import("run_idle.zig").enabled = false;
     try repl.runScripted(gpa, io, environ_map, in, out, &repl_ctx, repl_glue.replTurnCb, repl_glue.replModelCb, repl_glue.replCancelCb, root.provider.model, models_buf.items);
     // Same stderr footer as `-p`, so evals can score the scripted REPL the
-    // same way. TTY `graff repl` is the TUI and keeps the restore tail clean.
+    // same way. TTY `graff repl` uses the main loop's footer.
     pricing.printUsageFooter(io);
     root.messages = try convo.cloneInto(root.arena);
     root.compaction_window = convo.compaction_window;
     return true;
 }
 
-pub fn runFrontendCommands(gpa: Allocator, io: Io, environ_map: anytype, root: *agent_mod.Agent, keys: *provider_mod.Keys, client: *std.http.Client, in: *Io.Reader, out: *Io.Writer, arena: Allocator, flags: args.Flags, json_mode: bool, cwd: []const u8, final_io: Io) !bool {
+pub fn runFrontendCommands(gpa: Allocator, io: Io, environ_map: anytype, root: *agent_mod.Agent, keys: *provider_mod.Keys, client: *std.http.Client, in: *Io.Reader, out: *Io.Writer, arena: Allocator, flags: args.Flags, json_mode: bool, _: []const u8, final_io: Io) !bool {
     if (try runReplCommand(gpa, io, environ_map, root, keys, client, in, out, arena, flags)) {
         try finalizeSession(gpa, final_io, arena, out, root, json_mode);
         return true;
     }
     if (try @import("acp.zig").runAcpCommand(gpa, io, environ_map, root, keys, client, in, out, arena, flags)) {
-        try finalizeSession(gpa, final_io, arena, out, root, json_mode);
-        return true;
-    }
-    if (try tui_launch.maybeRun(gpa, io, environ_map, root, keys, client, arena, flags, json_mode, cwd)) {
         try finalizeSession(gpa, final_io, arena, out, root, json_mode);
         return true;
     }

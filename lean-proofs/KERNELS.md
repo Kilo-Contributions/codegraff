@@ -17,9 +17,7 @@ root partition), `PromptPrefix` (names + triggers, pinned once; skill
 load/list/rescan do not rewrite the prefix), `PromptStable` (OpenGauss
 must-nots: skills/schemas in history, no clock/toolset-rewrite/memory
 reload in the prefix; compact re-pins — showcase with
-`python3 spec/conformance.py --showcase`), `TerminalModes` (`Op`/`step`
-mode map + kitty depth; enable++restore returns to Idle; pop floors;
-alt-screen leave is last), `PathConfine` (component walk: Escaped and
+`python3 spec/conformance.py --showcase`), `PathConfine` (component walk: Escaped and
 Absolute absorb), `Transport` (a sub never takes WS; only one live root
 Responses cell does), and `Score` (`attempt` never files; `capture`
 after the join files one stage row). They are not Turing machines: no
@@ -53,7 +51,6 @@ not a skip: TUI, prompts, and SSE bytes stay out of Lean on purpose.
 | `PromptCache` | 48 cells + `Event`/`step` | provider cache HIT, uuid5 cwd bytes, vision pin |
 | `PromptPrefix` | 6 cells + `Event`/`step` | catalog wording, provider HIT, compaction |
 | `PromptStable` | 20 cells + `Event`/`step` | Anthropic `cache_control` bytes, compact summary wording |
-| `TerminalModes` | 14 named sequences + `Op`/`step` | TUI layout, glyphs, the emulator font |
 | `PathConfine` | 16 lexical paths + 80 lease cells + `Event`/`step` | OS errno, Windows drives, live symlink walk |
 | `Shape` | 1728 ladder cells | `admit`, learned override, ε-explore, `observe` |
 | `Score` | 1210 filing cells (240 filed) + `Event`/`step`; 11 titles; 16 class samples | HMAC, providerClass price fallback |

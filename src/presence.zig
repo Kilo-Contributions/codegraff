@@ -138,8 +138,11 @@ var g_acked: [max_peers]u64 = undefined;
 var g_acked_len: usize = 0;
 
 var g_activity: []const u8 = "waiting";
+var g_activity_ms: i64 = 0;
 pub fn noteActivity(io: Io, arena: Allocator, working: bool) void {
+    if (g_own_name == null) return;
     g_activity = if (working) "working" else "waiting";
+    g_activity_ms = unixMs(io);
     writeOwn(io, arena);
 }
 
@@ -149,6 +152,7 @@ fn writeOwn(io: Io, arena: Allocator) void {
     var owner = worktree_lease.selfOwner(io, g_identity, g_session, unixMs(io));
     owner.goal = g_goal;
     owner.activity = g_activity;
+    owner.last_activity_ms = g_activity_ms;
     owner.title = g_title;
     owner.session_base = g_session_base;
     const text = formatRecord(arena, owner) catch return;
@@ -242,6 +246,8 @@ pub fn deinit(gpa: Allocator) void {
     g_device_off = 0;
     g_tail_seeked = false;
     g_acked_len = 0;
+    g_activity = "waiting";
+    g_activity_ms = 0;
 }
 
 pub fn retire(io: Io) void {
@@ -534,63 +540,42 @@ pub fn drainDevice(io: Io, arena: Allocator) []const Message {
     return out.items;
 }
 
-test "roomCursor adopt/reset: resume continues from the saved byte offset" {
-    resetRoomCursorForTest();
-    defer resetRoomCursorForTest();
-    adoptRoomCursor(.{ .chan = 4096, .device = 128 });
-    const cur = roomCursor();
-    try std.testing.expectEqual(@as(u64, 4096), cur.chan);
-    try std.testing.expectEqual(@as(u64, 128), cur.device);
-    resetRoomCursorForTest();
-    try std.testing.expectEqual(@as(u64, 0), roomCursor().chan);
+test {
+    _ = @import("presence_tests.zig");
 }
 
-test "listPeers: probes liveness, reaps the provably dead, keeps the alive" {
-    // Windows: the live self-record probes .gone on the runner (OpenProcess on own pid fails there) — skip until diagnosed on a real Windows box.
-    if (builtin.os.tag == .windows) return error.SkipZigTest;
+test "presence activity records turn boundaries but not metadata rewrites" {
     const io = std.testing.io;
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const self = proc_identity.selfRecord(io);
-    const alive: Owner = .{ .pid = self.pid, .start_id = self.start_id, .session_id = "s-live", .identity = "/x/.git", .goal = "g" };
-    try tmp.dir.writeFile(io, .{ .sub_path = "live.json", .data = try formatRecord(arena, alive) });
-    // pid -7 can never hold a process (probe: pid <= 0 is .gone), so the reap path is exercised identically on every platform.
-    const dead: Owner = .{ .pid = -7, .start_id = 1, .session_id = "s-dead", .identity = "/x/.git" };
-    try tmp.dir.writeFile(io, .{ .sub_path = "dead.json", .data = try formatRecord(arena, dead) });
-    // Reopen with .iterate: tmpDir's handle isn't iteration-capable on the Linux backend (dirRead seeks an O_PATH fd → EBADF panic, the CI crash).
-    var idir = try tmp.dir.openDir(io, ".", .{ .iterate = true });
-    defer idir.close(io);
-    const peers = listPeers(io, arena, idir);
-    try std.testing.expectEqual(1, peers.records.len);
-    try std.testing.expectEqualStrings("s-live", peers.records[0].session_id);
-    var buf: [16]u8 = undefined;
-    try std.testing.expectError(error.FileNotFound, tmp.dir.readFile(io, "dead.json", &buf));
-}
-
-test "unackedPeer: returns the live foreign co-owner once, then yields to the ack" {
-    const my_identity = "/repo/.git";
-    const foreign: Owner = .{ .pid = 4242, .start_id = 99, .session_id = "s-b", .identity = "/repo/.git", .goal = "theirs" };
-    const other_tree: Owner = .{ .pid = 4343, .start_id = 98, .session_id = "s-c", .identity = "/repo/.git/worktrees/wt1" };
-    const records = [_]Owner{ other_tree, foreign };
-    const probes = [_]proc_identity.Probe{ .{ .id = 98 }, .{ .id = 99 } };
-    const peers: Peers = .{ .records = &records, .probes = &probes };
-    const found = unackedPeer(peers, my_identity, 1, &.{}) orelse return error.ExpectedPeer;
-    try std.testing.expectEqualStrings("s-b", found.session_id);
-    const key = ackKey(found);
-    try std.testing.expect(unackedPeer(peers, my_identity, 1, &.{key}) == null);
-    // A new session reusing that pid is a NEW peer, not an acked one.
-    const reused: Owner = .{ .pid = 4242, .start_id = 100, .session_id = "s-d", .identity = "/repo/.git" };
-    const records2 = [_]Owner{reused};
-    const probes2 = [_]proc_identity.Probe{.{ .id = 100 }};
-    try std.testing.expect(unackedPeer(.{ .records = &records2, .probes = &probes2 }, my_identity, 1, &.{key}) != null);
-}
-
-test "lean one-shots skip the shared-tree checkpoint" {
-    const saved = no_local_tools.lean;
-    defer no_local_tools.lean = saved;
-    no_local_tools.lean = true;
-    try std.testing.expect(gateCheck(std.testing.io, std.testing.allocator) == null);
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path_len = try tmp.dir.realPath(io, &path_buf);
+    bindForTest(path_buf[0..path_len], "/test/.git", "activity-test", proc_identity.selfRecord(io));
+    g_own_name = "activity.json";
+    defer {
+        g_own_name = null;
+        g_activity = "waiting";
+        g_activity_ms = 0;
+        unbindForTest();
+    }
+    // Startup/metadata refresh is not evidence of a turn.
+    writeOwn(io, arena);
+    const initial = parseRecord(arena, try tmp.dir.readFileAlloc(io, "activity.json", arena, .limited(record_max))).?;
+    try std.testing.expectEqual(@as(i64, 0), initial.last_activity_ms);
+    for ([_]bool{ true, false }) |working| {
+        noteActivity(io, arena, working);
+        const active = parseRecord(arena, try tmp.dir.readFileAlloc(io, "activity.json", arena, .limited(record_max))).?;
+        try std.testing.expect(active.last_activity_ms > 0);
+        try std.testing.expectEqualStrings(if (working) "working" else "waiting", active.activity);
+        // Make the distinction deterministic even on a same-millisecond rewrite.
+        g_activity_ms = 1234;
+        writeOwn(io, arena);
+        const refreshed = parseRecord(arena, try tmp.dir.readFileAlloc(io, "activity.json", arena, .limited(record_max))).?;
+        try std.testing.expectEqual(@as(i64, 1234), refreshed.last_activity_ms);
+        try std.testing.expect(refreshed.last_seen_ms > refreshed.last_activity_ms);
+        try std.testing.expectEqualStrings(active.activity, refreshed.activity);
+    }
 }

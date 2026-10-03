@@ -255,6 +255,8 @@ pub fn runSubcommand(io: Io, gpa: Allocator, arena: Allocator, init: std.process
         try hw.interface.flush();
         return true;
     }
+    if (flags.oneshot_prompt == null and flags.positionals.items.len > 0 and std.mem.eql(u8, flags.positionals.items[0], "tui"))
+        std.process.fatal("use graff tui [arguments]: put tui before its flags", .{});
     router_config.load(io, arena) catch |err|
         std.process.fatal("invalid {s}: {s}", .{ router_config.path, @errorName(err) });
     // #402: pin THE codex credential directory ($CODEX_HOME, else ~/.codex) before
@@ -544,16 +546,5 @@ pub fn runSubcommand(io: Io, gpa: Allocator, arena: Allocator, init: std.process
     if (!main_mod.json_mode and flags.oneshot_prompt == null)
         @import("server_diagnostics.zig").warnStartup(arena, io);
 
-    // ADR 0042: claim the pager before keys / MCP / prompt so `graff tui`
-    // (and TTY `graff repl`) do not sit on a blank shell. No-op off a TTY.
-    if (!main_mod.json_mode and flags.oneshot_prompt == null and flags.isPager()) {
-        _ = @import("tui").claim();
-    }
     return false;
-}
-
-test "pager commands claim the alt screen before credentials" {
-    const src = @embedFile("startup.zig");
-    try std.testing.expect(std.mem.indexOf(u8, src, "flags.isPager()") != null);
-    try std.testing.expect(std.mem.indexOf(u8, src, ".claim()") != null);
 }

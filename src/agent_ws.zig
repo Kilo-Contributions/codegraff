@@ -470,7 +470,7 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
     var fbuf: std.ArrayList(u8) = .empty;
     defer fbuf.deinit(gpa);
     var frames_seen: usize = 0;
-    // Prose (not protocol frames) tightens the inter-frame stall budget.
+    // Prose tightens the inter-frame stall budget until its item closes (ADR 0241).
     var loop_guard: @import("agent_model_loop.zig").Stream = .{};
     var sig: TokenSignal = .{};
     var text_seen = false;
@@ -491,13 +491,13 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
         //     nothing came back". A FRESH connect skips this: its handshake just
         //     proved liveness, so it keeps the full pre-first-token budget.
         //   * otherwise → the inter-frame budget: full stream_stall_ms after
-        //     protocol frames (encrypted thinking), a quarter once prose flowed.
+        //     protocol frames (encrypted thinking), a quarter while prose streams.
         //     http_stall.budgetMs is what streamStallWatch asks the SSE reader's
         //     budget of on every tick; it cannot change mid-wait, so deciding it
         //     here is equivalent and lets both regimes share one watchdog arm.
         read: {
             const head_wait = reused and frames_seen == 0;
-            const budget = if (head_wait) http.head_stall_ms else http_stall.interFrameBudgetMs(http.stream_stall_ms, frames_seen > 0, text_seen, self.stall.widen);
+            const budget = if (head_wait) http.head_stall_ms else http_stall.interFrameBudgetMs(http.stream_stall_ms, frames_seen > 0, text_seen and sig.open, self.stall.widen);
             const ReadDone = union(enum) { msg: ws.Error!ws.Opcode, stall: WatchdogFired };
             var rd_buf: [2]ReadDone = undefined;
             var rsel: Io.Select(ReadDone) = .init(self.io, &rd_buf);
@@ -558,9 +558,9 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
         // …and THIS is the budget signal: visible prose, from EITHER event that
         // grows partial_text on SSE — an output-text delta, or the streamed
         // arguments of a whitelisted meta call (attempt_completion / ask_user),
-        // which is all a final-answer turn emits. Fed every frame until it
-        // fires (output_item.added/done open and close the tracked call).
-        if (!text_seen and sig.flowing(gpa, fbuf.items)) {
+        // which is all a final-answer turn emits. Fed every frame: an item that
+        // closes restores the full budget for the next one (ADR 0241).
+        if (sig.step(gpa, fbuf.items) and !text_seen) {
             text_seen = true;
             self.traceFirstToken();
             if (self.tracer) |tr| tr.note("ws", "first output text — tightening stall budget");
