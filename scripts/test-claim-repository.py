@@ -169,7 +169,8 @@ def main():
         if args.only and name != args.only:
             continue
         # Unavailable `gh pr view` plus an explicit other --repo is not a
-        # claim match; the second bash then hits publication preflight.
+        # claim match; the second bash is then refused conservatively because
+        # the fixture cannot resolve which PR it targets. Opt-in only.
         if name == 'unknown-pr' and not args.only:
             continue
         run_case(binary, name, case, args.evidence)

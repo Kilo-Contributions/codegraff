@@ -172,33 +172,6 @@ test "rlm order each preserves pending and cancellation without binding partial 
     }
 }
 
-const Observed = struct {
-    names: [8][]const u8 = undefined,
-    count: usize = 0,
-    fn record(context: *anyopaque, call: tools.ToolCall, _: tools.ExecResult) !void {
-        const self: *Observed = @ptrCast(@alignCast(context));
-        self.names[self.count] = try gpa.dupe(u8, call.name);
-        self.count += 1;
-    }
-};
-
-test "rlm order observes each lexical host output exactly once in execution order" {
-    var f = try Fixture.init();
-    defer f.deinit();
-    try f.tmp.dir.writeFile(io, .{ .sub_path = "items.json", .data = "[{\"id\":1},{\"id\":2}]" });
-    var observed: Observed = .{};
-    defer for (observed.names[0..observed.count]) |name| gpa.free(name);
-    var state: @import("pr_local_checks.zig").State = .{};
-    var ctx = f.ctx();
-    ctx.publication_observer = .{ .context = &observed, .state = &state, .record = Observed.record };
-    const out = try rlm.runScript(ctx, "items = read_file(\"items.json\")\nmapped = each(items, \"sleep_ms\", \"id\")\ne = write_file(path=\"target.txt\", content=\"new\", replace=true)\nr = read_file(\"target.txt\")\nprint(r)");
-    defer gpa.free(out.text);
-    try std.testing.expect(!out.is_error);
-    try std.testing.expectEqualStrings("new", out.text);
-    try std.testing.expectEqual(@as(usize, 5), observed.count);
-    for ([_][]const u8{ "read_file", "sleep_ms", "sleep_ms", "write_file", "read_file" }, observed.names[0..observed.count]) |want, got| try std.testing.expectEqualStrings(want, got);
-}
-
 test "rlm order unresolved print argument prevents speculative tail reads" {
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();

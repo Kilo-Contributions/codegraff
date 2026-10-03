@@ -56,8 +56,6 @@ fn toolCtx(self: *Agent) tools_mod.ToolCtx {
         .approvals = self.approvals,
         .tracer = self.tracer,
         .run_budget = self.run_budget,
-        .publication_checks = self.publication_checks,
-        .publication_observer = .{ .context = self, .state = &self.publication_checks, .record = @import("pr_local_checks.zig").observeOutput },
         .depth = self.depth,
         .snapshots = self.snapshots,
         .tools_used = &self.tools_used,
@@ -372,10 +370,6 @@ pub fn argLiveDelta(self: *Agent, obj: std.json.ObjectMap) void {
 /// never carried these moments (argLiveDelta gates --json off), so JsonSink
 /// stays silent.
 fn openLive(self: *Agent, name: []const u8, ix: i64) void {
-    if (!@import("builtin").is_test and argToolFor(name) == .attempt_completion and @import("pr_verify.zig").hasObligation(self)) {
-        self.arg_live = .{};
-        return;
-    }
     if (argToolFor(name) == .rlm) rlm_spec.resetLive(self.gpa, self.io);
     self.arg_live.open(name, ix);
 }

@@ -1,6 +1,6 @@
 # 0100. Publication claims and verified completion
 
-Status: accepted 2026-09-10
+Status: accepted 2026-09-10; PR-readiness and verified-completion parts superseded by 0250 (2026-10-03)
 
 ## Context
 

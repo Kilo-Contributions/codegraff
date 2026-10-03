@@ -110,11 +110,11 @@ record only when you need the evidence or the edge cases.
 | [0097](0097-isolate-probe-clipboards.md) | Offline PTY probes get private clipboard commands per process; direct probe runs retain OS clipboard integration. |
 | [0098](0098-orphan-listeners-are-not-stop-authority.md) | Legacy listener discovery is read-only; stop authority requires verified ownership, port preflight checks both families, and unknown browser visibility protects listening jobs. |
 | [0099](0099-gui-saved-sessions-are-snapshots.md) | A saved-session GET is a snapshot with unknown live status; the GUI must not infer the REPL finished. |
-| [0100](0100-publication-claims-and-verified-completion.md) | Non-draft PRs fail closed on CI/Verification/helper-only claims; artifact presence ACK is not ownership; recipe success is verified task success. |
+| [0100](0100-publication-claims-and-verified-completion.md) | Non-draft PRs fail closed on CI/Verification/helper-only claims; artifact presence ACK is not ownership; recipe success is verified task success. PR-readiness and verified-completion parts superseded by [0250](0250-pr-publication-is-not-gated.md). |
 | [0101](0101-gui-tests-preserve-desktop-focus.md) | GUI tests stay hidden by default; visible opt-in can overlap other apps, and native foreground checks require separate opt-in. |
 | [0102](0102-workspace-agents-and-cancel-recovery.md) | Agents uses the workspace area, Tasks visibility is explicit and persisted, and timed-out cancellation retires the worker before session recovery. |
 | [0103](0103-mcp-apps-are-isolated-result-views.md) | MCP Apps are private saved result views in isolated GUI/browser sandboxes; app tool calls require a future approval path. |
-| [0104](0104-live-publication-and-deferred-tool-evidence.md) | Requests merge only ready MCP tasks; publication and completion use fresh head evidence; claim transactions serialize handoffs. |
+| [0104](0104-live-publication-and-deferred-tool-evidence.md) | Requests merge only ready MCP tasks; publication and completion use fresh head evidence; claim transactions serialize handoffs. Publication head-evidence part superseded by [0250](0250-pr-publication-is-not-gated.md). |
 | [0105](0105-explicit-legacy-listener-stop.md) | Only an explicit identity-bound stop-suspect action may terminate an unrecorded legacy listener; automatic cleanup stays conservative. |
 | [0106](0106-desktop-html-explanations.md) | Desktop HTML explanations are private saved results in static, opaque sandboxes with bounded source and offscreen teardown. |
 | [0107](0107-model-drawn-pages-render-in-an-opaque-frame.md) | A page the model draws (`render_html`) is a private snapshot served under a CSP sandbox; the model picks the presentation, never the privilege. |
@@ -128,18 +128,18 @@ record only when you need the evidence or the edge cases.
 | [0116](0116-informational-turns-have-bounded-scope.md) | Summary turns gather bounded evidence; coding completion requirements apply to requested changes. |
 | [0118](0118-file-edits-check-target-worktree.md) | File edits checkpoint the target Git worktree; unresolved paths retain the caller checkpoint. |
 | [0119](0119-computer-tools-receive-caller-context.md) | Computer-use MCP requests receive opaque caller-owned session and turn context. |
-| [0120](0120-draft-publication-does-not-complete-verification.md) | Draft PRs cannot satisfy verified completion. A draft completes as a labeled, unverified handoff with no user command; ready PRs need passing current-head checks. |
+| [0120](0120-draft-publication-does-not-complete-verification.md) | Superseded by [0250](0250-pr-publication-is-not-gated.md). Draft PRs cannot satisfy verified completion. A draft completes as a labeled, unverified handoff with no user command; ready PRs need passing current-head checks. |
 | [0121](0121-claims-include-repository-identity.md) | Claims include repository identity; literal PR mutations compare the observed repository, PR number and branch, while unknown scopes stay conservative. |
 
 | [0122](0122-one-session-navigation-surface.md) | Open chats use the expanded sidebar or collapsed top tabs, preserving drafts and groups; focused mode keeps a compact composer and accessible settings. |
 
-| [0123](0123-pr-check-observations-retain-the-rollup.md) | PR completion retains named current-head check observations locally; diagnostic receipts never replace fresh verification. |
+| [0123](0123-pr-check-observations-retain-the-rollup.md) | Superseded by [0250](0250-pr-publication-is-not-gated.md). PR completion retains named current-head check observations locally; diagnostic receipts never replace fresh verification. |
 
 | [0124](0124-review-checkpoints-preserve-unfinished-scope.md) | Explicit reviews request a findings checkpoint every twenty calls without forcing completion or changing authority. |
 
 | [0125](0125-review-deadlines-belong-to-one-turn.md) | Opt-in review deadlines use joined turn-owned watchers, preserve user cancellation, and cannot validate late results. |
 
-| [0126](0126-publication-retains-observed-check-failures.md) | Observed failed checks survive resumes; non-draft publication waits for successful reruns and occupies its own tool batch. |
+| [0126](0126-publication-retains-observed-check-failures.md) | Superseded by [0250](0250-pr-publication-is-not-gated.md). Observed failed checks survive resumes; non-draft publication waits for successful reruns and occupies its own tool batch. |
 
 
 | [0127](0127-title-generation-is-an-explicit-result.md) | GUI titles require one explicit result and successful process exit; diagnostics never become chat names. |
@@ -152,7 +152,7 @@ record only when you need the evidence or the edge cases.
 | [0132](0132-desktop-passkeys-use-signed-device-credentials.md) | Desktop Touch ID uses matching signed keychain configuration; account choice is explicit and existing iCloud credentials need a fallback. |
 | [0133](0133-clipboard-files-follow-consumer-ownership.md) | Clipboard cleanup requires file ownership and released consumers; age alone never deletes active or saved attachments. |
 
-| [0133](0133-publication-review-binds-committed-inputs.md) | Proposed: non-draft publication reviews immutable source and observed checks; changed inputs invalidate earlier assessments. |
+| [0133](0133-publication-review-binds-committed-inputs.md) | Superseded by [0250](0250-pr-publication-is-not-gated.md). Proposed: non-draft publication reviews immutable source and observed checks; changed inputs invalidate earlier assessments. |
 | [0134](0134-accord-live-jsonl-durable.md) | JSONL is the durable peer room; Accord Unix 0600 is live by default (`GRAFF_ACCORD=0` opts out). |
 | [0135](0135-one-shell-tool.md) | Advertise one `shell` tool (`run` / `output` / `kill`); bash names stay dispatch aliases. Not a PTY. |
 | [0136](0136-follow-up-promotes-a-live-shell.md) | A queued follow-up or force-steer promotes a foreground shell; Esc still kills it. |
@@ -276,6 +276,7 @@ record only when you need the evidence or the edge cases.
 | [0247](0247-parked-work-is-named-above-the-prompt.md) | A parked turn names the work it waits on: the standing block draws `↻ waiting on <work> — graff continues when it finishes` while a job or agent that will wake the session runs, the yield prints only for a server, and a wake prints what finished before continuing. |
 | [0248](0248-commentary-prose-does-not-tighten-the-stall-budget.md) | Commentary prose (the heads-up before a tool-call batch, which the server holds open until it releases the calls) counts as visible text but does not tighten the stall budget; final-answer prose and whitelisted tool-argument prose still do. Refines 0241. |
 | [0249](0249-a-spec-task-ends-at-its-own-tests.md) | The work note no longer says a green public test is not the whole spec: it made the model write an extra verification script on every spec task without changing the pass rate. Spec tasks end at their own tests; the lean note is unchanged. Refines 0024. |
+| [0250](0250-pr-publication-is-not-gated.md) | PR publication is not gated: no local-check, head-CI or claim-review preflight and no completion obligation; drafts complete like any task. Artifact claims and disclosure policy are unchanged. Supersedes 0120, 0123, 0126, 0133 and parts of 0100/0104. |
 
 ## When to write one
 

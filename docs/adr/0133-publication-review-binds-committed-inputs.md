@@ -1,6 +1,6 @@
 # 0133. Publication review binds committed inputs
 
-Status: proposed
+Status: proposed; superseded by 0250 (2026-10-03)
 
 ## Context
 

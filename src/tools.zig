@@ -131,8 +131,6 @@ pub const ToolCtx = struct {
     plan_read_owner: ?*const anyopaque = null,
     tracer: ?*Tracer,
     run_budget: ?*run_budget_mod.RunBudget = null,
-    publication_checks: @import("pr_local_checks.zig").State = .{},
-    publication_observer: ?@import("pr_local_checks.zig").Observer = null,
     host_gate: ?HostGate = null, // #1292: rlm host calls pass the same gate as catalog calls
     depth: u8 = 0,
     snapshots: ?*Snapshots = null,

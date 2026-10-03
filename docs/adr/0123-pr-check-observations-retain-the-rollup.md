@@ -1,6 +1,6 @@
 # 0123. PR check observations retain the rollup
 
-Status: accepted 2026-09-15
+Status: accepted 2026-09-15; superseded by 0250 (2026-10-03)
 
 ## Context
 
