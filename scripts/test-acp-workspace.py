@@ -60,6 +60,38 @@ def run(binary):
             a.close()
             model.stop()
 
+        # Independent repositories remain discoverable after the saving process exits.
+        client_saves = list((client / ".graff" / "sessions").glob("*.session.json"))
+        assert len(client_saves) == 1, client_saves
+        remote_save = client_saves[0]
+        remote_key = remote_save.name.removesuffix(".session.json")
+        assert list((home / ".graff" / "session-workspaces").glob("*.json")), "save registers its workspace"
+        # Same-named local history must not hide or replace the explicitly selected remote save.
+        local_save = launch / ".graff" / "sessions" / remote_save.name
+        local_save.parent.mkdir(parents=True, exist_ok=True)
+        local_payload = json.loads(remote_save.read_text())
+        local_payload["workspace"] = str(launch)
+        local_payload["title"] = "different local conversation"
+        local_save.write_text(json.dumps(local_payload))
+        model = ScriptedModel([{"tool": "shell", "arguments": {"action": "run", "command": "pwd"}}, {"text": "restored"}])
+        port = model.start(0)
+        a = Acp(binary, launch, home, port, isolation_off)
+        try:
+            a.request("initialize", {"protocolVersion": 1})
+            active = a.request("session/new", {"cwd": str(launch), "mcpServers": []})["result"]["sessionId"]
+            before = len(a.events)
+            a.request("session/prompt", {"sessionId": active, "prompt": [{"type": "text", "text": "/sessions"}]})
+            assert str(remote_save) in json.dumps(a.events[before:]), "remote target remains visible beside duplicate local key"
+            resumed = a.request("session/prompt", {"sessionId": active, "prompt": [{"type": "text", "text": f"/resume {remote_save}"}]})
+            assert resumed["result"]["stopReason"] == "end_turn", resumed
+            turn = a.request("session/prompt", {"sessionId": active, "prompt": [{"type": "text", "text": "confirm restored workspace"}]}, 35)
+            assert turn["result"]["stopReason"] == "end_turn", turn
+            assert "where am I" in str(model.requests[0]), "resume restores the remote history"
+            assert any(str(client) in text for text in tool_text(model.requests[1])), "tools enter the remote workspace"
+        finally:
+            a.close()
+            model.stop()
+
         # A relative cwd is invalid params, not a silent fallback.
         model = ScriptedModel([])
         port = model.start(0)

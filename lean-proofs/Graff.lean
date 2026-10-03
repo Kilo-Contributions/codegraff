@@ -7,7 +7,6 @@ import Graff.Shape
 import Graff.Score
 import Graff.BashPolicy
 import Graff.StructuredOutput
-import Graff.TerminalModes
 import Graff.PromptCache
 import Graff.PromptPrefix
 import Graff.PromptStable

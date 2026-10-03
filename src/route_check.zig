@@ -78,7 +78,12 @@ test "qualified route keeps the selected provider and credential" {
     var openai_only: provider_mod.Keys = .{ .values = @splat(null) };
     try std.testing.expect(openai_only.set("openai", "metered-token", .session));
     try std.testing.expect(seatFor(openai_only, "codex/shared-route-fixture") == .no_credential);
-    try std.testing.expect(seatFor(keys, "codex/not-a-model") == .unknown);
+    // Account catalogs can omit a newly rolled-out model; explicit routing
+    // keeps that seat and lets the backend validate it. Metered catalogs stay strict.
+    const omitted = seatFor(keys, "codex/not-in-catalog");
+    try std.testing.expectEqualStrings("codex", omitted.seat.pid);
+    try std.testing.expectEqualStrings("not-in-catalog", omitted.seat.model);
+    try std.testing.expect(seatFor(keys, "openai/not-in-catalog") == .unknown);
 }
 
 pub fn billingLabel(b: pricing.Billing) []const u8 {

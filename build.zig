@@ -59,30 +59,20 @@ pub fn build(b: *std.Build) void {
     const http_zig_dep = b.dependency("http_zig", .{ .target = target, .optimize = optimize });
     const http_zig_mod = http_zig_dep.module("http_zig");
     exe.root_module.addImport("http_zig", http_zig_mod);
-    // Shared by the line-REPL picker and the TUI overlay so they cannot
-    // drift: a file import from both modules is illegal in Zig 0.17.
+    // Shared model-ranking module used by the line-REPL picker.
     const models_rank_mod = b.createModule(.{
         .root_source_file = b.path("src/models_rank.zig"),
         .target = target,
         .optimize = optimize,
     });
     exe.root_module.addImport("models_rank", models_rank_mod);
-    // Same reason: one nearest-command speller for the REPL/ACP catalog and
-    // the TUI catalog (#1275).
+    // Shared nearest-command speller for the REPL/ACP catalog.
     const slash_suggest_mod = b.createModule(.{
         .root_source_file = b.path("src/slash_suggest.zig"),
         .target = target,
         .optimize = optimize,
     });
     exe.root_module.addImport("slash_suggest", slash_suggest_mod);
-    const tui_mod = b.createModule(.{
-        .root_source_file = b.path("TUI/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    tui_mod.addImport("models_rank", models_rank_mod);
-    tui_mod.addImport("slash_suggest", slash_suggest_mod);
-    exe.root_module.addImport("tui", tui_mod);
     const install_graff = b.addInstallArtifact(exe, .{});
     b.getInstallStep().dependOn(&install_graff.step);
     const graff_step = b.step("graff", "Build and install only the release CLI");
@@ -117,7 +107,6 @@ pub fn build(b: *std.Build) void {
     unit_tests.root_module.addImport("http_zig", http_zig_mod);
     unit_tests.root_module.addImport("models_rank", models_rank_mod);
     unit_tests.root_module.addImport("slash_suggest", slash_suggest_mod);
-    unit_tests.root_module.addImport("tui", tui_mod);
     // spec/ fixtures live outside src/; importing them here makes @embedFile
     // legal and rebuilds the suite when the exported semantics change.
     exe.root_module.addAnonymousImport("ui_theme", .{ .root_source_file = b.path("src/ui_theme.css") });
@@ -260,40 +249,9 @@ pub fn build(b: *std.Build) void {
         unit_tests.root_module.addAnonymousImport(asset.import, .{ .root_source_file = b.path(asset.path) });
     }
 
-    const tui_exe = b.addExecutable(.{
-        .name = "graff-tui",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("TUI/root.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = lean_release,
-            .link_libc = true,
-        }),
-    });
-    tui_exe.root_module.addImport("models_rank", models_rank_mod);
-    tui_exe.root_module.addImport("slash_suggest", slash_suggest_mod);
-    b.installArtifact(tui_exe);
-
-    const tui_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("TUI/root.zig"),
-            .target = target,
-            .optimize = optimize,
-            // The dump/bench helpers read GRAFF_TUI_DUMP / GRAFF_TUI_BENCH
-            // through std.c.getenv. Without libc those tests do not compile
-            // on Linux, so the painter battery never ran here.
-            .link_libc = true,
-        }),
-        // Same -Dtest-filter as `zig build test`: the layout benchmark needs to
-        // be runnable on its own, ReleaseFast, without the rest of the suite.
-        .filters = test_filters,
-    });
-    tui_tests.root_module.addImport("models_rank", models_rank_mod);
-    tui_tests.root_module.addImport("slash_suggest", slash_suggest_mod);
-    tui_tests.root_module.addAnonymousImport("spec_terminal_modes", .{ .root_source_file = b.path("spec/kernels/terminal_modes.json") });
-
-    const tui_test_step = b.step("tui-test", "Run fullscreen TUI unit tests");
-    tui_test_step.dependOn(&b.addRunArtifact(tui_tests).step);
+    const external_tui_test = b.addSystemCommand(&.{ "python3", "scripts/test-external-tui.py" });
+    external_tui_test.addArtifactArg(exe);
+    test_step.dependOn(&external_tui_test.step);
 
     // In-process ACP (fx-shaped embed). Off the default install so the
     // tagged CLI cut does not grow a .so / .wasm. `zig build libgraff`

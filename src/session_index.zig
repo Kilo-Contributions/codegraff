@@ -153,7 +153,7 @@ pub fn appendWorkspaceSessions(
     for (extra.items) |e| {
         var seen = false;
         for (entries.items) |c| {
-            if (std.mem.eql(u8, c.base, e.base)) {
+            if (std.mem.eql(u8, c.base, e.base) and sameWorkspace(c.workspace, e.workspace)) {
                 seen = true;
                 break;
             }

@@ -175,7 +175,9 @@ fn execToolInner(ctx: ToolCtx, call: ToolCall) !ToolOutput {
         // loads its schema inline and runs — the refusal round trip is gone
         // (same user direction as the native fold). Still downstream of
         // agent_tool_gate.gateTool: consent is already settled.
-        mcp_schema_gate.autoLoad(gpa, reg.tools, call.name);
+        const connected = try reg.snapshotTools(gpa);
+        defer gpa.free(connected);
+        mcp_schema_gate.autoLoad(gpa, connected, call.name);
         var prepared = codedbpro_paths.prepareInput(gpa, io, ctx.agent_cwd, call.name, call.input) catch |err| {
             codedbpro_report.onFailure(ctx, call.name, @errorName(err));
             return failure(gpa, err);

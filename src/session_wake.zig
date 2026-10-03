@@ -124,9 +124,8 @@ test "notification provenance survives saved JSON and conversation adoption with
     try std.testing.expect(isNotice(restored.array.items[0]));
     try std.testing.expect(!@import("session_peer.zig").isHumanUserTurn(restored.array.items[0]));
     try std.testing.expect(!isNotice(restored.array.items[1]));
-    const turns = try @import("tui_session.zig").visibleTurns(a, restored.array);
-    try std.testing.expect(turns[0].notification);
-    try std.testing.expect(!turns[1].notification);
+    try std.testing.expect(@import("session_peer.zig").isHumanUserTurn(restored.array.items[1]));
+    try std.testing.expectEqualStrings("wake up", @import("messages.zig").latestUserText(restored.array.items));
 }
 
 test "notification metadata stays off chat, responses and anthropic wires including cache branches" {

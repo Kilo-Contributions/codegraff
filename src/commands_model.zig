@@ -149,7 +149,7 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
             const mdl = std.mem.trim(u8, arg[i + 1 ..], " \t");
             if (provider_mod.specFor(pid)) |spec| {
                 if (mdl.len == 0) return true;
-                if (!isLocalUrl(spec.url) and !pricing.providerModelInTable(pid, mdl)) {
+                if (!isLocalUrl(spec.url) and !@import("catalog_selection.zig").acceptsExplicitModel(spec, mdl)) {
                     try out.print("unknown model '{s}' for {s} — choose /model, or run `graff models refresh` first\n", .{ mdl, pid });
                     try out.flush();
                     return true;

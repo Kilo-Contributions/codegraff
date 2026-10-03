@@ -3,7 +3,7 @@
 # and free. No provider calls, no network, no model in the loop. This is what
 # the pre-push hook runs, so it has to stay honest and it has to stay fast:
 # a warm fmt/reach/sdk subset is seconds; a post-src run rebuilds zig and
-# the PTY pool (minutes, see #641).
+# the engine integration probes (minutes).
 #
 # Tier 2 is the model-backed behavioral eval set (scripts/eval-tier2.py). It is
 # deliberately NOT in the hook: it spends turns and it is slower.
@@ -11,7 +11,7 @@
 #   scripts/eval-tier1.sh              run every check
 #   scripts/eval-tier1.sh --list       show the check names
 #   scripts/eval-tier1.sh --only sdk   run one check
-#   scripts/eval-tier1.sh --only tui,tuiguard   run a comma-separated list (#641)
+#   scripts/eval-tier1.sh --only fmt,reach   run a comma-separated list (#641)
 #
 set -uo pipefail
 
@@ -27,7 +27,7 @@ cd "$repo_root"
 # processes discover their repo from their cwd like they expect.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_PREFIX
 
-CHECKS=(fmt lines spec reach build shell tests tui tuiguard invariants sdk)
+CHECKS=(fmt lines spec reach build shell tests terminal invariants sdk)
 
 usage() {
   cat <<'EOF'
@@ -41,9 +41,7 @@ checks, in order:
   build       zig build
   shell       durable shell IDs and stale-handle isolation after a crash
   tests       zig build test, and the suite count never shrinks
-  tui         zig build tui-test (the TUI suite was ungated until the 2026-08 bug wave)
-  tuiguard    real-binary pty probes: lifecycle invariants (tui-pty-guard.py)
-              and virtual-screen checks (test-tui-screenstate.py)
+  terminal    PTY cleanup integrity and line-REPL prompt reflow
   invariants  the named goal/loop/todo tests actually ran, not just compiled
   sdk         the committed SDKs match `graff --schema`
 EOF
@@ -261,33 +259,14 @@ if wanted tests; then
   fi
 fi
 
-# --- tui ---------------------------------------------------------------
-if wanted tui; then
+# --- terminal ----------------------------------------------------------
+if wanted terminal; then
   if ((!build_ok)); then
-    skip_dependent tui
+    skip_dependent terminal
   else
-    announce tui "zig build tui-test — the TUI parser/render suite"
-    out=$(zig build tui-test --summary all 2>&1)
-    if (($? != 0)); then
-      printf '%s\n' "$out" | tail -8
-      record_fail tui
-    else
-      printf '%s\n' "$out" | sed -n 's/.*Build Summary: .*; \([0-9/]* tests passed.*\)/  \1/p' | tail -1
-    fi
-  fi
-fi
-
-# --- tuiguard ----------------------------------------------------------
-if wanted tuiguard; then
-  if ((!build_ok)); then
-    skip_dependent tuiguard
-  else
-    announce tuiguard "19 PTY probes in a 4–8 process pool (#641 / #704 / #537)"
-    # Original 17 plus the ESC-split and line-REPL prompt-reflow regressions.
-    # Each owns its pty/tmp/mock; the pool is the wall-time win. Deadlines
-    # (#704) are checked first so a wedged probe cannot hang pre-push.
-    if python3 scripts/eval/test_pty_cleanup.py && python3 scripts/eval/test_tier1_tuiguard.py && python3 scripts/eval/tier1_tuiguard.py zig-out/bin/graff; then :; else
-      record_fail tuiguard
+    announce terminal "PTY cleanup integrity and line-REPL prompt reflow"
+    if python3 scripts/eval/test_pty_cleanup.py && python3 scripts/eval/process_guard.py --timeout 90 python3 scripts/test-repl-prompt-reflow.py zig-out/bin/graff; then :; else
+      record_fail terminal
     fi
   fi
 fi

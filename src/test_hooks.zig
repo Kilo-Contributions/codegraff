@@ -31,11 +31,10 @@ const learn_submit = @import("learn_submit.zig");
 const learn_tournament = @import("learn_tournament.zig");
 const recipe = @import("recipe.zig");
 
-// Scripted `graff repl` Model (piped/CI). TTY `graff repl` is TUI/.
+// Scripted `graff repl` Model (piped/CI).
 const repl = @import("repl.zig");
 const repl_markdown = @import("repl_markdown.zig");
 const repl_parser = @import("repl_parser.zig");
-const tui_session = @import("tui_session.zig");
 
 // Routing + worker selection.
 const router_config = @import("router_config.zig");
@@ -247,7 +246,6 @@ test {
     _ = repl;
     _ = repl_markdown;
     _ = repl_parser;
-    _ = tui_session;
     _ = router_config;
     _ = subagent_selection;
     _ = subagent_pin_tests;
@@ -366,13 +364,11 @@ test {
     _ = @import("acp_workspace.zig");
     _ = @import("acp_images.zig");
     _ = @import("libgraff.zig");
-    _ = @import("tui_peer.zig");
     _ = @import("acp_auth.zig");
     _ = @import("local_tools.zig");
     _ = @import("schedule.zig");
     _ = @import("channel_worker.zig");
     _ = @import("session_wake.zig");
-    _ = @import("tui_acp.zig");
     _ = @import("readline_paste.zig"); // #674: semantic paste spans (not reached via readline.zig's runtime import)
     _ = @import("readline_image.zig"); // #702: composer image chips sync on delete
     _ = @import("readline_keys.zig"); // #981: Cmd/Option modified-Backspace decoding
@@ -380,7 +376,6 @@ test {
     _ = @import("commands_resume.zig"); // #697: --resume SOURCE --branch DEST parser
     _ = @import("session_list.zig"); // #712: device-wide saved-session listing
     _ = @import("turn_dedup.zig"); // #714: identical user turns do not replay
-    _ = @import("tui_goal.zig"); // #716: typed TUI /goal is retirable, not standing
     _ = @import("net_efficiency_test.zig");
     _ = @import("codex_tool_search.zig"); // hosted tool_search on gpt-5.4+ Codex
     _ = @import("acp_tool_view.zig"); // #1287/#1289: ACP locations and edit diffs

@@ -12,10 +12,9 @@
   ],
   "test_roots": [
     "src/main.zig",
-    "src/repl.zig",
-    "TUI/root.zig"
+    "src/repl.zig"
   ],
-  "test_count_baseline": 3159,
+  "test_count_baseline": 3140,
   "test_count_slack": 25,
   "required_invariants": [
     {

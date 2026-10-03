@@ -387,7 +387,7 @@ container.
 
 | path | what it is |
 |---|---|
-| `src/`, `TUI/` | agent engine and terminal UI |
+| `src/` | agent engine, line REPL, and ACP |
 | `apps/` | Chrome native-messaging extension |
 | `graff-evals/` | live, in-house, FrontierHarness |
 | `docs/` | ADRs, architecture, images, install, embedding |
@@ -395,7 +395,9 @@ container.
 | `scripts/` | tier-1/2, PTY probes, release |
 
 The desktop app has its own repository,
-[justrach/harness](https://github.com/justrach/harness).
+[justrach/harness](https://github.com/justrach/harness). The fullscreen terminal
+UI is also maintained separately: `graff tui` launches an installed `graff-tui`
+beside the graff executable, or otherwise from `PATH`. It does not download it.
 
 ```bash
 scripts/install-hooks.sh          # once

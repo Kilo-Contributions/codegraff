@@ -64,8 +64,17 @@ pub fn invalidateRootTools(self: *Agent) void {
     self.tools_interactions = "";
 }
 
+pub fn refreshMcp(self: *Agent) bool {
+    if (self.sub) return false;
+    const registry = self.registry orelse return false;
+    if (!registry.catalog_dirty.swap(false, .acq_rel)) return false;
+    invalidateRootTools(self);
+    return true;
+}
+
 pub fn ensureRootTools(self: *Agent, kind: Provider.Kind) !void {
     if (self.sub and !main_mod.g_codedbpro_licensed) return;
+    _ = refreshMcp(self);
     const dest = switch (kind) {
         .anthropic => &self.tools_anthropic,
         .openai => &self.tools_openai,

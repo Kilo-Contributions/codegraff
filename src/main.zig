@@ -1,6 +1,5 @@
 //! Agentic loop: native/MCP tools, parallel agents, compaction, and local traces.
 const std = @import("std");
-pub const panic = @import("tui").restore.Panic; // leave the alt screen BEFORE std prints a panic, or the restore sequence erases the trace (#535)
 const Io = std.Io;
 const http_client = @import("http_client.zig");
 const Value = std.json.Value;
@@ -123,7 +122,7 @@ test {
     _ = session_start;
     _ = session_run;
     _ = @import("obs_cost_test.zig");
-    _ = @import("tui_launch.zig");
+    _ = @import("external_tui.zig");
     _ = provider_mod;
     _ = .{ @import("named_work.zig"), @import("task_intent.zig") };
 }
@@ -247,6 +246,7 @@ const session_start = @import("session_start.zig");
 const session_run = @import("session_run.zig");
 pub fn main(init: std.process.Init) !void {
     if (init.environ_map.get("GRAFF_AGENT_OBSERVER") != null) return @import("acp_agents.zig").run(init);
+    if (try @import("external_tui.zig").maybeRun(init)) return;
     var boot = startup_timing.Tracker.init(startup_timing.shutdown_trace.arm(init.io, init.environ_map), init.environ_map.get("GRAFF_BOOT_DEBUG") != null); // #364: arm() passes io through, so the teardown below stamps phases without a line of its own
     const gpa = init.gpa;
     const io = init.io;
@@ -559,9 +559,9 @@ const workflow = @import("workflow_test.zig"); // the engine's tests live here (
 const exec = @import("exec.zig");
 test { // ── Unit tests (`zig build test`): pull in tests from imported modules (mcp.zig)
     _ = .{ @import("beta_feed.zig"), @import("jev_tool.zig"), @import("jev_model_scope.zig"), @import("jev_provider_switch_tests.zig"), @import("jev_effort_state.zig") };
-    _ = .{ @import("mcp_apps.zig"), @import("html_view.zig"), @import("usage_trace.zig"), @import("providers_confirmation_tests.zig"), @import("repl_model_confirmation_tests.zig"), @import("repl_model_pick_tests.zig"), @import("engine_sink_citation_tests.zig"), @import("cite_markup_stream_tests.zig"), @import("oneshot_citation_tests.zig"), @import("tui_acp.zig"), @import("acp_permission.zig"), @import("acp_usage.zig") };
-    _ = .{ @import("mcp_server_tests.zig"), @import("main_test.zig"), @import("artifact_claim_command.zig"), @import("cli_path_hint.zig"), @import("run_budget.zig"), @import("pr_review_input.zig"), @import("pr_claim_review.zig"), @import("tui_paste_transfer.zig") };
-    _ = .{ @import("session_catalog.zig"), @import("session_prompt.zig"), @import("session_discovery.zig") };
+    _ = .{ @import("mcp_apps.zig"), @import("html_view.zig"), @import("usage_trace.zig"), @import("providers_confirmation_tests.zig"), @import("repl_model_confirmation_tests.zig"), @import("repl_model_pick_tests.zig"), @import("engine_sink_citation_tests.zig"), @import("cite_markup_stream_tests.zig"), @import("oneshot_citation_tests.zig"), @import("acp_permission.zig"), @import("acp_usage.zig") };
+    _ = .{ @import("mcp_server_tests.zig"), @import("main_test.zig"), @import("artifact_claim_command.zig"), @import("cli_path_hint.zig"), @import("run_budget.zig"), @import("pr_review_input.zig"), @import("pr_claim_review.zig") };
+    _ = .{ @import("session_catalog.zig"), @import("session_prompt.zig"), @import("session_discovery.zig"), @import("session_workspaces.zig"), @import("commands_resume.zig"), @import("peer_live.zig"), @import("presence_tests.zig"), @import("mcp_rpc_tests.zig") };
     _ = .{ @import("prompt_astra.zig"), @import("prompt_guidance.zig"), @import("oauth_chatgpt.zig") }; // per-model guidance (Astra, GPT-5.6); ChatGPT plan sign-in
     _ = .{ @import("agent_empty_completion.zig"), @import("agent_model_loop.zig"), @import("publication_policy_tests.zig"), @import("jobs_completion_tests.zig") };
     _ = .{ @import("provider_routing_tests.zig"), @import("history_wire.zig"), @import("readline_paste_number_tests.zig"), @import("test_hooks.zig"), @import("peer_wake_loop.zig") };
@@ -577,7 +577,6 @@ test { // ── Unit tests (`zig build test`): pull in tests from imported modu
     _ = @import("agent_ws_signal.zig");
     _ = @import("agent_ws_prewarm.zig");
     _ = .{ @import("http2_pool.zig"), @import("agent_stream_h2.zig"), @import("agent_stream_h2_transport_test.zig") }; // h2 stream path, and graff's request/response contract over the pinned http-zig
-    _ = @import("tui_acp_updates.zig");
     _ = @import("acp_preauth.zig"); // credential-free ACP loop must stay in the test root
     _ = .{ @import("acp_protocol.zig"), @import("acp_v2.zig"), @import("acp_v2_prompt.zig"), @import("acp_elicit.zig"), @import("hot_context.zig"), @import("history_translate.zig"), @import("mcp_notify.zig"), @import("mcp_wait.zig"), @import("mcp_pages.zig"), @import("mcp_mrtr.zig"), @import("ask_user_args.zig"), @import("mcp_add.zig"), @import("mcp_lazy.zig"), @import("mcp_share.zig"), @import("acp_room.zig"), @import("mcp_catalog.zig"), @import("mcp_watch.zig"), @import("acp_engine_test.zig"), @import("subagent_mimo_tests.zig"), @import("mimo_effort_tests.zig"), @import("gateway_picker_catalog.zig"), @import("ask_user_answers.zig"), @import("job_class.zig"), @import("startup_claim.zig") };
     _ = @import("task_outcome.zig"); // goal-outcome telemetry events

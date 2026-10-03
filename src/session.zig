@@ -259,6 +259,9 @@ fn queueSave(root: *Agent, arena: Allocator, dir: Io.Dir, name: []const u8) !u64
     // state — never leave a blank draft as an "Untitled session" on disk. Existing
     // files are untouched (we skip the write, we do not delete).
     if (!hasMeaningfulState(root)) return 0;
+    if (dir.realPathFileAlloc(root.io, ".", arena)) |workspace|
+        @import("session_workspaces.zig").remember(root.io, arena, root.home, workspace)
+    else |_| {}
     // #273: nothing has changed since the last successful write of this session
     // AND that write is still what the file holds (a second graff, an editor or
     // an rm all invalidate it — the skip is never taken on trust).

@@ -1,7 +1,8 @@
 # Architecture
 
-Codegraff is a coding agent built with Zig 0.17. The terminal pager is
-first-party (`TUI/`); the desktop app is
+Codegraff is a coding agent built with Zig 0.17. The fullscreen terminal UI is
+maintained separately: `graff tui` launches an installed `graff-tui` sibling
+executable, falling back to `PATH`, without downloading it. The desktop app is
 [Harness](https://github.com/justrach/harness), an ACP client. The harness talks to
 LLM providers, runs tools (including subagents and MCP servers) in
 parallel, and compacts its own context. This document explains how the

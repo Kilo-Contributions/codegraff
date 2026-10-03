@@ -10,6 +10,32 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.18
+
+### Terminal UI
+
+- The fullscreen UI is now a separate client. `graff tui` launches an installed `graff-tui` (the sibling binary first, then `PATH`) with its arguments unchanged, and never downloads one. In a terminal, `graff` and `graff repl` start the line REPL. The embedded renderer, its adapters and fixtures are removed (ADR 0245).
+
+### Speed and cost
+
+- Heads-ups are one short line in the same response as their tool calls, and a script that computes an answer is its own proof, so the model no longer recomputes it a second way. `read_file` is required only before editing an existing file. A call's time follows the tokens it writes (ADR 0239, #1478).
+- rlm: a slim view names the fields the whole value holds, the slim rule says to compute over results inside the same script, and an unbound call or `each()` prints its result (ADR 0240, #1479).
+- On the Responses wire, prose tightens the stall budget only while its output item is open. A model that writes a heads-up and then composes its tool calls in silence gets the full budget instead of a false stall and a repeated generation (ADR 0241, #1480).
+- The `shell` tool names the python3 the shell runs, read from where `python3` on `PATH` resolves and never by running it, so scripts stop using features that version lacks (ADR 0242, #1481).
+- On the ChatGPT plan and the OpenAI platform, the project instructions and layout ride as their own input item. The instructions are then identical in every repo and are read from the cache on a new repo's first call (ADR 0243, #1483).
+
+### Sessions
+
+- Live sessions show meaningful activity age, deterministic recent-first ordering, and separated rows without repeated identifiers. Resume errors distinguish live identifiers from saved keys. (#1459–#1464)
+- Saved workspaces remain discoverable after their processes exit. Workspace-qualified targets distinguish same-named conversations, and cross-project resume enters the selected workspace before restoring history (ADR 0244). (#1457, #1458)
+
+### Recovery
+
+- Empty or format-only terminal pastes recover an available clipboard image or show a warning instead of a misleading pasted-text chip. (#1468)
+- Explicit account-backed model selections tolerate omissions from dynamic catalogs while preserving credential validation. (#1466)
+- Stale MCP registrations and closed connections return recovery guidance; disconnected tools are withdrawn from the next catalog without automatically replaying calls. (#1465, #1467)
+- Added screen-level coverage for long blockquotes; the published reproduction already renders correctly. (#1470)
+
 ## v0.0.302.17
 
 ### Code mode

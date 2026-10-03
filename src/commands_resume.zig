@@ -58,12 +58,13 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
     if (source.len == 0) {
         if (!(main_mod.use_color and root.in != null)) return reject(out, "usage: /resume SOURCE [--branch DEST]\n", .{});
         const picked = pickSource(root, arena, out) orelse return true;
-        source = try arena.dupe(u8, picked.base);
+        source = try @import("session_workspaces.zig").target(arena, picked);
         if (!picked.local and picked.workspace.len > 0) picked_remote = try arena.dupe(u8, picked.workspace);
     }
 
     const resumed = session_branch.restore(root, keys, arena, source, parsed.branch, null) catch |err| return switch (err) {
-        error.FileNotFound => reject(out, "no session named '{s}' ({s}{s} not found in cwd or ~/{s}) — /sessions lists saved ones\n", .{ source, source, session.session_ext, session.sessions_dir }),
+        error.FileNotFound => reject(out, "{s}\n", .{try missingMessage(root, arena, source)}),
+        error.WorkspaceUnavailable => reject(out, "resume stopped: the selected workspace could not be entered; use /workspace use with its directory, then retry /resume\n", .{}),
         error.InvalidSessionName => reject(out, "resume failed: invalid source or branch name\n", .{}),
         error.BranchMatchesSource => reject(out, "branch failed: destination must differ from source\n", .{}),
         error.BranchAlreadyExists => reject(out, "branch failed: destination already exists\n", .{}),
@@ -84,6 +85,39 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
     }
     try out.flush();
     return true;
+}
+
+pub fn missingMessage(root: *Agent, arena: Allocator, source: []const u8) ![]const u8 {
+    const entries = session.listSavedSessionsAll(root, arena);
+    for (entries.items) |entry| {
+        if (entry.title) |title| if (std.mem.eql(u8, title, source))
+            return std.fmt.allocPrint(arena, "'{s}' is a saved-session title; use /resume {s}", .{ source, try @import("session_workspaces.zig").target(arena, entry) });
+    }
+    return missingLiveMessage(arena, source, presence.liveAllPeers(root.io, arena));
+}
+
+fn missingLiveMessage(arena: Allocator, source: []const u8, peers: []const @import("worktree_lease.zig").Owner) ![]const u8 {
+    for (peers) |peer| {
+        const pid = std.fmt.parseInt(i32, source, 10) catch 0;
+        if (!std.mem.eql(u8, source, peer.title) and !std.mem.eql(u8, source, peer.session_id) and
+            !std.mem.eql(u8, source, peer.session_base) and (pid == 0 or pid != peer.pid)) continue;
+        const key = if (peer.session_base.len > 0) peer.session_base else peer.session_id;
+        return std.fmt.allocPrint(arena, "'{s}' matches a live session, but no reachable save has that key. /resume takes a saved key, not a title, PID or live ID. In the originating workspace, /save {s}; then select it with bare /resume. Live workspace identity: {s}", .{ source, key, peer.identity });
+    }
+    return std.fmt.allocPrint(arena, "no reachable saved session named '{s}'. Searched cwd, linked worktrees, remembered workspaces and ~/.graff/sessions. /resume takes a saved key (not a title or PID), or an absolute .graff/sessions/KEY.session.json path. Use bare /resume to select a save; /sessions also lists live processes, which may have no save yet.", .{source});
+}
+
+test "resume missing diagnostic distinguishes live identifiers from saved keys" {
+    const a = std.testing.allocator;
+    const peers = [_]@import("worktree_lease.zig").Owner{.{ .pid = 42, .session_id = "live-id", .title = "Visible title", .session_base = "saved-key", .identity = "/project/.git" }};
+    const live = try missingLiveMessage(a, "42", &peers);
+    defer a.free(live);
+    try std.testing.expect(std.mem.indexOf(u8, live, "matches a live session") != null);
+    try std.testing.expect(std.mem.indexOf(u8, live, "/save saved-key") != null);
+    const absent = try missingLiveMessage(a, "missing", &peers);
+    defer a.free(absent);
+    try std.testing.expect(std.mem.indexOf(u8, absent, "no reachable saved session") != null);
+    try std.testing.expect(std.mem.indexOf(u8, absent, "remembered workspaces") != null);
 }
 
 test "resume argument parser separates an explicit branch" {

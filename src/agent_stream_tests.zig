@@ -5,18 +5,10 @@ const Kind = @import("provider.zig").Provider.Kind;
 
 pub fn reasoningBoundaries() !void {
     const a = std.testing.allocator;
-    const tui = @import("tui");
-    const tui_sink = @import("tui_sink.zig");
     var arena_state = std.heap.ArenaAllocator.init(a);
     defer arena_state.deinit();
     var client: std.http.Client = .{ .allocator = a, .io = std.testing.io };
     defer client.deinit();
-    var queue: tui.EventQueue = .{};
-    queue.attach(a);
-    defer queue.deinit();
-    var buf: [2048]u8 = undefined;
-    var stream: @import("repl.zig").StreamBuf = .{ .buf = &buf };
-    var bridge: tui_sink.Bridge = .{ .queue = &queue, .stream = &stream, .show_thinking = true };
     var agent: @import("agent.zig").Agent = .{
         .gpa = a,
         .arena = arena_state.allocator(),
@@ -24,13 +16,11 @@ pub fn reasoningBoundaries() !void {
         .client = &client,
         .provider = .{ .id = "test", .kind = .responses, .auth = .bearer, .url = "", .api_key = "", .model = "test", .context = 0 },
         .messages = std.json.Array.init(arena_state.allocator()),
-        .sink = tui_sink.forBridge(&bridge),
         .sub = false,
         .label = "test",
         .out = null,
     };
-    // Also exercise the classic REPL's actual "▼ Thinking" writer, not just
-    // the fullscreen frontend's live buffer.
+    // Exercise the line REPL's actual "▼ Thinking" writer and engine buffer.
     const engine_sink = @import("engine_sink.zig");
     const main = @import("main.zig");
     const tick_gate = @import("tick_gate.zig");
@@ -48,12 +38,11 @@ pub fn reasoningBoundaries() !void {
     engine_sink.hosted_frontend = false;
     var rendered: std.Io.Writer.Allocating = .init(a);
     defer rendered.deinit();
-    var plain_agent = agent;
-    plain_agent.out = &rendered.writer;
-    plain_agent.sink = engine_sink.tuiSink(&plain_agent);
-    plain_agent.show_thinking = true;
-    defer plain_agent.thinking_text.deinit(a);
-    const agents = [_]*@import("agent.zig").Agent{ &agent, &plain_agent };
+    agent.out = &rendered.writer;
+    agent.sink = engine_sink.tuiSink(&agent);
+    agent.show_thinking = true;
+    defer agent.thinking_text.deinit(a);
+    const agents = [_]*@import("agent.zig").Agent{&agent};
     const dispatch = struct {
         fn send(receivers: []const *@import("agent.zig").Agent, line: []const u8) void {
             for (receivers) |receiver| @import("agent_stream.zig").printDelta(receiver, line);
@@ -78,42 +67,10 @@ pub fn reasoningBoundaries() !void {
     }
     dispatch(&agents, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"synthetic private text\"}");
     dispatch(&agents, "data: {\"type\":\"response.reasoning_summary_text.done\",\"text\":\"\"}");
-    const snap = stream.snapshot(a) orelse return error.NoStream;
-    defer a.free(snap);
+    const snap = agent.thinking_text.items;
     try std.testing.expectEqualStrings("**First heading**\n\n**Second heading**\n\n**Third heading**\n\n**Fourth heading**\n\n", snap);
-    try std.testing.expectEqualStrings(snap, plain_agent.thinking_text.items);
     try std.testing.expect(std.mem.indexOf(u8, rendered.written(), "▼ Thinking") != null);
     try std.testing.expect(std.mem.endsWith(u8, rendered.written(), snap));
-
-    var term: tui.sim.Term = undefined;
-    term.init(a, 80, 24);
-    defer term.deinit();
-    const Job = std.meta.Child(std.meta.Child(@TypeOf(term.model.pending)));
-    var job: Job = .{
-        .gpa = a,
-        .history = &.{},
-        .params = .{},
-        .stream = .{ .buf = &buf },
-        .threaded = false,
-    };
-    job.stream.appendBytes(snap);
-    try term.model.push(.pending, "");
-    term.model.pending = &job;
-    defer term.model.pending = null;
-    const visible = try term.screen();
-    defer a.free(visible);
-    var lines = std.mem.splitScalar(u8, visible, '\n');
-    var seen: usize = 0;
-    while (lines.next()) |line| {
-        if (std.mem.indexOf(u8, line, " heading") != null) {
-            try std.testing.expect(seen < headings.len);
-            try std.testing.expect(std.mem.indexOf(u8, line, headings[seen]) != null);
-            try std.testing.expect(std.mem.count(u8, line, " heading") == 1);
-            try std.testing.expect(std.mem.indexOf(u8, line, "**") == null);
-            seen += 1;
-        }
-    }
-    try std.testing.expectEqual(headings.len, seen);
 }
 
 pub fn streamEnd(is_stream_end: anytype) !void {

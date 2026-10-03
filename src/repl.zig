@@ -1,6 +1,6 @@
 //! Scripted `graff repl` Model: conversation history, slash commands, and a
-//! pane renderer for piped/CI stdin. TTY `graff repl` is the Grok-style pager
-//! (`tui_launch`), not this Model. Styling is local (`repl_style.zig`).
+//! pane renderer for piped/CI stdin. TTY `graff repl` uses the ordinary line
+//! REPL, not this Model. Styling is local (`repl_style.zig`).
 //!
 //! The model call runs on a background thread so the ensō thinking spinner
 //! can animate while a scripted job is in flight. The whole conversation is
