@@ -11,8 +11,10 @@ pub const version_bytes = "1\n";
 pub const max_config_bytes: usize = 1 << 20;
 pub const max_record_bytes: usize = 8 << 20;
 // The supported Linux debug build is itself a pinnable evaluator; keep this
-// bounded while leaving headroom beyond its current ~128 MiB link image.
-pub const max_program_bytes: u64 = 160 << 20;
+// bounded while leaving headroom beyond its link image. That image is ~150 MiB
+// and grows in steps (its debug sections reserve capacity), so an unrelated
+// change moved it past an earlier 160 MiB cap to ~181 MiB.
+pub const max_program_bytes: u64 = 256 << 20;
 pub const max_suite_bytes: usize = 8 << 20;
 pub const max_pairs: usize = 4096;
 
