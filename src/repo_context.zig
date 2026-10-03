@@ -1,0 +1,66 @@
+//! ADR 0243: on the Responses wires whose backend caches the instructions as
+//! one unit, the per-repo context (the project-instructions block and the
+//! layout) rides as its own developer input item, ahead of the conversation,
+//! so the instructions are byte-identical in every repo and turn 1 in a new
+//! repo reads them from the cache. Other wires keep them in the instructions.
+
+const std = @import("std");
+const Agent = @import("agent.zig").Agent;
+
+pub const Split = struct { instructions: []const u8, context: []const u8 = "" };
+
+/// Root turns on the ChatGPT plan and the OpenAI platform. Their backend
+/// renders the tools and then the instructions, and caches the instructions
+/// as one unit: a per-repo byte inside them forfeits all of it in a new repo.
+pub fn eligible(self: *const Agent) bool {
+    if (self.sub or self.provider.kind != .responses) return false;
+    for ([_][]const u8{ "codex", "chatgpt-new", "openai" }) |id| if (std.mem.eql(u8, self.provider.id, id)) return true;
+    return false;
+}
+
+/// `instructions` without the per-repo blocks, and the blocks as one text, in
+/// prompt order: the instructions section the prefix holds now (hot_context
+/// keeps it in step with compaction folds, ADR 0208) and the layout in the
+/// current base (resume may have swapped it, ADR 0109). Unchanged when the
+/// agent is not eligible or neither block is present.
+pub fn split(self: *Agent, instructions: []const u8) !Split {
+    if (!eligible(self)) return .{ .instructions = instructions };
+    const arena = self.scratchAlloc();
+    var rest = instructions;
+    var ctx: std.ArrayList(u8) = .empty;
+    const baked = @import("hot_context.zig").bakedSection();
+    const blocks = [_]?[]const u8{ if (baked.len != 0) baked else null, @import("session_prompt.zig").snapshot(self) };
+    for (blocks) |maybe| {
+        const block = maybe orelse continue;
+        var at = std.mem.indexOf(u8, rest, block) orelse continue;
+        const end = at + block.len;
+        // A section composed as "\n\n" ++ section leaves with its separator.
+        if (block[0] != '\n' and at >= 2 and std.mem.eql(u8, rest[at - 2 .. at], "\n\n")) at -= 2;
+        rest = try std.mem.concat(arena, u8, &.{ rest[0..at], rest[end..] });
+        if (ctx.items.len != 0) try ctx.appendSlice(arena, "\n\n");
+        try ctx.appendSlice(arena, std.mem.trim(u8, block, "\n"));
+    }
+    if (ctx.items.len == 0) return .{ .instructions = instructions };
+    return .{ .instructions = rest, .context = ctx.items };
+}
+
+/// The context as a developer message, the role ADR 0208 gives mid-session
+/// context on Responses. Written with the conversation's first item only:
+/// chained requests already hold it server-side.
+pub fn writeItem(s: *std.json.Stringify, text: []const u8) !void {
+    try s.beginObject();
+    try s.objectField("type");
+    try s.write("message");
+    try s.objectField("role");
+    try s.write("developer");
+    try s.objectField("content");
+    try s.beginArray();
+    try s.beginObject();
+    try s.objectField("type");
+    try s.write("input_text");
+    try s.objectField("text");
+    try s.write(text);
+    try s.endObject();
+    try s.endArray();
+    try s.endObject();
+}

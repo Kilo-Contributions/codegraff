@@ -116,6 +116,61 @@ test "#401: silence after frames trips the tightened read budget, not the full p
     try std.testing.expectEqual(@as(usize, 0), agent.codex_sent_upto);
 }
 
+// ADR 0241: the tightened budget belongs to prose that is still streaming. A
+// heads-up whose item has closed is followed by a silent think while the model
+// composes its tool calls; tripping a quarter budget there killed healthy
+// turns and re-paid the whole generation. Same tightened budgets as #401, a
+// server that thinks past them after the item closes: the turn must finish.
+test "ADR 0241: a closed prose item gets the full budget back for a silent think" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+
+    var addr = try std.Io.net.IpAddress.parseLiteral("127.0.0.1:0");
+    var server = try std.Io.net.IpAddress.listen(&addr, io, .{});
+    defer server.deinit(io);
+    var done: std.atomic.Value(bool) = .init(false);
+    var fut = io.async(Mock.run, .{ io, &server, Mock.Mode.prose_close_then_think, &done });
+    defer fut.await(io);
+    defer done.store(true, .release);
+
+    const saved_stream = http.stream_stall_ms;
+    const saved_floor = http_stall.idle_floor_ms;
+    http.stream_stall_ms = 2000;
+    http_stall.idle_floor_ms = 100;
+    defer http.stream_stall_ms = saved_stream;
+    defer http_stall.idle_floor_ms = saved_floor;
+    try std.testing.expect(mock.think_after_prose_ms > http_stall.budgetMs(http.stream_stall_ms, true));
+
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var tw: Io.Writer.Allocating = .init(gpa);
+    defer tw.deinit();
+    var tracer: trace.Tracer = .{ .io = io, .gpa = gpa, .out = &tw.writer, .start = Io.Timestamp.now(io, .awake) };
+
+    var url_buf: [64]u8 = undefined;
+    const url = try std.fmt.bufPrint(&url_buf, "http://127.0.0.1:{d}/x", .{server.socket.address.getPort()});
+    var agent = mockAgent(gpa, arena, io, url);
+    agent.tracer = &tracer;
+    defer if (agent.codex_ws) |c| {
+        c.dead = true;
+        c.deinit(gpa);
+        agent.codex_ws = null;
+    };
+
+    const body = "{\"model\":\"gpt-5\",\"input\":[]}";
+    const t0 = nowMs(io);
+    const out = try agent_ws.postResponsesWs(&agent, body);
+    defer gpa.free(out);
+    try std.testing.expect(nowMs(io) - t0 >= mock.think_after_prose_ms - 100); // the think really happened
+    try std.testing.expect(std.mem.indexOf(u8, out, mock.item_done_event) != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, completed_event) != null);
+    try std.testing.expect(traced(&tw, "\"detail\":\"completed\""));
+    try std.testing.expect(!traced(&tw, "\"detail\":\"stall\""));
+}
+
 // The control: same harness, same tightened budgets, a server that finishes.
 // Proves the stall is the SERVER's silence, not the mock — and pins the notes.
 test "#401 control: a mock that completes the response still finishes the turn cleanly" {
