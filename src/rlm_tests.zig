@@ -471,7 +471,44 @@ test "#1016: literal read_file stays native when an MCP short name collides" {
 test "a printed slim view names itself and the full size (ADR 0238)" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
-    const note = @import("rlm.zig").slimNote(arena_state.allocator(), "[{\"id\":\"ISS-1\"}]", 56005);
+    const full: [56005]u8 = @splat('x');
+    const note = @import("rlm.zig").slimNote(arena_state.allocator(), "[{\"id\":\"ISS-1\"}]", &full);
     try std.testing.expect(std.mem.startsWith(u8, note, "[{\"id\":\"ISS-1\"}]\n[slim view of a 56005-byte value"));
     try std.testing.expect(std.mem.indexOf(u8, note, "write_file") != null);
+}
+
+test "a printed slim view names the fields the whole value has (ADR 0240)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const note = @import("rlm.zig").slimNote(arena_state.allocator(), "[{\"id\":\"ISS-1\"}]", "[{\"id\":\"ISS-1\",\"priority\":2,\"estimate\":3}]");
+    try std.testing.expect(std.mem.indexOf(u8, note, "-byte value; fields: id, priority, estimate; the value keeps every field") != null);
+}
+
+test "an unbound call and a bare each() print their results (ADR 0240)" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "note.txt", .data = "hello-rlm\n" });
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const n = try tmp.dir.realPath(io, &path_buf);
+    var dummy_client: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer dummy_client.deinit();
+    const saved = rlm.available;
+    defer {
+        rlm.available = saved;
+        rlm.resetLive(gpa, io);
+    }
+    rlm.available = true;
+    var ctx = testCtx(gpa, io, &dummy_client);
+    ctx.agent_cwd = path_buf[0..n];
+    const bare = try rlm.runScript(ctx, "read_file(\"note.txt\")");
+    defer gpa.free(bare.text);
+    try std.testing.expect(!bare.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, bare.text, "hello-rlm") != null);
+    // each() hands a native tool `arg`; sleep_ms takes it (rlm_order_tests does the same).
+    const mapped = try rlm.runScript(ctx, "each([1, 2], \"sleep_ms\")");
+    defer gpa.free(mapped.text);
+    try std.testing.expect(!mapped.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, mapped.text, "slept") != null);
 }
