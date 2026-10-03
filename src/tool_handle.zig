@@ -42,17 +42,17 @@ pub const handles_dir = ".graff/tool-results";
 /// by this same number, so one result costs at most one threshold of context
 /// whatever its size.
 ///
-/// 16 KiB is ~4k tokens — still a constant, bounded price, but big enough that
-/// a typical search result or file read comes back INLINE. That matters more
-/// than the context it spends: every handle forces the model into a follow-up
-/// read, and a round-trip costs ~5-8s of model latency while the tokens cost
-/// cache-read prices on big-window models. Measured on K3 (1M window, 2026-08
-/// graff×kimi-cli benchmark): raising 4 KiB → 32 KiB cut runEval/providers
-/// wall time ~16% by removing 2-3 handle-chase round-trips per task; 16 KiB
-/// keeps half that win while staying safe on 32k-class windows. The caps this
+/// 64 KiB (ADR 0251) is big enough that a whole source file comes back INLINE:
+/// a 600-line module runs 20-35 KB, and at 16 KiB its second half became a
+/// handle the model then paged through, three to five extra round trips on a
+/// real-repository task. Every handle forces a follow-up read, and a round
+/// trip costs seconds of model latency while the tokens cost cache-read
+/// prices; fewer calls also re-send less context. Small windows are safe by
+/// construction: effectiveThreshold clamps this to Provider.perOutputCap(),
+/// half the window, so a 32k-token model still gets ~16 KB. The caps this
 /// contract replaced were not constant: 128 KiB of bash stdout, 64 KiB of
 /// codedb output, and up to 136 KiB of a single result at send time.
-pub const default_threshold_bytes: usize = 16384;
+pub const default_threshold_bytes: usize = 64 * 1024;
 pub var threshold_bytes: usize = default_threshold_bytes;
 
 /// Ceiling on what one process may leave in `handles_dir`. Every handle is a

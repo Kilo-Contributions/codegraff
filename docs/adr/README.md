@@ -277,6 +277,7 @@ record only when you need the evidence or the edge cases.
 | [0248](0248-commentary-prose-does-not-tighten-the-stall-budget.md) | Commentary prose (the heads-up before a tool-call batch, which the server holds open until it releases the calls) counts as visible text but does not tighten the stall budget; final-answer prose and whitelisted tool-argument prose still do. Refines 0241. |
 | [0249](0249-a-spec-task-ends-at-its-own-tests.md) | The work note no longer says a green public test is not the whole spec: it made the model write an extra verification script on every spec task without changing the pass rate. Spec tasks end at their own tests; the lean note is unchanged. Refines 0024. |
 | [0250](0250-pr-publication-is-not-gated.md) | PR publication is not gated: no local-check, head-CI or claim-review preflight and no completion obligation; drafts complete like any task. Artifact claims and disclosure policy are unchanged. Supersedes 0120, 0123, 0126, 0133 and parts of 0100/0104. |
+| [0251](0251-tool-results-inline-up-to-64-kib.md) | Tool results inline up to 64 KiB (was 16 KiB); `effectiveThreshold` still clamps to half the context window, so small windows are unchanged. The codedb small-read exemption follows the same number. |
 
 ## When to write one
 
