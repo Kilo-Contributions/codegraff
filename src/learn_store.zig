@@ -57,19 +57,18 @@ pub fn syncDirectory(io: Io, dir: Io.Dir) !void {
     try file.sync(io);
 }
 
-/// Zig 0.16 opens Windows no-follow files asynchronously but marks the returned
-/// handle as blocking. Correct the flag so reads use the APC-aware path instead
-/// of treating a legitimate STATUS_PENDING result as unreachable.
+/// Open without following a symlink, beneath `dir` for a relative path. Zig
+/// 0.17.0 opens Windows no-follow files synchronously and flags them so; the
+/// development build opened them asynchronously, and the flag fix-up it needed
+/// would now send reads down the async path to wait forever.
 fn openFileNoFollow(io: Io, dir: Io.Dir, path: []const u8, options: Io.Dir.OpenFileOptions) !Io.File {
     var adjusted = options;
     adjusted.follow_symlinks = false;
     if (!std.fs.path.isAbsolute(path)) adjusted.resolve_beneath = true;
-    var file = if (std.fs.path.isAbsolute(path))
-        try Io.Dir.openFileAbsolute(io, path, adjusted)
+    return if (std.fs.path.isAbsolute(path))
+        Io.Dir.openFileAbsolute(io, path, adjusted)
     else
-        try dir.openFile(io, path, adjusted);
-    if (builtin.os.tag == .windows) file.flags.nonblocking = true;
-    return file;
+        dir.openFile(io, path, adjusted);
 }
 
 // Input validation lives in learn_store_validate.zig (600-line goal); the
