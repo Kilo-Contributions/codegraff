@@ -122,6 +122,22 @@ def stream_http(port, path, body, events):
         conn.close()
 
 
+def wait_for_children(pid, timeout=10.0):
+    """Wait until `pid` has no child processes. A serve session closed with
+    DELETE exits on its own and writes its session and trajectory files on the
+    way out; removing the workspace before then races those writes."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            alive = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True).returncode == 0
+        except FileNotFoundError:
+            time.sleep(1.0)
+            return
+        if not alive:
+            return
+        time.sleep(0.05)
+
+
 def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 1234), Mock)
     server.daemon_threads = True
@@ -245,6 +261,7 @@ def main():
                         http_json(port, "DELETE", f"/v1/sessions/{session_id}")
                     except OSError:
                         pass
+                    wait_for_children(serve.pid)
                 if serve.poll() is None:
                     serve.terminate()
                     try:
