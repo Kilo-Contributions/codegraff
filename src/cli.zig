@@ -23,6 +23,13 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.19
+    \\  • tool results inline up to 64 KiB: large files read in one piece
+    \\  • no false stalls while the model composes a batch of tool calls
+    \\  • parked work is named above the prompt; graff says it will continue
+    \\  • PR commands run like any other command (no readiness gate)
+    \\  • logged in, Jev picks each turn's effort alongside the first request
+    \\
     \\0.0.302.18
     \\  • graff tui launches the separate fullscreen client; terminals get the line REPL
     \\  • shorter turns: one-line heads-ups, no recomputed answers, fewer false stalls
