@@ -192,6 +192,15 @@ or pass `--yolo`. Full flag list: `graff --help`. Learning:
 A bare `/` opens a filterable menu, Esc interrupts the turn, and `/help` is the
 live catalog.
 
+`/import-claude` (or `graff mcp import`) also imports the current project's
+Claude Code conversations for `/resume`. Imports keep text, tool calls and
+results, titles, timestamps, and the Claude model; signed thinking and subagent
+sidechains are omitted. Saves use `claude-<session-id>` names, and repeat imports
+leave existing saves intact. Resuming uses the currently configured graff provider
+and its credentials; Claude Code subscription credits are never used. The source
+model remains historical metadata. Import one conversation without copying setup
+with `graff mcp import-session <Claude-session-id>`.
+
 | mode | what it does |
 | --- | --- |
 | default | ask before writes, MCP, and non-read-only bash |

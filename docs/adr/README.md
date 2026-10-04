@@ -279,6 +279,7 @@ record only when you need the evidence or the edge cases.
 | [0250](0250-pr-publication-is-not-gated.md) | PR publication is not gated: no local-check, head-CI or claim-review preflight and no completion obligation; drafts complete like any task. Artifact claims and disclosure policy are unchanged. Supersedes 0120, 0123, 0126, 0133 and parts of 0100/0104. |
 | [0251](0251-tool-results-inline-up-to-64-kib.md) | Tool results inline up to 64 KiB (was 16 KiB); `effectiveThreshold` still clamps to half the context window, so small windows are unchanged. The codedb small-read exemption follows the same number. |
 | [0253](0253-an-interactive-session-signs-in-to-chatgpt-again.md) | When a ChatGPT request is rejected and the refresh cannot replace the token, an interactive root session opens the browser sign-in, waits up to three minutes and retries once; `-p`, piped, `--json`, ACP and sub-agents never do. One unfinished sign-in ends it for the process. |
+| [0254](0254-imported-conversations-use-the-configured-route.md) | Imported Claude history uses the configured graff provider and credentials; source models are metadata, and foreign tool results remain historical receipts. |
 
 ## When to write one
 

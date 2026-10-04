@@ -208,7 +208,8 @@ fn mcpCliUsage(w: *Io.Writer) !void {
         \\  graff mcp install [--directory PATH] [--port N]   install HTTP service and client entries
         \\  graff mcp serve [--http] [--port N] [--model NAME] [--yolo]   expose run_task over stdio or HTTP
         \\  graff mcp                      list servers in .mcp.json + ~/.codegraff/mcp.json
-        \\  graff mcp import               copy Claude/Cursor MCP + skills into graff folders
+        \\  graff mcp import               copy setup and import this project's Claude history
+        \\  graff mcp import-session <id>  import only one Claude conversation into graff
         \\  graff mcp add <url | @scope/package | uvx:package | '{json}' | ->   infer, save, then connect to check it
         \\  graff mcp add <name> [--env K=V] [--header K=V]   look up a server (codegraff.com/mcp, then the MCP registry)
         \\  graff mcp add … --everywhere   save to ~/.codegraff/mcp.json (every project) instead of ./.mcp.json
@@ -308,10 +309,18 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
     // Reads (list/login) see project + global; writes stay project-local.
     const global_path = mcp_config.globalPath(arena, home, environ_map);
 
-    if (args.len > 0 and (std.mem.eql(u8, args[0], "import") or std.mem.eql(u8, args[0], "import-claude") or std.mem.eql(u8, args[0], "adopt"))) {
+    if (args.len > 0 and (std.mem.eql(u8, args[0], "import") or std.mem.eql(u8, args[0], "import-claude") or std.mem.eql(u8, args[0], "adopt") or std.mem.eql(u8, args[0], "import-session"))) {
         var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
         const n = Io.Dir.cwd().realPath(io, &cwd_buf) catch 0;
         const cwd = if (n > 0) cwd_buf[0..n] else ".";
+        if (std.mem.eql(u8, args[0], "import-session")) {
+            if (args.len != 2) return error.InvalidArguments;
+            const config = environ_map.get("CLAUDE_CONFIG_DIR") orelse try std.fmt.allocPrint(arena, "{s}/.claude", .{home});
+            const name = try @import("adopt_sessions.zig").importOne(io, arena, config, cwd, args[1], environ_map.get("CLAUDE_CODE_PROJECT_DIR_NAME"));
+            try out.interface.print("{s}\n", .{name});
+            try out.interface.flush();
+            return;
+        }
         try @import("adopt.zig").command(io, arena, home, cwd, &out.interface);
         return;
     }

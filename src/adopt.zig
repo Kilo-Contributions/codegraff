@@ -24,14 +24,22 @@ pub const Report = struct {
     hooks: usize = 0,
     rules: usize = 0,
     sources: usize = 0,
+    sessions: usize = 0,
+    sessions_skipped: usize = 0,
+    sessions_failed: usize = 0,
 };
 
 /// `graff mcp import` / `graff import-claude`. Always allowed after first-run.
 pub fn command(io: Io, arena: Allocator, home: []const u8, cwd: []const u8, out: *Io.Writer) !void {
-    const r = try run(io, arena, home, cwd);
+    var r = try run(io, arena, home, cwd);
+    // Conversations are an explicit import, never part of first-run adoption.
+    const conversations = try @import("adopt_sessions.zig").run(io, arena, home, cwd);
+    r.sessions = conversations.imported;
+    r.sessions_skipped = conversations.skipped;
+    r.sessions_failed = conversations.failed;
     markAdopted(io, arena, home);
-    if (r.added_user + r.added_project + r.skills == 0 and r.skipped == 0) {
-        try out.writeAll("nothing to adopt: no Claude/Cursor MCP servers or skills found.\n");
+    if (r.added_user + r.added_project + r.skills + r.hooks + r.rules + r.sessions + r.sessions_skipped + r.sessions_failed == 0 and r.skipped == 0) {
+        try out.writeAll("nothing to adopt: no Claude/Cursor setup or Claude conversations found.\n");
         try out.flush();
         return;
     }
@@ -41,7 +49,10 @@ pub fn command(io: Io, arena: Allocator, home: []const u8, cwd: []const u8, out:
     try out.print("copied {d} skill(s) → ~/.codegraff/skills and .harness/skills\n", .{r.skills});
     if (r.hooks > 0) try out.print("copied {d} hook(s) → ~/.codegraff/hooks (PreToolUse Read/Edit skipped)\n", .{r.hooks});
     if (r.rules > 0) try out.print("copied {d} rule file(s) → .harness/\n", .{r.rules});
-    try out.writeAll("new MCP servers still need /mcp trust or --yolo to connect.\n");
+    if (r.sessions > 0) try out.print("imported {d} Claude conversation(s) → .graff/sessions — /resume to continue\n", .{r.sessions});
+    if (r.sessions_skipped > 0) try out.print("skipped {d} existing conversation save(s)\n", .{r.sessions_skipped});
+    if (r.sessions_failed > 0) try out.print("could not import {d} Claude transcript(s) (unreadable, invalid or too large)\n", .{r.sessions_failed});
+    if (r.added_user + r.added_project > 0) try out.writeAll("new MCP servers still need /mcp trust or --yolo to connect.\n");
     try out.flush();
 }
 
