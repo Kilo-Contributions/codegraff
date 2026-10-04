@@ -48,11 +48,15 @@ pub fn login(io: Io, gpa: Allocator, arena: Allocator, home: []const u8) !void {
     };
     const user_code = strFieldObj(start_resp, "user_code") orelse "";
     const verification_uri = strFieldObj(start_resp, "verification_uri") orelse "https://codegraff.com/cli/auth";
-    const complete_uri = strFieldObj(start_resp, "verification_uri_complete") orelse verification_uri;
+    const complete_uri = strFieldObj(start_resp, "verification_uri_complete") orelse
+        if (user_code.len > 0) try std.fmt.allocPrint(arena, "{s}?code={s}", .{ verification_uri, user_code }) else verification_uri;
     const interval: i64 = @max(1, intFieldObj(start_resp, "interval", 2));
     const expires: i64 = intFieldObj(start_resp, "expires_in", 600);
 
-    try out.print("\nTo authorize, open:\n\n  {s}\n\nand enter code: {s}{s}{s}\n\nwaiting for approval …\n", .{ verification_uri, style.bold, user_code, style.reset });
+    // Print the link that carries the code: a person who copies it (the
+    // browser did not open, or opened elsewhere) lands on the approval itself,
+    // not on a page with nowhere to type the code.
+    try out.print("\nTo authorize, open:\n\n  {s}\n\nand check it shows the code {s}{s}{s}\n\nwaiting for approval …\n", .{ complete_uri, style.bold, user_code, style.reset });
     try out.flush();
     openBrowser(io, complete_uri);
 
