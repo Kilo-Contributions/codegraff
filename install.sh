@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# POSIX sh compatible: `curl ... | sh` runs this under dash on Debian/Ubuntu,
+# which rejects `set -o pipefail`. Enable it only where the shell supports it.
+set -eu
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 # Git Bash / MSYS / Cygwin: graff runs natively, through the PowerShell
 # installer. This check must run here, at top level: inside detect_platform,
