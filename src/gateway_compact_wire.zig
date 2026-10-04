@@ -336,10 +336,11 @@ pub const Plan = struct {
 };
 
 /// Check the reply against what the decisions imply, then decide which
-/// neutral messages stay. A summarized reply is [first, summary, newest
-/// recent_kept]; the cut moves back over any call a kept result answers (a
-/// result without its call is rejected by every wire), and `opening` — an
-/// unresolved turn's opening prompt (#581) — is kept verbatim too.
+/// neutral messages stay. A summarized reply is [first, summary, newest k]:
+/// k is at least recent_kept, more when the endpoint moved its cut back over
+/// a call/result pair. The cut also moves back here over any call a kept
+/// result answers (a result without its call is rejected by every wire), and
+/// `opening` — an unresolved turn's opening prompt (#581) — stays verbatim.
 pub fn plan(a: Allocator, msgs: []const Msg, reply: *const Reply, opening: ?usize) !Plan {
     const d = &reply.decisions;
     var left: std.ArrayList(usize) = .empty;
@@ -351,9 +352,10 @@ pub fn plan(a: Allocator, msgs: []const Msg, reply: *const Reply, opening: ?usiz
         for (left.items, reply.messages) |j, r| if (!matches(r, msgs[j], d)) return error.UnexpectedReply;
         return .{ .keep = keep };
     }
-    if (left.items.len < recent_kept + 3 or reply.messages.len != recent_kept + 2) return error.UnexpectedReply;
+    // At least two messages summarized between the first and the kept tail.
+    if (reply.messages.len < 3 or left.items.len < reply.messages.len + 1) return error.UnexpectedReply;
     const head = left.items[0];
-    const tail = left.items[left.items.len - recent_kept ..];
+    const tail = left.items[left.items.len - (reply.messages.len - 2) ..];
     if (!matches(reply.messages[0], msgs[head], d)) return error.UnexpectedReply;
     for (tail, reply.messages[2..]) |j, r| if (!matches(r, msgs[j], d)) return error.UnexpectedReply;
     var cut = tail[0];

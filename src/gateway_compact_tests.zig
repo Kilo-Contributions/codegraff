@@ -219,7 +219,7 @@ const long_turn =
     \\ {"type":"function_call_output","call_id":"a5","output":"five"}
 ;
 
-fn summarizedReply(a: Allocator, msgs: []const wire.Msg) !wire.Reply {
+fn summarizedReply(a: Allocator, msgs: []const wire.Msg, kept: usize) !wire.Reply {
     var out: std.Io.Writer.Allocating = .init(a);
     const w = &out.writer;
     try w.writeAll("{\"stats\":{\"summarized\":true},\"decisions\":[],\"messages\":[");
@@ -227,7 +227,7 @@ fn summarizedReply(a: Allocator, msgs: []const wire.Msg) !wire.Reply {
     const sent = field(neutral, "messages").array.items;
     try std.json.Stringify.value(sent[0], .{}, w);
     try w.writeAll(",{\"role\":\"user\",\"text\":\"[compacted summary of 6 earlier messages]\\nRan two checks.\",\"toolUses\":[]}");
-    for (sent[sent.len - wire.recent_kept ..]) |m| {
+    for (sent[sent.len - kept ..]) |m| {
         try w.writeByte(',');
         try std.json.Stringify.value(m, .{}, w);
     }
@@ -243,7 +243,7 @@ test "ADR 0252: a summary keeps the unresolved turn's opening prompt and never o
     const unresolved = try parse(a, long_turn ++ "]");
     const msgs = try wire.transcript(a, unresolved);
     try std.testing.expectEqual(@as(usize, 13), msgs.len);
-    const reply = try summarizedReply(a, msgs);
+    const reply = try summarizedReply(a, msgs, wire.recent_kept);
     try std.testing.expectEqualStrings("Ran two checks.", reply.summary);
     const p = try wire.plan(a, msgs, &reply, 6);
     const stubber: TestStub = .{};
@@ -261,12 +261,22 @@ test "ADR 0252: a summary keeps the unresolved turn's opening prompt and never o
         \\,{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]
     );
     const msgs2 = try wire.transcript(a, resolved);
-    const reply2 = try summarizedReply(a, msgs2);
+    const reply2 = try summarizedReply(a, msgs2, wire.recent_kept);
     const p2 = try wire.plan(a, msgs2, &reply2, null);
     const fresh2 = try wire.apply(a, resolved, msgs2, p2, &reply2.decisions, 6, note, &stubber);
     try std.testing.expectEqualStrings("a3", field(fresh2.items[2], "call_id").string);
     try std.testing.expectEqualStrings("function_call", field(fresh2.items[2], "type").string);
     try wire.checkPairs(a, resolved, fresh2.items);
+
+    // An endpoint that moves its own cut back over the pair keeps seven
+    // newest messages; the same history results.
+    const reply3 = try summarizedReply(a, msgs2, wire.recent_kept + 1);
+    const p3 = try wire.plan(a, msgs2, &reply3, null);
+    const fresh3 = try wire.apply(a, resolved, msgs2, p3, &reply3.decisions, 6, note, &stubber);
+    try std.testing.expectEqual(fresh2.items.len, fresh3.items.len);
+    try std.testing.expectEqualStrings("a3", field(fresh3.items[2], "call_id").string);
+    // Too few left to summarize: refused, not misread.
+    try std.testing.expectError(error.UnexpectedReply, wire.plan(a, msgs2, &(try summarizedReply(a, msgs2, msgs2.len - 2)), null));
 }
 
 test "ADR 0252: a history that pairs worse than the one it replaces is refused" {

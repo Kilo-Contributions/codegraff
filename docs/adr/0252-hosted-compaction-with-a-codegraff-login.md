@@ -69,6 +69,7 @@ Codegraff gateway each time they compact. Each compaction costs a small
 billed request and a round trip, which buys decisions that can be audited and
 results that are trimmed rather than paraphrased. A gateway outage or an empty
 balance never stops a session; it costs that compaction its quality.
-Revisit when the endpoint accepts graff's own pin (the hybrid summary keeps a
-fixed number of newest messages today), or when live-turn calls can be
-dropped safely on a given wire.
+The endpoint may keep more than its six newest messages when it moves its
+cut back over a call and its result; graff accepts any such tail. Revisit to
+send graff's own working set as `preserveRecentMessages`, or when live-turn
+calls can be dropped safely on a given wire.
