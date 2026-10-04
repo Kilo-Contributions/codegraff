@@ -19,6 +19,7 @@ const handoff_note = @import("compact_handoff_note.zig"); // #411: both halves o
 const peer_context = @import("peer_context.zig"); // ADR 0004: peer injects are not a human turn
 const compact_note_glue = @import("compact_note_glue.zig"); // #391
 const server_compact = @import("agent_server_compact.zig"); // #compact-ab telemetry
+const compact_mix = @import("compact_mix.zig"); // GRAFF_COMPACT_MIX: two-pass extract+synthesis arm
 
 const messages_mod = @import("messages.zig");
 const textMessage = messages_mod.textMessage;
@@ -191,7 +192,7 @@ pub fn compact(self: *Agent) anyerror!usize {
         }
     };
 
-    try self.messages.append(try textMessage(compact_arena, "user", try handoff_note.summaryRequest(compact_arena, self)));
+    try self.messages.append(try textMessage(compact_arena, "user", try compact_mix.summaryRequest(self, compact_arena))); // mix off: handoff_note's request
     // #174: establish the synthetic summary turn before pruning Responses
     // reasoning. An active tool loop's reasoning is newer than the real user
     // turn and must remain while that loop is in flight, but it becomes prior-
@@ -214,7 +215,7 @@ pub fn compact(self: *Agent) anyerror!usize {
     defer self.stream_quiet = was_quiet;
     defer self.compaction_request = was_compaction_request;
     defer self.message_mutation_arena = was_message_mutation_arena;
-    const root = try self.request(@import("cache_fork.zig").tools(self, fork));
+    const root = try compact_mix.synthRequest(self, @import("cache_fork.zig").tools(self, fork));
     progress.end(self);
     // Any complete transport response proves the previous opaque failure was
     // transient/non-wedging, even when its summary text is empty or truncated.
