@@ -141,7 +141,71 @@ class FollowingModel(ScriptedModel):
         return {"text": "done"}
 
 
+
+def claude_import(binary):
+    with tempfile.TemporaryDirectory(prefix="graff-acp-import-") as temporary:
+        cwd = Path(temporary).resolve()
+        home = cwd / "home"
+        config = home / ".claude"
+        slug = "".join(c if c.isascii() and c.isalnum() else "-" for c in str(cwd))
+        project = config / "projects" / slug
+        project.mkdir(parents=True)
+        records = [
+            {"type": "user", "message": {"content": "Imported human request."}},
+            {"type": "assistant", "message": {"model": "claude-source-model", "content": [
+                {"type": "thinking", "thinking": "private-import-thinking", "signature": "signed"},
+                {"type": "text", "text": "Imported assistant answer."},
+                {"type": "tool_use", "id": "import-call", "name": "Bash",
+                 "input": {"command": "touch imported-tool-must-not-run"}},
+            ]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "import-call", "content": "Imported tool receipt."},
+            ]}},
+        ]
+        source = project / "chosen.jsonl"
+        original = "\n".join(json.dumps(record) for record in records) + "\n"
+        source.write_text(original)
+        (project / "other.jsonl").write_text(original)
+        env = dict(os.environ, HOME=str(home), CLAUDE_CONFIG_DIR=str(config), ANTHROPIC_API_KEY="")
+        env.pop("CLAUDE_CODE_PROJECT_DIR_NAME", None)
+        imported = subprocess.run([str(binary), "mcp", "import-session", "chosen"],
+                                  cwd=cwd, env=env, text=True, capture_output=True, timeout=15)
+        assert imported.returncode == 0, imported.stderr
+        assert imported.stdout.strip() == "claude-chosen", imported.stdout
+        assert not (cwd / ".graff/sessions/claude-other.session.json").exists()
+        model = ScriptedModel([{"text": "Continued through graff."}])
+        port = model.start(0)
+        client = Acp(binary, cwd, home, port, extra_env={"ANTHROPIC_API_KEY": ""})
+        try:
+            client.request("initialize", {"protocolVersion": 1})
+            client.request("session/new", {"cwd": str(cwd), "mcpServers": []})
+            loaded = client.request("session/load", {"sessionId": "claude-chosen", "cwd": str(cwd), "mcpServers": []})
+            assert "result" in loaded, loaded
+            reply = client.request("session/prompt", {"sessionId": "claude-chosen",
+                "prompt": [{"type": "text", "text": "Continue the imported task."}]})
+            assert reply["result"]["stopReason"] == "end_turn", reply
+            body = json.dumps(model.requests[0])
+            for text in ["Imported human request.", "Imported assistant answer.", "Imported tool receipt."]:
+                assert text in body, text
+            assert "private-import-thinking" not in body
+            assert model.requests[0]["model"] != "claude-source-model"
+            assert not (cwd / "imported-tool-must-not-run").exists()
+            assert source.read_text() == original
+            saved = cwd / ".graff/sessions/claude-chosen.session.json"
+            deadline = time.monotonic() + 5
+            while json.loads(saved.read_text()).get("provider") != "vercel" and time.monotonic() < deadline:
+                time.sleep(.05)
+            snapshot = json.loads(saved.read_text())
+            assert snapshot["provider"] == "vercel", snapshot
+            assert "imported_from" not in snapshot
+        finally:
+            client.close()
+            model.stop()
+    print("ACP Claude history import uses graff credentials and retains tool receipts: ok")
+
+
 def run(binary):
+    claude_import(binary)
     with tempfile.TemporaryDirectory(prefix="graff-acp-load-") as temporary:
         cwd = Path(temporary)
         home = cwd / "home"

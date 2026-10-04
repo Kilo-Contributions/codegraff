@@ -23,6 +23,10 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.22
+    \\  • /import-claude brings this project's Claude Code conversations to /resume
+    \\  • imported conversations continue on your graff provider and credentials
+    \\
     \\0.0.302.21
     \\  • Windows: irm https://codegraff.com/install.ps1 | iex installs graff natively
     \\  • graff login prints the link with your code; Windows opens the browser
