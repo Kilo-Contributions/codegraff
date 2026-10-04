@@ -93,9 +93,15 @@ const keys_file = ".simple-harness-keys.json";
 /// no HOME). Key storage, sessions, history, login credentials, and saved model
 /// all hang off this, so the Windows fallback is what makes them work there.
 pub fn homeEnv(env: anytype) ?[]const u8 {
-    if (env.get("HOME")) |h| return h;
-    if (builtin.os.tag == .windows) {
-        if (env.get("USERPROFILE")) |h| return h;
+    return homeEnvFor(env, builtin.os.tag == .windows);
+}
+
+fn homeEnvFor(env: anytype, windows: bool) ?[]const u8 {
+    // Empty overrides are not homes: on Windows they must not hide the
+    // profile directory or send credential paths to the root of a drive.
+    if (env.get("HOME")) |h| if (h.len > 0) return h;
+    if (windows) {
+        if (env.get("USERPROFILE")) |h| if (h.len > 0) return h;
     }
     return null;
 }
@@ -121,6 +127,58 @@ fn keychainLookup(io: Io, arena: Allocator, provider: []const u8) KeychainLookup
     const key = std.mem.trim(u8, out orelse "", " \t\r\n");
     if (key.len > 0) return .{ .found = key };
     return if (term == .exited and (term.exited == 0 or term.exited == 44)) .missing else .transient;
+}
+
+test "homeEnv: Windows finds shared login credentials without a nonempty HOME" {
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    try tmp.dir.writeFile(io, .{
+        .sub_path = ".simple-harness-codegraff.json",
+        .data = "{\"api_key\":\"cg_sk_profile_fixture\"}",
+    });
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const profile = path_buf[0..try tmp.dir.realPath(io, &path_buf)];
+    var env = std.StringHashMap([]const u8).init(std.testing.allocator);
+    defer env.deinit();
+    try env.put("USERPROFILE", profile);
+    for ([_]?[]const u8{ null, "" }) |home| {
+        if (home) |value| try env.put("HOME", value);
+        const resolved = homeEnvFor(env, true).?;
+        try std.testing.expectEqualStrings(profile, resolved);
+        try std.testing.expectEqualStrings("cg_sk_profile_fixture", @import("oauth_codegraff.zig").loadKey(io, arena, resolved).?);
+        if (builtin.os.tag == .windows) try std.testing.expectEqualStrings(resolved, homeEnv(env).?);
+    }
+}
+
+test "homeEnv: nonempty HOME takes precedence on every platform" {
+    var env = std.StringHashMap([]const u8).init(std.testing.allocator);
+    defer env.deinit();
+    try env.put("HOME", "override home");
+    try env.put("USERPROFILE", "profile home");
+    for ([_]bool{ false, true }) |windows| {
+        try std.testing.expectEqualStrings("override home", homeEnvFor(env, windows).?);
+    }
+    try std.testing.expectEqualStrings("override home", homeEnv(env).?);
+}
+
+test "homeEnv: missing homes stay absent and Unix ignores USERPROFILE" {
+    var env = std.StringHashMap([]const u8).init(std.testing.allocator);
+    defer env.deinit();
+    for ([_]?[]const u8{ null, "" }) |home| {
+        if (home) |value| try env.put("HOME", value);
+        _ = env.remove("USERPROFILE");
+        for ([_]?[]const u8{ null, "" }) |profile| {
+            if (profile) |value| try env.put("USERPROFILE", value);
+            try std.testing.expect(homeEnvFor(env, true) == null);
+            try std.testing.expect(homeEnvFor(env, false) == null);
+        }
+        try env.put("USERPROFILE", "profile home");
+        try std.testing.expect(homeEnvFor(env, false) == null);
+    }
 }
 
 pub fn storeKey(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, provider: []const u8, key: []const u8) bool {
