@@ -277,6 +277,15 @@ fn addInferred(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, envir
 
 pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, environ_map: anytype, args: []const []const u8) !void {
     if (args.len > 0 and std.mem.eql(u8, args[0], "install")) {
+        // The installer sets up a launchd/systemd service; spawning it on
+        // Windows failed with a bare FileNotFound.
+        if (@import("builtin").os.tag == .windows) {
+            var ebuf: [512]u8 = undefined;
+            var ew = Io.File.stderr().writer(io, &ebuf);
+            try ew.interface.writeAll("graff mcp install sets up a background service on macOS and Linux only.\nOn Windows, add graff to an MCP client with the command `graff mcp serve`.\n");
+            try ew.interface.flush();
+            std.process.exit(1);
+        }
         const exe = try std.process.executablePathAlloc(io, arena);
         var argv: std.ArrayList([]const u8) = .empty;
         try argv.appendSlice(arena, &.{ "python3", "-c", @embedFile("mcp_installer"), "--binary", exe });

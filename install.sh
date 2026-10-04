@@ -29,7 +29,8 @@ detect_platform() {
     Linux)  os="linux" ;;
     MINGW*|MSYS*|CYGWIN*)
       printf "\n  ${W}harness installer${N}\n\n"
-      printf "  ${Y}Windows detected${N} — run this inside ${G}WSL2${N} instead.\n\n"
+      printf "  ${Y}Windows detected${N} — graff runs natively; install it from PowerShell:\n\n"
+      printf "  ${C}irm https://github.com/justrach/codegraff/releases/latest/download/install.ps1 | iex${N}\n\n"
       exit 0 ;;
     *) printf "  ${R}unsupported OS: $os${N}\n" >&2; exit 1 ;;
   esac

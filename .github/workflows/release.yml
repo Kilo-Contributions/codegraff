@@ -257,7 +257,7 @@ jobs:
             printf '%s\n' "$section" > changelog-notes.md
             notes=(--notes-file changelog-notes.md)
           fi
-          assets=(graff-*.tar.gz SHA256SUMS install.sh)
+          assets=(graff-*.tar.gz SHA256SUMS install.sh install.ps1)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             # A maintainer may publish the notes while cross-compilation is still
             # running. Attach to that release instead of creating an untagged draft.
