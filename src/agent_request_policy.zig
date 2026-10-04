@@ -208,9 +208,10 @@ pub fn retryWithout(self: *Agent, msg: []const u8, force: *bool, stream_usage: *
 pub fn retryAfterAuthRefresh(self: *Agent, msg: []const u8, refreshed: *bool) bool {
     if (refreshed.* or self.provider.source != .login or !isAuthError(msg)) return false;
     refreshed.* = true;
-    const fresh = oauth.refreshOAuthKey(self.io, self.gpa, self.scratchAlloc(), self.home, self.provider.id, true, self.provider.api_key, self.provider.account) orelse return false;
+    // ADR 0253: when the refresh cannot help, an interactive ChatGPT session signs in again.
+    const fresh = oauth.refreshOAuthKey(self.io, self.gpa, self.scratchAlloc(), self.home, self.provider.id, true, self.provider.api_key, self.provider.account) orelse return @import("chatgpt_reauth.zig").renewed(self);
     warnUnpersistedRefresh(self);
-    if (std.mem.eql(u8, fresh.key, self.provider.api_key)) return false;
+    if (std.mem.eql(u8, fresh.key, self.provider.api_key)) return @import("chatgpt_reauth.zig").renewed(self);
     adoptFreshAuth(self, fresh);
     if (self.tracer) |tr| tr.note("oauth_refresh", "auth error — refreshed login token, retrying");
     return true;
