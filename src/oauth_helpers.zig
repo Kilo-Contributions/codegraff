@@ -541,12 +541,30 @@ test "#402: a refresh write preserves the fields the codex CLI owns" {
 /// name for `open -a` on macOS, a command elsewhere).
 pub fn openBrowser(io: Io, url: []const u8) void {
     const chosen: ?[]const u8 = if (std.c.getenv("GRAFF_BROWSER")) |v| std.mem.span(v) else null;
-    const argv: []const []const u8 = if (builtin.os.tag == .macos)
-        (if (chosen) |app| &.{ "open", "-a", app, url } else &.{ "open", url })
-    else if (chosen) |cmd|
-        &.{ cmd, url }
-    else
-        &.{ "xdg-open", url };
-    var child = std.process.spawn(io, .{ .argv = argv, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore }) catch return;
+    var buf: [4][]const u8 = undefined;
+    var child = std.process.spawn(io, .{ .argv = browserArgv(builtin.os.tag, chosen, url, &buf), .stdin = .ignore, .stdout = .ignore, .stderr = .ignore }) catch return;
     _ = child.wait(io) catch {};
+}
+
+/// Windows has no `xdg-open`: the browser never opened there, so sign-ins
+/// waited on a page nobody saw. url.dll's handler takes the URL as one
+/// argument, with no shell to split it at `&`.
+fn browserArgv(os: std.Target.Os.Tag, chosen: ?[]const u8, url: []const u8, buf: *[4][]const u8) []const []const u8 {
+    const parts: []const []const u8 = switch (os) {
+        .macos => if (chosen) |app| &.{ "open", "-a", app, url } else &.{ "open", url },
+        .windows => if (chosen) |cmd| &.{ cmd, url } else &.{ "rundll32.exe", "url.dll,FileProtocolHandler", url },
+        else => if (chosen) |cmd| &.{ cmd, url } else &.{ "xdg-open", url },
+    };
+    @memcpy(buf[0..parts.len], parts);
+    return buf[0..parts.len];
+}
+
+test "browserArgv opens the default browser on every platform" {
+    var buf: [4][]const u8 = undefined;
+    const url = "https://codegraff.com/cli/auth?code=AB12-CD34&x=1";
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "rundll32.exe", "url.dll,FileProtocolHandler", url }), browserArgv(.windows, null, url, &buf));
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "open", url }), browserArgv(.macos, null, url, &buf));
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "xdg-open", url }), browserArgv(.linux, null, url, &buf));
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "open", "-a", "Safari", url }), browserArgv(.macos, "Safari", url, &buf));
+    try std.testing.expectEqualDeep(@as([]const []const u8, &.{ "firefox", url }), browserArgv(.windows, "firefox", url, &buf));
 }
