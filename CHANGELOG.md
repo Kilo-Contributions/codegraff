@@ -10,6 +10,19 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.21
+
+### Windows
+
+- graff installs natively on Windows from PowerShell: `irm https://codegraff.com/install.ps1 | iex`. The installer picks the x86_64 or ARM64 build, verifies it against the release's `SHA256SUMS`, installs `graff.exe` under `%LOCALAPPDATA%\Programs\graff\bin` and adds that to your user `PATH`. Releases attach `install.ps1` next to `install.sh` (#1508).
+- `install.sh` run from Git Bash, MSYS or Cygwin points to the PowerShell installer and stops. It used to tell Windows users to use WSL2, and because the check ran in a subshell, it then went on to clone the repo and build it (#1508).
+- `graff mcp install` sets up a macOS or Linux background service. On Windows it now says so, instead of failing with `FileNotFound` (#1508).
+
+### Sign-in
+
+- `graff login` prints the approval link with your code in it (`…/cli/auth?code=XXXX-XXXX`), and on Windows it opens the browser. Before, the printed link had no code, and on Windows the browser never opened, so copying the link led to a page with nowhere to enter the code.
+- When a ChatGPT sign-in lapses in an interactive session, graff opens the browser sign-in and retries the request once you have signed in, instead of failing the turn. ChatGPT sign-ins currently last about an hour because renewals are refused upstream. `-p`, piped and `--json` runs, ACP sessions and sub-agents never open a browser (ADR 0253, #1507).
+
 ## v0.0.302.20
 
 v0.0.302.19 was tagged but not published; this release ships its changes (listed under v0.0.302.19 below) together with the following.
