@@ -10,6 +10,19 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.20
+
+v0.0.302.19 was tagged but not published; this release ships its changes (listed under v0.0.302.19 below) together with the following.
+
+### Fixes
+
+- A stdio MCP server that sent one message over the 1 MiB line limit no longer fails every later call with `McpResponseTooLarge`. The oversized line is skipped: an oversized notification is ignored and the awaited reply read after it, and an oversized reply fails only its own call (#1504).
+- On Windows, an empty `HOME` or `USERPROFILE` no longer counts as a home directory. An empty `HOME` used to hide `%USERPROFILE%`, so saved keys, sign-ins and sessions resolved against the root of the drive.
+
+### Experimental
+
+- `GRAFF_COMPACT_MIX=1` turns on a two-pass compactor for comparison runs: a low-effort pass extracts a short state ledger (decisions, ruled-out approaches with reasons, in-flight values verbatim, next step, open asks) and the handoff summary carries it as a checklist at the session's effort. Off by default; any extract failure falls back to the single-pass summary. `evals/compact_ab` gains a `mix` arm.
+
 ## v0.0.302.19
 
 ### Speed and cost
