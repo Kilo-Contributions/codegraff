@@ -473,7 +473,8 @@ pub fn loadSession(root: *Agent, keys: *Keys, arena: Allocator, name: []const u8
     const obj = parsed.object;
     const pid = if (obj.get("provider")) |v| v.string else return error.BadSession;
     const model = if (obj.get("model")) |v| v.string else return error.BadSession;
-    const msgs = if (obj.get("messages")) |v| (if (v == .array) v.array else return error.BadSession) else return error.BadSession;
+    var msgs = if (obj.get("messages")) |v| (if (v == .array) v.array else return error.BadSession) else return error.BadSession;
+    const claude_import = if (obj.get("imported_from")) |v| v == .string and std.mem.eql(u8, v.string, "claude") else false;
     const strict = if (obj.get("strict")) |v| (v == .bool and v.bool) else false;
     const ultracode_mode = if (obj.get("ultracode_mode")) |v| (v == .bool and v.bool) else false;
     const goal: ?agent_mod.Goal = if (obj.get("goal")) |v| goalFromValue(v, unixMs(root.io)) else null;
@@ -493,8 +494,14 @@ pub fn loadSession(root: *Agent, keys: *Keys, arena: Allocator, name: []const u8
     if (promptCacheKeyFromSession(obj)) |k| http_headers.restoreProjectRootId(k);
 
     root.ensureStoredKeys(keys);
-    if (std.mem.eql(u8, pid, "codex")) root.ensureModelCatalog(keys.*);
-    root.provider = try keys.providerById(pid, model);
+    if (!claude_import) {
+        if (std.mem.eql(u8, pid, "codex")) root.ensureModelCatalog(keys.*);
+        root.provider = try keys.providerById(pid, model);
+    } else {
+        // The source route is metadata. Import history into the configured
+        // graff provider without resolving any credentials for Claude Code.
+        msgs = try @import("adopt_conversation.zig").forProvider(arena, msgs, root.provider.kind);
+    }
     // A resumed session may use a different wire format than the startup
     // default. Materialize that catalog before rebasing its saved context
     // meter, and keep every still-unused format lazy.

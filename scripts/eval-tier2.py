@@ -53,6 +53,8 @@ files written into the fresh workspace BEFORE graff boots, in scripted and
 trajectory archive bench_priors folds. Under --provider the ScriptedModel
 never runs, so request_contains/request_lacks are skipped and scoring rests
 on the event and final-text asserts.
+`claude_transcripts` seeds per-project Claude JSONL files and runs the explicit
+import command before startup, for conversation import/resume regressions.
 """
 
 from __future__ import annotations
@@ -168,6 +170,15 @@ def execute(case: dict[str, Any], graff: str, port: int,
                 dest = pathlib.Path(workspace) / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(content, encoding="utf-8")
+            if case.get("claude_transcripts"):
+                canonical = str(pathlib.Path(workspace).resolve())
+                slug = "".join(c if c.isascii() and c.isalnum() else "-" for c in canonical)
+                project = pathlib.Path(workspace) / ".claude" / "projects" / slug
+                project.mkdir(parents=True)
+                for name, content in case["claude_transcripts"].items():
+                    (project / name).write_text(content, encoding="utf-8")
+                subprocess.run([graff, "mcp", "import"], cwd=workspace, env=env,
+                               check=True, capture_output=True, text=True, timeout=30)
             # Real linked-worktree topology for ownership/checkpoint cases.
             if case.get("nested_worktree"):
                 for command in [

@@ -82,6 +82,7 @@ test {
     _ = serde;
     _ = mcp_cli;
     _ = @import("adopt.zig");
+    _ = @import("adopt_sessions_tests.zig");
     _ = cli;
     _ = @import("version_status.zig");
     _ = prompts;
