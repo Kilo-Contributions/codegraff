@@ -31,6 +31,14 @@ To check one named notary profile, use
 `security find-generic-password -l <profile-name>` or read the documented
 default from the release scripts. Do not `pkill` `security`/`securityd`.
 
+## Imported conversations continue in graff
+
+A conversation brought in from another agent (Claude Code, Codex, or any other)
+continues in a graff session, on graff's configured provider (for example
+Codegraff). The source agent's transcript is read-only input. Never re-launch or
+`--resume` the source agent to continue it, and never spend that agent's
+subscription or credits. This applies in the REPL, over ACP, and in Harness.
+
 ## Decisions live in docs/adr/
 
 Settled, evidence-backed decisions are recorded as ADRs. Read the one-line
