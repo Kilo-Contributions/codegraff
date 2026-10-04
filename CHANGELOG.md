@@ -10,6 +10,13 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.22
+
+### Sessions
+
+- `/import-claude` (or `graff mcp import`) now also imports the current project's Claude Code conversations, so `/resume` can continue them in graff. Imports keep the text, tool calls and results, titles, timestamps and the source model; signed thinking and sub-agent sidechains are left out. Saves are named `claude-<session-id>`, and importing again never overwrites an existing save. `graff mcp import-session <id>` imports one conversation without copying any setup.
+- A resumed import runs on the provider and credentials graff is configured with, not the route the conversation came from; the source model is kept as history. When the wire format differs, earlier tool calls and results come through as labeled text receipts. No Claude credentials are read, and no imported tool call runs again (ADR 0254).
+
 ## v0.0.302.21
 
 ### Windows
