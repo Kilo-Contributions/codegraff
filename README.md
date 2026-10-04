@@ -37,9 +37,15 @@ On macOS or Linux:
 curl -fsSL https://github.com/justrach/codegraff/releases/latest/download/install.sh | sh
 ```
 
-On Windows, unpack `graff-x86_64-windows.tar.gz` (or `aarch64`) from the
-[latest release](https://github.com/justrach/codegraff/releases/latest) and put
-`graff.exe` on your `PATH`. The desktop app, [Harness](https://github.com/justrach/harness), installs
+On Windows, in PowerShell (no WSL needed):
+
+```powershell
+irm https://github.com/justrach/codegraff/releases/latest/download/install.ps1 | iex
+```
+
+It verifies the download against the release's `SHA256SUMS`, installs
+`graff.exe` under `%LOCALAPPDATA%\Programs\graff\bin` and adds that to your user
+`PATH`. The desktop app, [Harness](https://github.com/justrach/harness), installs
 `graff` for you.
 
 ```sh
