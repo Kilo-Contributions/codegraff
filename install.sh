@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Git Bash / MSYS / Cygwin: graff runs natively, through the PowerShell
+# installer. This check must run here, at top level: inside detect_platform,
+# which main() runs in a $(...) subshell, `exit` only left the subshell and
+# the script went on to clone and build.
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    printf '\n  Windows detected — graff runs natively; install it from PowerShell:\n\n'
+    printf '    irm https://codegraff.com/install.ps1 | iex\n\n'
+    exit 0 ;;
+esac
+
 # graff-harness installer. Prefers a prebuilt binary from the latest GitHub
 # release; falls back to building from source with Zig. Styled after the
 # codedb/codegraff installers.
@@ -27,10 +38,6 @@ detect_platform() {
   case "$os" in
     Darwin) os="darwin" ;;
     Linux)  os="linux" ;;
-    MINGW*|MSYS*|CYGWIN*)
-      printf "\n  ${W}harness installer${N}\n\n"
-      printf "  ${Y}Windows detected${N} — run this inside ${G}WSL2${N} instead.\n\n"
-      exit 0 ;;
     *) printf "  ${R}unsupported OS: $os${N}\n" >&2; exit 1 ;;
   esac
   case "$arch" in

@@ -23,6 +23,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.21
+    \\  • Windows: irm https://codegraff.com/install.ps1 | iex installs graff natively
+    \\  • graff login prints the link with your code; Windows opens the browser
+    \\  • an expired ChatGPT sign-in reopens in the browser and the request continues
+    \\
     \\0.0.302.20
     \\  • includes everything from 0.0.302.19 (not published on its own)
     \\  • one oversized MCP message no longer breaks every later call to that server
