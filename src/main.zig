@@ -571,7 +571,7 @@ test { // ── Unit tests (`zig build test`): pull in tests from imported modu
     _ = @import("agent_gateway_retry.zig"); // #1019: flake vs overflow classification must stay reachable
     _ = @import("agent_responses.zig"); // #1019: type:error frame message extraction
     _ = @import("agent_server_compact.zig"); // server-side autocompact (codex Responses)
-    _ = @import("compact_status.zig");
+    _ = .{ @import("compact_status.zig"), @import("compact_mix.zig") }; // compact status + GRAFF_COMPACT_MIX mixture arm
     _ = @import("agent_request_search_tests.zig");
     _ = @import("agent_ws_steer.zig");
     _ = @import("agent_ws_signal.zig");

@@ -23,6 +23,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.20
+    \\  • includes everything from 0.0.302.19 (not published on its own)
+    \\  • one oversized MCP message no longer breaks every later call to that server
+    \\  • Windows: an empty HOME no longer hides your profile directory
+    \\  • GRAFF_COMPACT_MIX=1: experimental two-pass compaction
+    \\
     \\0.0.302.19
     \\  • tool results inline up to 64 KiB: large files read in one piece
     \\  • no false stalls while the model composes a batch of tool calls

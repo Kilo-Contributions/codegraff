@@ -215,6 +215,12 @@ pub fn applyEnvKnobs(arena: Allocator, environ_map: anytype) !void {
         const off = std.mem.eql(u8, v, "0") or std.ascii.eqlIgnoreCase(v, "false") or std.ascii.eqlIgnoreCase(v, "off");
         server_compact.g_server_compact_override = !off;
     }
+    // GRAFF_COMPACT_MIX=0/false/off keeps the single-pass summary; anything
+    // else arms the two-pass extract+synthesis arm (#compact-ab mix arm).
+    if (environ_map.get("GRAFF_COMPACT_MIX")) |v| {
+        const off = std.mem.eql(u8, v, "0") or std.ascii.eqlIgnoreCase(v, "false") or std.ascii.eqlIgnoreCase(v, "off");
+        @import("compact_mix.zig").g_enabled = !off;
+    }
     // #502: xAI defaults to the Responses wire (api.x.ai/v1/responses) —
     // first-party server compaction + WS turns. GRAFF_XAI_WIRE=chat (anything
     // but "responses") moves it back to chat completions; unset keeps the default.

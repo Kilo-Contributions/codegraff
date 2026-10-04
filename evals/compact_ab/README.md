@@ -22,7 +22,18 @@ scripted stdin sessions cannot approve writes (#unattended-gate).
 |---|---|
 | server | `GRAFF_SERVER_COMPACT=1 GRAFF_COMPACT_PCT=6` |
 | client | `GRAFF_SERVER_COMPACT=0 GRAFF_COMPACT_PCT=6` |
+| mix | `GRAFF_SERVER_COMPACT=0 GRAFF_COMPACT_MIX=1 GRAFF_COMPACT_PCT=6` |
 | none | `GRAFF_SERVER_COMPACT=0 GRAFF_COMPACT_PCT=100` |
+
+The `mix` arm is the two-pass mixture compactor (`src/compact_mix.zig`): a
+low-effort extract pass mines a state ledger (decisions, dead ends with the
+reason each failed, in-flight identifiers verbatim, next step, open user asks)
+and the synthesis pass weaves it into the handoff summary at session effort.
+Any extract failure falls back to the byte-identical single-pass summary, so
+the arm is baseline-safe in failure behavior and costs one extra low-effort
+call per compaction. The comparison prices whether the ledger improves recall
+(the observed failure shape — erased "already tried that" state causing retry
+loops) enough to pay for that call.
 
 `run_compact_bench.sh wave N` runs one trial per arm in parallel; `score_compact_bench.py`
 grades `answer.md` against `questions.json` and counts compaction notices.

@@ -15,6 +15,7 @@ run_one() {
   case $arm in
     server) envs="GRAFF_SERVER_COMPACT=1 GRAFF_COMPACT_PCT=6";;
     client) envs="GRAFF_SERVER_COMPACT=0 GRAFF_COMPACT_PCT=6";;
+    mix)    envs="GRAFF_SERVER_COMPACT=0 GRAFF_COMPACT_MIX=1 GRAFF_COMPACT_PCT=6";;
     none)   envs="GRAFF_SERVER_COMPACT=0 GRAFF_COMPACT_PCT=100";;
   esac
   envs="$envs GRAFF_TOOL_HANDLE_BYTES=262144"
@@ -28,10 +29,10 @@ run_one() {
 
 if [ "${1:-}" = "wave" ]; then
   # one trial per arm in parallel (wave $2)
-  run_one server "$2" & run_one client "$2" & run_one none "$2" & wait
+  run_one server "$2" & run_one client "$2" & run_one mix "$2" & run_one none "$2" & wait
 else
   for trial in 1 2; do
-    for arm in server client none; do
+    for arm in server client mix none; do
       run_one $arm $trial
     done
   done

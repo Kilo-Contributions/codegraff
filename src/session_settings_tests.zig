@@ -54,6 +54,7 @@ const knobs = [_]Knob{
     .{ .name = "GRAFF_CONTEXT", .value = "123456" },
     .{ .name = "GRAFF_TOOL_HANDLE_BYTES", .value = "8192" },
     .{ .name = "GRAFF_COMPACT_PCT", .value = "55" },
+    .{ .name = "GRAFF_COMPACT_MIX", .value = "1" },
     .{ .name = "GRAFF_WS_DEBUG", .value = "1" },
     .{ .name = "GRAFF_WS_FORCE_FAIL_ONCE", .value = "1" },
     .{ .name = "GRAFF_WS_FORCE_FAIL_COUNT", .value = "3" },
@@ -118,6 +119,7 @@ const Saved = struct {
     stable_catalog: bool,
     x_search: bool,
     job_idle: job_idle.Policy,
+    compact_mix: bool,
 
     fn capture() Saved {
         return .{
@@ -150,6 +152,7 @@ const Saved = struct {
             .stable_catalog = mcp_schema_gate.g_stable_catalog,
             .x_search = @import("xai_hosted.zig").enabled,
             .job_idle = job_idle.policy,
+            .compact_mix = @import("compact_mix.zig").g_enabled,
         };
     }
 
@@ -184,6 +187,7 @@ const Saved = struct {
         mcp_schema_gate.g_stable_catalog = s.stable_catalog;
         @import("xai_hosted.zig").enabled = s.x_search;
         job_idle.policy = s.job_idle;
+        @import("compact_mix.zig").g_enabled = s.compact_mix;
     }
 };
 
