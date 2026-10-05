@@ -215,6 +215,7 @@ test "yield_turn (#1531): every wire returns the handoff after recording the too
             .sub = false,
             .label = "test",
             .out = null,
+            .session_name = "", // protocol-only fixture has no durable session
         };
         defer agent.tools_used.deinit(std.testing.allocator);
         const root = try std.json.parseFromSliceLeaky(std.json.Value, arena, case[1], .{});
