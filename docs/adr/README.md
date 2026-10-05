@@ -13,7 +13,7 @@ record only when you need the evidence or the edge cases.
 |---|---|
 | [0001](0001-structured-outputs-are-a-formatting-step.md) | Structured output is a final formatting step. Never constrain the agentic phase with a schema grammar, and do not use `--output-schema` unless a program consumes the result. |
 | [0002](0002-xai-defaults-to-the-responses-wire.md) | xAI runs on the Responses wire by default (WS turns + on-socket `previous_response_id`). Compaction is the client summarizer, not xAI's blob endpoint. `GRAFF_XAI_WIRE=chat` opts out. |
-| [0003](0003-codegraff-wire-follows-model-capability.md) | Codegraff uses Responses + WS for GPT-5.6+ (incl. GPT-6 Astra / Codex `gpt-5.6-*`) and grok-4.6; Claude, Gemini, and other aliases stay on Chat Completions. |
+| [0003](0003-codegraff-wire-follows-model-capability.md) | Codegraff uses Responses + WS for GPT-5.6+ (incl. GPT-6 Astra / Codex `gpt-5.6-*`) and grok-4.6; Claude aliases use native Messages (0255); Gemini and other aliases stay on Chat Completions. |
 | [0004](0004-peer-speech-is-a-working-set.md) | Peer speech is pull: a one-line `[peer]` wake in history, bodies in the inbox ring; compact drops spent injects and never treats them as the human. |
 | [0005](0005-standing-goal-lives-in-the-prefix.md) | Standing goal is one prefix line; the user-message essay injects on change only, never every N turns. |
 | [0006](0006-workspace-switch-is-a-tool.md) | Mid-session worktree switch is a real `workspace` tool; a skill cannot move file-tool cwd. |
@@ -280,6 +280,7 @@ record only when you need the evidence or the edge cases.
 | [0251](0251-tool-results-inline-up-to-64-kib.md) | Tool results inline up to 64 KiB (was 16 KiB); `effectiveThreshold` still clamps to half the context window, so small windows are unchanged. The codedb small-read exemption follows the same number. |
 | [0253](0253-an-interactive-session-signs-in-to-chatgpt-again.md) | When a ChatGPT request is rejected and the refresh cannot replace the token, an interactive root session opens the browser sign-in, waits up to three minutes and retries once; `-p`, piped, `--json`, ACP and sub-agents never do. One unfinished sign-in ends it for the process. |
 | [0254](0254-imported-conversations-use-the-configured-route.md) | Imported Claude history uses the configured graff provider and credentials; source models are metadata, and foreign tool results remain historical receipts. |
+| [0255](0255-codegraff-claude-uses-native-messages.md) | Claude aliases on codegraff use the native Messages endpoint; `isClaudeApi` is the one predicate for the real Claude wire. |
 
 ## When to write one
 

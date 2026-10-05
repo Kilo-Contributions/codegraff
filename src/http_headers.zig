@@ -232,7 +232,7 @@ pub fn providerHeadersWithConv(io: Io, provider: Provider, bearer: []const u8, b
         // ADR 0219: the beta that goes with the body's thinking.block_binding,
         // on the Anthropic API and the models that check it (claude_wire).
         const claude = @import("claude_wire.zig");
-        if (std.mem.eql(u8, provider.id, "anthropic") and claude.bindsThinking(provider.model)) {
+        if (claude.isClaudeApi(provider.id, provider.model) and claude.bindsThinking(provider.model)) {
             buf[count] = .{ .name = "anthropic-beta", .value = claude.binding_beta };
             count += 1;
         }

@@ -119,7 +119,7 @@ pub fn buildBody(gpa: Allocator, provider: Provider, prompt: []const u8) ![]u8 {
             // ADR 0219: a Claude model that thinks by default spends max_tokens
             // on thinking first; 256 left no answer. Room, and little thinking.
             const claude = @import("claude_wire.zig");
-            const thinks = std.mem.eql(u8, provider.id, "anthropic") and claude.thinksByDefault(provider.model);
+            const thinks = claude.isClaudeApi(provider.id, provider.model) and claude.thinksByDefault(provider.model);
             try s.objectField("max_tokens");
             try s.write(if (thinks) @as(u32, 4096) else max_out_tokens);
             if (thinks and claude.takesEffort(provider.model)) {

@@ -53,7 +53,7 @@ pub fn end() void {
 /// Whether the cache still holds this conversation's prefix and a fork of the
 /// whole history fits the window.
 pub fn warm(self: *Agent) bool {
-    if (self.provider.kind != .anthropic or !std.mem.eql(u8, self.provider.id, "anthropic")) return false;
+    if (self.provider.kind != .anthropic or !claude.isClaudeApi(self.provider.id, self.provider.model)) return false;
     if (self.last_request_context_overflow or self.compact_summary_failures > 0) return false;
     const started = self.request_started orelse return false;
     const window = if (@import("cache_ttl.zig").asksLong(self.provider.id, self.provider.model)) warm_long_ms else warm_ms;

@@ -34,8 +34,8 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
     switch (self.provider.kind) {
         .anthropic => {
             const is_kimi = std.mem.eql(u8, self.provider.id, "kimi");
-            const is_claude = std.mem.eql(u8, self.provider.id, "anthropic");
             const claude = @import("claude_wire.zig"); // ADR 0219
+            const is_claude = claude.isClaudeApi(self.provider.id, self.provider.model);
             try s.objectField("max_tokens");
             try s.write(if (is_claude) claude.maxTokens(self.provider.model, self.reasoning, max_tokens) else max_tokens);
             if (stream) {
@@ -83,7 +83,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             try s.objectField("system");
             const sys = try @import("agent_request_body_responses.zig").schemaAwarePrompt(self);
             const cc = @import("cache_ttl.zig").control(self); // #1320: 1h when calls outlive 5m
-            if (std.mem.eql(u8, self.provider.id, "anthropic") or is_kimi) {
+            if (is_claude or is_kimi) {
                 try s.beginArray();
                 try s.beginObject();
                 try s.objectField("type");
@@ -121,7 +121,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             // Cache the conversation prefix too (not just system) on the real
             // Anthropic API and Kimi's declared Anthropic transport. Kimi also
             // normalizes all string content into Anthropic text blocks.
-            const cache_msgs = std.mem.eql(u8, self.provider.id, "anthropic") or is_kimi;
+            const cache_msgs = is_claude or is_kimi;
             try writeAnthropicMessages(&s, self.messages, if (cache_msgs) cc else null, is_kimi);
         },
         .openai => {
