@@ -454,8 +454,8 @@ CI and network) if it meets **any one** of these:
   12-month period.
 
 A company that crosses a line must contact us within 5 working days.
-Individuals, and organizations that meet none of these, use graff under the
-AGPL. Earlier versions keep the license they shipped with. Unsure? Treat
+Individuals always use graff under the AGPL, whatever they earn,
+and so do organizations that meet none of these tests. Earlier versions keep the license they shipped with. Unsure? Treat
 yourself as covered and contact
 [rach@standardharness.com](mailto:rach@standardharness.com).
 
