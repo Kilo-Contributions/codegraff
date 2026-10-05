@@ -48,7 +48,7 @@ fn opensTurn(items: []const std.json.Value) bool {
 /// The Anthropic API, and Anthropic models through OpenRouter (#1284), take a
 /// TTL; other Anthropic-format providers keep the default.
 pub fn takesTtl(provider_id: []const u8, model: []const u8) bool {
-    return std.mem.eql(u8, provider_id, "anthropic") or
+    return @import("claude_wire.zig").isClaudeApi(provider_id, model) or
         (std.mem.eql(u8, provider_id, "openrouter") and std.mem.startsWith(u8, model, "anthropic/"));
 }
 
@@ -189,4 +189,11 @@ test "#1320: a zero-read request names its likely cause" {
 
 test {
     _ = @import("openrouter_cache.zig");
+}
+
+test "codegraff Claude takes the TTL like the direct Anthropic API" {
+    try std.testing.expect(takesTtl("codegraff", "claude-opus-5-5"));
+    try std.testing.expect(takesTtl("codegraff", "claude-sonnet-5-5"));
+    try std.testing.expect(!takesTtl("codegraff", "gpt-6-sol"));
+    try std.testing.expect(!takesTtl("codegraff", "mimo-v2.6-pro"));
 }

@@ -180,7 +180,7 @@ pub fn schemaAwarePrompt(self: *Agent) ![]const u8 {
     // enforces server-side on the formatting turn — same light prompt as
     // Responses. minimax / kimi-anthropic stay on the tool.
     const anthropic_tool_mode = self.provider.kind == .anthropic and
-        (self.sox_json_object or !std.mem.eql(u8, self.provider.id, "anthropic"));
+        (self.sox_json_object or !@import("claude_wire.zig").isClaudeApi(self.provider.id, self.provider.model));
     if ((self.provider.kind == .openai and self.sox_json_object) or anthropic_tool_mode) return std.mem.concat(self.scratchAlloc(), u8, &.{
         base,
         "\n\nA JSON output schema is enforced on your final answer. Use tools first to gather every fact you need — never guess values. This provider cannot enforce the schema server-side, so satisfy it yourself: call the structured_output tool when it is offered, otherwise reply with a single JSON object, matching exactly this schema: ",
@@ -252,7 +252,7 @@ pub fn writeStructuredOutputTool(s: *std.json.Stringify, schema_json: []const u8
 /// structured_output tool, and a learned sox flag falls back to it too.
 /// True when it wrote `output_config`, with `effort` inside it (ADR 0219).
 pub fn writeAnthropicSchema(s: *std.json.Stringify, self: *const Agent, schema_json: []const u8, effort: ?[]const u8) !bool {
-    if (std.mem.eql(u8, self.provider.id, "anthropic") and !self.sox_json_object) {
+    if (@import("claude_wire.zig").isClaudeApi(self.provider.id, self.provider.model) and !self.sox_json_object) {
         try writeAnthropicOutputConfig(s, schema_json, effort);
         return true;
     }

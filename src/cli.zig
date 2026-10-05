@@ -23,6 +23,10 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.24
+    \\  • Codegraff sign-in: models on the Messages wire use it natively
+    \\  • goals set from the desktop app start immediately; unfinished work survives a question
+    \\
     \\0.0.302.23
     \\  • ChatGPT-plan sign-in caches the prompt again, on every model
     \\

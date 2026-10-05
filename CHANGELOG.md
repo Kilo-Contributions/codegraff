@@ -10,6 +10,17 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.24
+
+### Codegraff sign-in
+
+- Models on the Codegraff sign-in that use the Messages wire now speak it natively instead of going through Chat Completions. Reasoning carries across turns, thinking summaries show, images inside tool results work, the longer cache lifetime applies, and long answers are no longer cut at the chat limit.
+
+### Goals
+
+- A goal set from the desktop app starts immediately, in the same turn — it no longer waits for the next prompt.
+- When the agent asks for missing input, unfinished work and its checklist survive the answer instead of completing early or restarting.
+
 ## v0.0.302.23
 
 ### Prompt caching

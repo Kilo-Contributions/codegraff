@@ -25,6 +25,14 @@ pub const Version = struct { family: Family, major: u16, minor: u16 };
 /// The beta that enables `thinking.block_binding`.
 pub const binding_beta = "thinking-binding-controls-2026-08-01";
 
+/// Requests that speak the real Anthropic Messages API: the direct anthropic
+/// provider, and Claude models on the codegraff gateway (native /v1/messages).
+/// Other Anthropic-format providers (minimax, kimi) keep their own quirks.
+pub fn isClaudeApi(provider_id: []const u8, model: []const u8) bool {
+    return std.mem.eql(u8, provider_id, "anthropic") or
+        @import("provider_codegraff.zig").usesMessages(provider_id, model);
+}
+
 /// Parse `claude-opus-5-5`, `claude-sonnet-4-6-20260101`, `claude-fable-5`.
 pub fn version(model: []const u8) ?Version {
     const rest = if (std.mem.startsWith(u8, model, "claude-")) model["claude-".len..] else return null;

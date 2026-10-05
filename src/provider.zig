@@ -178,6 +178,7 @@ fn resolvedUrl(spec: ProviderSpec, model: []const u8) []const u8 {
     if (std.mem.eql(u8, spec.id, "xai")) return g_xai_url_override orelse if (g_xai_responses) xai_responses_url else spec.url;
     if (std.mem.eql(u8, spec.id, "zai")) return g_zai_url_override orelse spec.url;
     if (std.mem.eql(u8, spec.id, "vercel")) return g_vercel_url_override orelse spec.url;
+    if (@import("provider_codegraff.zig").usesMessages(spec.id, model)) return @import("provider_codegraff.zig").messages_url;
     if (@import("provider_codegraff.zig").usesResponses(spec.id, model)) return @import("provider_codegraff.zig").responses_url;
     return spec.url;
 }
@@ -273,7 +274,7 @@ pub const Provider = struct {
         const is_xai_responses = std.mem.eql(u8, spec.id, "xai") and g_xai_responses;
         return .{
             .id = spec.id,
-            .kind = if (is_kimi_anthropic) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
+            .kind = if (is_kimi_anthropic or @import("provider_codegraff.zig").usesMessages(spec.id, model)) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
             .auth = if (is_kimi_anthropic) .x_api_key else spec.auth,
             .url = resolvedUrl(spec, model),
             .api_key = base.api_key,
@@ -369,7 +370,7 @@ pub const Keys = struct {
         const is_xai_responses = std.mem.eql(u8, spec.id, "xai") and g_xai_responses;
         return .{
             .id = spec.id,
-            .kind = if (is_kimi_anthropic) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
+            .kind = if (is_kimi_anthropic or @import("provider_codegraff.zig").usesMessages(spec.id, model)) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
             .auth = if (is_kimi_anthropic) .x_api_key else spec.auth,
             .url = resolvedUrl(spec, model),
             .api_key = key,
@@ -567,4 +568,23 @@ test "contextWindowFor (#203): GRAFF_CONTEXT overrides only an unknown/local mod
     // a known, catalogued model keeps its real window even with the override set
     try std.testing.expect(pricing.isKnownModel("anthropic", "claude-opus-4-8"));
     try std.testing.expect(contextWindowFor("anthropic", "claude-opus-4-8") != 8192);
+}
+
+test "codegraff Claude builds as the native Messages wire, bearer auth" {
+    const keys: Keys = .{ .values = @splat("k") };
+    const spec = specFor("codegraff").?;
+    const p = keys.build(spec, "k", "claude-opus-5-5");
+    try std.testing.expectEqual(Provider.Kind.anthropic, p.kind);
+    try std.testing.expectEqual(Provider.Auth.bearer, p.auth);
+    try std.testing.expectEqualStrings(@import("provider_codegraff.zig").messages_url, p.url);
+    try std.testing.expectEqualStrings("claude-opus-5-5", p.model);
+    // GPT on the gateway keeps Responses; a non-native alias keeps chat.
+    const g = keys.build(spec, "k", "gpt-6-sol");
+    try std.testing.expectEqual(Provider.Kind.responses, g.kind);
+    const m = keys.build(spec, "k", "mimo-v2.6-pro");
+    try std.testing.expectEqual(Provider.Kind.openai, m.kind);
+    // withModel inherits the same mapping for a /model switch onto Claude.
+    const switched = g.withModel("claude-sonnet-5-5");
+    try std.testing.expectEqual(Provider.Kind.anthropic, switched.kind);
+    try std.testing.expectEqualStrings(@import("provider_codegraff.zig").messages_url, switched.url);
 }
