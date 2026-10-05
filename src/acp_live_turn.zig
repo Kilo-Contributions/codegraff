@@ -65,6 +65,23 @@ pub const LiveTurn = struct {
             if (inbox.permission) |bridge| bridge.cancel();
             inbox.end();
         };
+        // An objective sets state AND starts this turn, unlike lifecycle verbs (#1528).
+        const goal_pacing = @import("goal_pacing.zig");
+        const line = std.mem.trim(u8, text, " \t\r\n");
+        const objective = @import("repl_glue.zig").goalPromptFromLine(line);
+        const auto = try goal_pacing.autonomousFromLine(arena, line, objective, false);
+        var clock: goal_pacing.LoopClock = .{};
+        defer clock.clear(self.root);
+        if (auto) |invocation| {
+            var aw: Io.Writer.Allocating = .init(arena);
+            try goal_pacing.armAndAnnounce(&clock, self.root, &aw.writer, arena, @import("util.zig").unixMs(self.root.io), invocation.budget());
+            try main_mod.handleCommand(self.root, self.keys, arena, invocation.goal_line.?, &aw.writer);
+            const notice = try @import("acp_engine.zig").stripSgr(arena, aw.writer.buffered());
+            output_lock.lockUncancelable(self.root.io);
+            defer output_lock.unlock(self.root.io);
+            try proto.writeSessionUpdate(self.out, self.session_id, try std.fmt.allocPrint(arena, "{s}\n", .{notice}));
+            try self.out.flush();
+        }
         const review_prompt = review.promptFromLine(text);
         const parent_override = self.root.sys_override;
         const parent_review_mode = self.root.review_mode;
@@ -79,7 +96,8 @@ pub const LiveTurn = struct {
         defer if (context.restore(self.root)) self.root.rebaseContextMeter();
         if (@import("side_steer.zig").isSideRequest(text))
             return @import("side_steer.zig").spawnSide(self.root, arena, null, text);
-        switch (try @import("turn_dedup.zig").enqueue(self.root, arena, self.out, review_prompt orelse text)) {
+        const prompt = try @import("goal_state.zig").applyGoalSteering(arena, self.root, review_prompt orelse if (auto) |invocation| invocation.prompt else text);
+        switch (try @import("turn_dedup.zig").enqueue(self.root, arena, self.out, prompt)) {
             .started => {},
             .skipped => return "",
             .stuck => return @import("turn_dedup.zig").stuck_text,
