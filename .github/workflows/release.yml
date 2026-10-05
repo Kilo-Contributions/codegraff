@@ -24,6 +24,19 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      # One runner per target instead of a serial six-target loop: wall time
+      # drops from ~24 min to roughly a single ReleaseFast build (~4-5 min).
+      # fail-fast stays on (the default) so a broken target cancels the rest
+      # instead of publishing a partial set.
+      matrix:
+        target:
+          - aarch64-macos
+          - x86_64-macos
+          - x86_64-linux
+          - aarch64-linux
+          - x86_64-windows
+          - aarch64-windows
     steps:
       - uses: actions/checkout@v7
 
@@ -33,32 +46,31 @@ jobs:
       - name: Install Zig
         uses: ./.github/actions/setup-codegraff-zig
 
-      - name: Cross-compile
+      - name: Cross-compile (${{ matrix.target }})
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           # Release builds phone usage/evolution telemetry here by default
           # (anonymous, opt out with --no-telemetry / GRAFF_NO_TELEMETRY).
           TELEMETRY_ENDPOINT="https://harness-telemetry.rachpradhan.workers.dev"
-          for target in aarch64-macos x86_64-macos x86_64-linux aarch64-linux x86_64-windows aarch64-windows; do
-            zig build graff -Doptimize=ReleaseFast -Dtarget="$target" -Dversion="$VERSION" -Dtelemetry-endpoint="$TELEMETRY_ENDPOINT"
-            name="graff-$target"
-            mkdir "$name"
-            # Windows targets emit graff.exe; every other target emits graff.
-            case "$target" in
-              *-windows) bin=graff.exe ;;
-              *) bin=graff ;;
-            esac
-            cp "zig-out/bin/$bin" "$name/$bin"
-            cp README.md LICENSE "$name/"
-            tar -czf "$name.tar.gz" "$name"
-            rm -r "$name"
-          done
+          zig build graff -Doptimize=ReleaseFast -Dtarget="$TARGET" -Dversion="$VERSION" -Dtelemetry-endpoint="$TELEMETRY_ENDPOINT"
+          name="graff-$TARGET"
+          mkdir "$name"
+          # Windows targets emit graff.exe; every other target emits graff.
+          case "$TARGET" in
+            *-windows) bin=graff.exe ;;
+            *) bin=graff ;;
+          esac
+          cp "zig-out/bin/$bin" "$name/$bin"
+          cp README.md LICENSE "$name/"
+          tar -czf "$name.tar.gz" "$name"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: cli-tarballs
-          path: graff-*.tar.gz
+          name: cli-tarballs-${{ matrix.target }}
+          path: graff-${{ matrix.target }}.tar.gz
           if-no-files-found: error
 
   # Sign + notarize the macOS CLI binaries, exactly as docs/notarization.md
@@ -93,8 +105,9 @@ jobs:
       - uses: actions/download-artifact@v7
         if: steps.signing.outputs.enabled == 'true'
         with:
-          name: cli-tarballs
+          pattern: cli-tarballs-*
           path: dist
+          merge-multiple: true
 
       - name: Import Developer ID certificate
         if: steps.signing.outputs.enabled == 'true'
@@ -209,8 +222,9 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          name: cli-tarballs
+          pattern: cli-tarballs-*
           path: .
+          merge-multiple: true
 
       - uses: actions/download-artifact@v7
         if: needs.macos-sign.outputs.signed == 'true'

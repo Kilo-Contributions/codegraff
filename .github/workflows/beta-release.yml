@@ -34,30 +34,39 @@ jobs:
     needs: plan
     if: needs.plan.outputs.build == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      # One runner per target instead of a serial six-target loop: wall time
+      # drops from ~24 min to roughly a single ReleaseFast build (~4-5 min).
+      # fail-fast stays on (the default) so a broken target cancels the rest
+      # instead of publishing a partial set.
+      matrix:
+        target:
+          - aarch64-macos
+          - x86_64-macos
+          - x86_64-linux
+          - aarch64-linux
+          - x86_64-windows
+          - aarch64-windows
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-codegraff-zig
-      - name: Cross-compile beta CLI
+      - name: Cross-compile beta CLI (${{ matrix.target }})
         env:
           BETA_VERSION: ${{ needs.plan.outputs.version }}
+          TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          mkdir -p beta-cli
-          for target in aarch64-macos x86_64-macos x86_64-linux aarch64-linux x86_64-windows aarch64-windows; do
-            zig build graff -Doptimize=ReleaseFast -Dtarget="$target" -Dversion="$BETA_VERSION"
-            name="graff-$target"
-            mkdir "$name"
-            case "$target" in *-windows) bin=graff.exe ;; *) bin=graff ;; esac
-            cp "zig-out/bin/$bin" "$name/$bin"
-            cp README.md LICENSE "$name/"
-            tar -czf "beta-cli/$name.tar.gz" "$name"
-            rm -r "$name"
-          done
-          (cd beta-cli && sha256sum graff-*.tar.gz > SHA256SUMS)
+          zig build graff -Doptimize=ReleaseFast -Dtarget="$TARGET" -Dversion="$BETA_VERSION"
+          name="graff-$TARGET"
+          mkdir "$name"
+          case "$TARGET" in *-windows) bin=graff.exe ;; *) bin=graff ;; esac
+          cp "zig-out/bin/$bin" "$name/$bin"
+          cp README.md LICENSE "$name/"
+          tar -czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v7
         with:
-          name: beta-cli
-          path: beta-cli/
+          name: beta-cli-${{ matrix.target }}
+          path: graff-${{ matrix.target }}.tar.gz
           if-no-files-found: error
 
   publish:
@@ -68,8 +77,19 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
-          name: beta-cli
+          pattern: beta-cli-*
           path: beta-assets
+          merge-multiple: true
+      - name: Verify targets and checksums
+        run: |
+          set -euo pipefail
+          for target in aarch64-macos x86_64-macos x86_64-linux aarch64-linux x86_64-windows aarch64-windows; do
+            test -f "beta-assets/graff-$target.tar.gz" || { echo "missing beta-assets/graff-$target.tar.gz" >&2; exit 1; }
+          done
+          # Checksums are computed once, centrally, from the exact bytes
+          # being uploaded — not per matrix job.
+          (cd beta-assets && sha256sum graff-*.tar.gz > SHA256SUMS)
+          cat beta-assets/SHA256SUMS
       - name: Recheck release branch head
         id: fresh
         run: python3 scripts/beta-release.py guard --branch "$GITHUB_REF_NAME" --sha "$GITHUB_SHA"
