@@ -124,14 +124,14 @@ const meta_specs = [_]ToolSpec{
     .{ .name = "note_constraint", .desc = "Record an explicit project-wide user rule in this project's playbook (.graff/playbook.jsonl). Do not call for temporary, task/session-limited, or ambiguous steering; follow that locally or ask before persisting. Durable intent must be clear. Pass scope=project and copy text verbatim from the current user message without widening qualifiers. The visible result includes scope, origin, and text plus /never removal guidance. Project records survive compaction and future sessions. Append-only: only the user can retire one with /never rm <id-or-text> (REPL, TUI, or ACP) or an explicit override. Duplicates are harmless.", .schema = "{\"type\": \"object\", \"properties\": {\"text\": {\"type\": \"string\", \"description\": \"Exact verbatim project-wide constraint from the current user message\"}, \"scope\": {\"type\": \"string\", \"enum\": [\"project\"], \"description\": \"Durable scope; local steering must not be recorded\"}}, \"required\": [\"text\", \"scope\"]}" },
     .{
         .name = "ask_user",
-        .desc = "Ask the human a question and wait for their reply (typed text and/or pasted images). Images reach you as vision blocks on the next request, same as a normal prompt. Call it whenever the next step depends on the user's choice — a decision between approaches, a clarification, or missing information — and put the choices in options: the harness renders them as a numbered picker and blocks for the answer. Ending the turn with a menu written in prose does neither.",
+        .desc = "Ask the human a question and wait for typed text or an option selection. Do not request screenshots or images here unless the active interface explicitly supports attachments in question replies; backend vision support alone is not enough. If that support is absent or unknown and an image is essential, use yield_turn to explain the next-prompt attachment handoff and stop without calling ask_user. Do not ask for permission to pause. Keep the conversation open and do not claim the task is complete. For text questions, put choices in options: the harness renders a numbered picker and blocks for the answer. Ending the turn with a menu written in prose does neither.",
         .schema =
         \\{"type": "object", "properties": {"question": {"type": "string", "description": "The question to ask the user"}, "options": {"type": "array", "items": {"type": "string"}, "description": "Optional suggested answers, shown numbered"}}, "required": ["question"]}
         ,
     },
     .{
         .name = "attempt_completion",
-        .desc = "Signal that the task is complete. Put the complete final answer to the user only in the result field; do not repeat it in accompanying prose. In strict mode this is the only way to end a turn. Completing also closes the standing /goal; if its checklist still has open items you will be asked once to finish or confirm.",
+        .desc = "Signal that the task is complete. Put your final answer to the user in the result field. In strict mode use this for completed tasks; use yield_turn instead to stop for missing user input without claiming completion. Completing also closes the standing /goal; if its checklist still has open items you will be asked once to finish or confirm.",
         .schema =
         \\{"type": "object", "properties": {"result": {"type": "string", "description": "Final answer to present to the user"}}, "required": ["result"]}
         ,
@@ -167,7 +167,7 @@ const learn_candidate_spec = ToolSpec{
 
 const peer_spec = ToolSpec{ .name = peer_channel.tool_name, .desc = peer_channel.tool_desc, .schema = peer_channel.tool_schema };
 const workspace_spec = ToolSpec{ .name = workspace_switch.tool_name, .desc = workspace_switch.tool_desc, .schema = workspace_switch.tool_schema };
-pub const root_specs = base_specs ++ meta_specs ++ [_]ToolSpec{ subagent_spec, workflow_spec, agent_output_spec, agent_message_spec, @import("schema_agents.zig").subagent_resume_spec, learn_candidate_spec, peer_spec, workspace_spec };
+pub const root_specs = base_specs ++ meta_specs ++ [_]ToolSpec{ subagent_spec, workflow_spec, agent_output_spec, agent_message_spec, @import("schema_agents.zig").subagent_resume_spec, learn_candidate_spec, peer_spec, workspace_spec, @import("turn_handoff.zig").spec };
 /// The root catalog minus the named optional entries, built once at compile
 /// time. The length check is the guard: each name must match EXACTLY one
 /// spec, so a rename or a duplicated entry is a compile error rather than a
@@ -188,7 +188,7 @@ const root_specs_without_clock = rootSpecsWithout(&.{"clock_sleep"});
 const root_specs_without_learning = rootSpecsWithout(&.{"learn_candidate"});
 const root_specs_without_optional = rootSpecsWithout(&.{ "clock_sleep", "learn_candidate" });
 
-pub const meta_names = [_][]const u8{ "todo_write", "todo_read", "ask_user", "eval", "attempt_completion", "clock_sleep", "note_constraint", mcp_schema_gate.tool_name, mcp_select.search_name, mcp_select.select_name, peer_channel.tool_name, workspace_switch.tool_name };
+pub const meta_names = [_][]const u8{ "todo_write", "todo_read", "ask_user", "eval", "attempt_completion", "yield_turn", "clock_sleep", "note_constraint", mcp_schema_gate.tool_name, mcp_select.search_name, mcp_select.select_name, peer_channel.tool_name, workspace_switch.tool_name };
 
 pub fn isMetaName(name: []const u8) bool {
     for (meta_names) |m| if (std.mem.eql(u8, name, m)) return true;

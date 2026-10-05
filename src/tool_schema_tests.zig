@@ -464,6 +464,36 @@ test "subagent desc: Codex sidecar rules, no routing essay on the catalog prefix
     try std.testing.expect(found);
 }
 
+test "ask_user (#1531): catalogs require reply attachment capability and explain next-prompt handoff" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    for ([_]Provider.Kind{ .anthropic, .openai, .responses, .interactions }) |kind| {
+        const catalog = try schema.renderRootTools(arena, kind, &schema.root_specs, &.{});
+        const parsed = try std.json.parseFromSliceLeaky(Value, arena, catalog, .{});
+        var found = false;
+        for (parsed.array.items) |tool| {
+            const obj = if (tool.object.get("function")) |f| f.object else tool.object;
+            if (!std.mem.eql(u8, obj.get("name").?.string, "ask_user")) continue;
+            found = true;
+            const desc = obj.get("description").?.string;
+            try testing.expect(std.mem.indexOf(u8, desc, "explicitly supports attachments in question replies") != null);
+            try testing.expect(std.mem.indexOf(u8, desc, "absent or unknown") != null);
+            try testing.expect(std.mem.indexOf(u8, desc, "next-prompt attachment handoff") != null);
+            try testing.expect(std.mem.indexOf(u8, desc, "use yield_turn") != null);
+            try testing.expect(std.mem.indexOf(u8, desc, "without calling ask_user") != null);
+            try testing.expect(std.mem.indexOf(u8, desc, "do not claim the task is complete") != null);
+            try testing.expect(std.mem.indexOf(u8, desc, "typed text and/or pasted images") == null);
+        }
+        try testing.expect(found);
+    }
+    try testing.expect(schema.isMetaName("yield_turn"));
+    try testing.expect(std.mem.indexOf(u8, schema.tools_openai_sub, "yield_turn") == null);
+    for (schema.root_specs) |t| if (std.mem.eql(u8, t.name, "attempt_completion")) {
+        try testing.expect(std.mem.indexOf(u8, t.desc, "use yield_turn instead") != null);
+    };
+}
+
 test "codedb schema exposes per-call local_only (#765)" {
     var found = false;
     for (schema.root_specs) |t| if (std.mem.eql(u8, t.name, "codedb")) {

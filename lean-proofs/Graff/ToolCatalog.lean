@@ -27,7 +27,7 @@ def localTools : List String :=
 
 def leanTools : List String :=
   ["shell", "read_file", "edit_file", "write_file", "codedb",
-   "subagent", "attempt_completion", "load_tool_schemas"]
+   "subagent", "attempt_completion", "yield_turn", "load_tool_schemas"]
 
 def optionalTools : List String :=
   ["imagegen"]
@@ -44,7 +44,7 @@ def metaTools : List String :=
 
 def rootExtras : List String :=
   ["subagent", "workflow", "agent_output", "agent_message", "learn_candidate", "peer_message",
-   "workspace"]
+   "workspace", "yield_turn"]
 
 def filterKeep (keep : String → Bool) : List String → List String
   | []      => []
@@ -140,7 +140,7 @@ example : catalog {} =
       ["todo_write", "todo_read", "eval", "note_constraint", "ask_user",
        "attempt_completion", "load_tool_schemas", "mcp_search_tools",
        "mcp_select_tool"] ++
-       ["subagent", "workflow", "agent_output", "agent_message", "peer_message", "workspace"]) := by native_decide
+       ["subagent", "workflow", "agent_output", "agent_message", "peer_message", "workspace", "yield_turn"]) := by native_decide
 
 example : catalog { imagegen := true } =
     catalog {} ++ ["imagegen"] := by native_decide

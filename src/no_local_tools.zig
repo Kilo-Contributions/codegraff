@@ -101,6 +101,7 @@ pub const lean_tools = [_][]const u8{
     "codedb",
     "subagent",
     "attempt_completion",
+    "yield_turn",
     "load_tool_schemas",
 };
 
@@ -237,7 +238,7 @@ test "#330: GRAFF_NO_LOCAL_TOOLS is affirmative-only" {
     for ([_][]const u8{ "", "0", "false", "off", "no", "2", "enabled" }) |v| try std.testing.expect(!envEnables(v));
 }
 
-test "lean: the filter keeps exactly the seven one-shot tools, and allocates nothing when off" {
+test "lean: the filter keeps the one-shot tools and handoff, and allocates nothing when off" {
     const Spec = struct { name: []const u8, desc: []const u8 = "" };
     const specs = [_]Spec{
         .{ .name = "shell" },
@@ -246,6 +247,7 @@ test "lean: the filter keeps exactly the seven one-shot tools, and allocates not
         .{ .name = "todo_write" },
         .{ .name = "subagent" },
         .{ .name = "attempt_completion" },
+        .{ .name = "yield_turn" },
     };
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
@@ -260,12 +262,13 @@ test "lean: the filter keeps exactly the seven one-shot tools, and allocates not
 
     lean = true;
     const kept = try filterLeanSpecs(Spec, arena, &specs);
-    try std.testing.expectEqual(@as(usize, 4), kept.len);
+    try std.testing.expectEqual(@as(usize, 5), kept.len);
     try std.testing.expectEqualStrings("shell", kept[0].name);
     try std.testing.expectEqualStrings("read_file", kept[1].name);
     try std.testing.expectEqualStrings("subagent", kept[2].name);
     try std.testing.expectEqualStrings("attempt_completion", kept[3].name);
-    try std.testing.expectEqual(@as(usize, 8), lean_tools.len);
+    try std.testing.expectEqualStrings("yield_turn", kept[4].name);
+    try std.testing.expectEqual(@as(usize, 9), lean_tools.len);
     try std.testing.expect(leanKeeps("read_file") and leanKeeps("edit_file") and leanKeeps("write_file"));
     try std.testing.expect(!leanKeeps("read_tool_result"));
     for (lean_tools) |tool| try std.testing.expect(leanKeeps(tool));

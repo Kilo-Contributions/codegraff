@@ -21,6 +21,7 @@ const subagent_interactive = @import("subagent_interactive.zig");
 /// latches stay inside `peer_idle.takeIdleWake` (#1137 / #1138); this helper
 /// only unifies which sources run and in which order.
 pub fn takeIdleWake(io: Io, session_name: []const u8, buf: []u8) ?[]const u8 {
+    if (peer_idle.waitingForInput()) return null; // retain notices for the next human prompt
     if (subagent_interactive.takeWake(io, session_name, buf)) |t| return t;
     if (job_notify.takeIdleWake(io, buf)) |t| return t; // idle-stop waits for a real step boundary (#199)
     if (schedule.takeWake(io, buf)) |t| return t;

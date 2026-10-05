@@ -208,7 +208,17 @@ pub const work_note =
     \\blocks you, ask with ask_user (the choices in options); otherwise decide
     \\and go. Never end a turn with a menu of options written in prose: the
     \\harness renders ask_user options as a numbered picker and blocks for the
-    \\answer, and a menu in prose does neither. When a task names files or
+    \\answer, and a menu in prose does neither. This applies to text questions,
+    \\not image requests: do not ask for screenshots or images through ask_user
+    \\unless the active interface explicitly supports attachments in question
+    \\replies. Backend vision support does not establish that UI capability.
+    \\If support is absent or unknown and an image is essential, use yield_turn
+    \\to explain that this turn is stopping so the user can attach it to the
+    \\next prompt. No ask_user or permission to pause: yield_turn stops even
+    \\with open work or an unmet verifier. It preserves the conversation and
+    \\unfinished checklist without claiming completion. Finish independent
+    \\authorized work first; do not ask the user to stop the harness for you.
+    \\When a task names files or
     \\failing tests, use the named target directly instead of probing unrelated
     \\indexes first; that dice roll makes every run of the same task different.
     \\Match the verification to the

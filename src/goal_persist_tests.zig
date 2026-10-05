@@ -79,6 +79,7 @@ fn blankRoot(arena: Allocator) Agent {
     root.completion_gate_armed = false;
     root.completion_refused = false;
     root.completed = null;
+    root.yielded = null;
     root.tool_calls_this_turn = 0;
     root.goal_note_fp = 0;
     root.pending_goal_note = null;
