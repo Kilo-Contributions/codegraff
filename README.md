@@ -427,10 +427,9 @@ Docs-only pushes skip it. In-house PR fixtures: `graff-evals/`
 
 ## Enterprise
 
-From the release after v0.0.302.15, a company that has raised more than
-US$500k (at any valuation, counting its affiliates) needs a commercial license
-for any use of graff, including on its own machines, CI and network (see
-[License](#license)). Contact
+From the release after v0.0.302.22, an organization needs a commercial license
+for any use of graff, including on its own machines, cloud, CI and network, if
+it meets any one of the tests under [License](#license). Contact
 [rach@standardharness.com](mailto:rach@standardharness.com) for a license,
 support, and deployment help. What the measured harness comparisons mean for
 a budget: [evals/enterprise-cost.md](evals/enterprise-cost.md).
@@ -444,11 +443,20 @@ licence is perpetual unless they breach it. Commercial permission without
 copyleft exists only if **both authors grant it jointly in writing**, and is
 revocable.
 
-**Funded companies.** Every version after v0.0.302.15 adds one term: a
-company that has raised more than US$500k, at any valuation and counting its
-affiliates, may use graff only under a commercial license, including on its
-own machines, CI and network. Individuals and other organizations use graff
-under the AGPL. Versions up to v0.0.302.15 keep the license they shipped
-with. Contact [rach@standardharness.com](mailto:rach@standardharness.com).
+**Companies need a commercial license.** Every version after v0.0.302.22 adds
+one term. Your organization, counted together with its affiliates, needs a
+commercial license for any use of graff (including on its own machines, cloud,
+CI and network) if it meets **any one** of these:
+
+- it has raised more than **US$500k** in total from investors or lenders;
+- its net worth or latest valuation is more than **US$500k**;
+- its gross revenue was more than **US$100k** in its last fiscal year or any
+  12-month period.
+
+A company that crosses a line must contact us within 5 working days.
+Individuals, and organizations that meet none of these, use graff under the
+AGPL. Earlier versions keep the license they shipped with. Unsure? Treat
+yourself as covered and contact
+[rach@standardharness.com](mailto:rach@standardharness.com).
 
 <p align="center"><sub>Built in Zig 0.17 dev · <a href="LICENSE">AGPL-3.0 (modified)</a> · <a href="docs/architecture.md">architecture</a> · <a href="CHANGELOG.md">CHANGELOG</a> · <a href="docs/uxlog.md">uxlog</a></sub></p>
