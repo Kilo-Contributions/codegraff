@@ -333,16 +333,16 @@ pub fn updateCommand(
 
     // Delegate download/codesign/atomic swap to install.sh. Inherit our stdio
     // so its progress (and any sudo prompt) reaches the terminal directly.
-    // "set -o pipefail" is required: without it, a failed "curl" is masked
-    // by the right-hand "sh" exiting 0 on EOF, and the pipeline reports
-    // success while installing nothing — silently.
+    // Download to a temp file, then run it: piping curl into sh would mask a
+    // failed curl (sh exits 0 on EOF) unless "set -o pipefail" is on, and
+    // /bin/sh is dash on Debian/Ubuntu, which rejects that option outright.
     //
     // `install_url` is user-controllable via GRAFF_INSTALL_URL / HARNESS_INSTALL_URL,
     // so it MUST NOT be interpolated into the sh -c string (shell injection).
     // Pass it as positional $1 instead — the shell never re-parses it and curl
     // receives it verbatim.
     var child = std.process.spawn(io, .{
-        .argv = &.{ "/bin/sh", "-c", "set -o pipefail; curl -fsSL \"$1\" | HARNESS_NO_GRAFF=1 sh", "sh", install_url },
+        .argv = &.{ "/bin/sh", "-c", "f=$(mktemp) || exit 1; trap 'rm -f \"$f\"' EXIT; curl -fsSL \"$1\" -o \"$f\" || exit 1; HARNESS_NO_GRAFF=1 sh \"$f\"", "sh", install_url },
     }) catch |err|
         std.process.fatal("update: could not launch installer: {t}", .{err});
     const term = child.wait(io) catch std.process.fatal("update: installer did not exit cleanly", .{});
