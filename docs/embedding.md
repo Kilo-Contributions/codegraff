@@ -139,9 +139,10 @@ registry client.
 
 codegraff is **Modified AGPLv3** ([`LICENSE`](../LICENSE)): a hosted or SaaS
 embed is a legal event (AGPL §13) unless both authors grant a separate
-written permission. From the release after v0.0.302.15, a company that has
-raised more than US$500k needs a commercial license for any use, embedding
-included (contact rach@standardharness.com).
+written permission. From the release after v0.0.302.22, an organization that
+has raised more than US$500k, is worth more than US$500k, or earns more than
+US$100k a year needs a commercial license for any use, embedding included
+(contact rach@standardharness.com).
 
 ## In-process (`createGraffAgent`)
 
