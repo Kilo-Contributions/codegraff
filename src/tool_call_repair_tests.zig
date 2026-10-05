@@ -261,8 +261,8 @@ test "brokenCallLoop stop runs the batch checkpoint, then ends the turn past eve
     const steps = @embedFile("agent_steps.zig");
     const step = steps[std.mem.indexOf(u8, steps, "pub fn stepOpenAI").?..];
     try std.testing.expect(std.mem.indexOf(u8, step, "turn_checkpoint.afterToolBatch(self)").? < std.mem.indexOf(u8, step, "return tool_call_repair.loop_stop_text").?);
-    const agent = @embedFile("agent.zig");
-    const loop = agent[std.mem.indexOf(u8, agent, "pub fn runTurn").?..];
+    const agent = @embedFile("agent_turn.zig");
+    const loop = agent[std.mem.indexOf(u8, agent, "pub fn run(").?..];
     try std.testing.expect(std.mem.indexOf(u8, loop, "endsTurn(").? < std.mem.indexOf(u8, loop, "bounced_answer.retry(").?);
     try std.testing.expect(isLoopStop(loop_stop_text));
     const copy = try std.testing.allocator.dupe(u8, loop_stop_text);
