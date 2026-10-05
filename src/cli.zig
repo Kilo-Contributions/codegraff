@@ -23,6 +23,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.23
+    \\  • ChatGPT-plan sign-in caches the prompt again, on every model
+    \\
     \\0.0.302.22
     \\  • /import-claude brings this project's Claude Code conversations to /resume
     \\  • imported conversations continue on your graff provider and credentials

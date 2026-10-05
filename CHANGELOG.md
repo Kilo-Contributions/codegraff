@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.23
+
+### Prompt caching
+
+- The ChatGPT-plan sign-in (`chatgpt-new`) caches the prompt again, for every model on it. graff sent the cache key in the request body but only sent the matching `session_id` header on the `codex` route, so this route's requests were not read from the cache. Both the HTTP and WebSocket requests now send `session_id`, set to the same value as the body's cache key; the Codex-only identity headers stay on `codex`.
+
 ## v0.0.302.22
 
 ### Sessions
