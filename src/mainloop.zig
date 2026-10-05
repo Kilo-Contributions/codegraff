@@ -539,7 +539,7 @@ pub fn run(ctx: *Ctx) !void {
                 .session_arena_kb = if (main_mod.g_session_arena) |a| a.queryCapacity() / 1024 else 0,
                 .scratch_arena_kb = if (ctx.root.scratch_arena) |a| a.queryCapacity() / 1024 else 0,
             });
-            ctx.root.emit(turn_event.fromTally(&pricing.g_cost, ctx.io, emitted_text, session_context_tokens, isolated_review or !ctx.root.eval_repair_pending));
+            ctx.root.emit(turn_event.fromTally(&pricing.g_cost, ctx.io, emitted_text, session_context_tokens, isolated_review or ctx.root.yielded != null or !ctx.root.eval_repair_pending));
         }
         // Apply only if already complete; poll never waits for title generation.
         title_jobs.poll(ctx);

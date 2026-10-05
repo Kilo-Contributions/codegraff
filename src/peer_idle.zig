@@ -15,12 +15,14 @@ const presence_chan = @import("presence_chan.zig");
 var last_woken_unread: usize = 0;
 var last_placed_gen: u64 = 0;
 var suppress_idle_wake: bool = false;
+var waiting_for_input: bool = false;
 var turn_busy: std.atomic.Value(bool) = .init(false);
 
 pub fn resetForTest() void {
     last_woken_unread = 0;
     last_placed_gen = 0;
     suppress_idle_wake = false;
+    waiting_for_input = false;
     turn_busy.store(false, .release);
 }
 
@@ -44,9 +46,21 @@ pub fn noteCompletion() void {
     suppress_idle_wake = true;
 }
 
+/// A handoff waits for human input without completing a goal. Peer mail
+/// stays readable, but cannot immediately reopen the yielded turn.
+pub fn noteHandoff() void {
+    suppress_idle_wake = true;
+    waiting_for_input = true;
+}
+
+pub fn waitingForInput() bool {
+    return waiting_for_input;
+}
+
 /// A later human prompt re-opens idle auto-turn.
 pub fn noteHumanPrompt() void {
     suppress_idle_wake = false;
+    waiting_for_input = false;
 }
 
 pub fn idleWakeSuppressed() bool {

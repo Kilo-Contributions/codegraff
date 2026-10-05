@@ -177,6 +177,7 @@ pub fn applyGoalSet(root: *Agent, objective: []const u8, now_ms: i64) GoalSetRes
 /// work, not silence. A session with no goal reads as .active, so a goal-less run
 /// is governed by its work and its iteration bound alone.
 pub fn loopTurnDecision(root: *Agent, iters_left: u32, now_ms: i64) repl_glue.ContinuationDecision {
+    if (root.yielded != null) return .{ .stop = .blocked }; // wait for the next user prompt, not completion
     if (@import("subagent_interactive.zig").enabled.load(.acquire) and @import("subagent_interactive.zig").yielded) return .{ .stop = .idle };
     const work_done = root.completed != null or goal_state.checklistFinished(root);
     const model_stopped = repl_glue.turnStopped(root.tool_calls_this_turn, root.completion_refused);
@@ -275,6 +276,7 @@ fn flowRoot(arena: Allocator) Agent {
     root.completion_gate_armed = false;
     root.completion_refused = false;
     root.completed = null;
+    root.yielded = null;
     root.goal_note_fp = 0;
     root.pending_goal_note = null;
     root.history_rewrites = 0;

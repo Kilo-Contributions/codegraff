@@ -151,6 +151,7 @@ pub fn stepResponses(self: *Agent, response: std.json.ObjectMap) !?[]const u8 {
             if (try grantRepairTurn(self)) return null;
             return eval_control.verifier_hard_stop;
         }
+        if (self.yielded) |handoff| return handoff;
         if (self.completed) |result| return result;
         return null;
     }
@@ -223,6 +224,7 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
             if (try grantRepairTurn(self)) return null;
             return eval_control.verifier_hard_stop;
         }
+        if (self.yielded) |handoff| return handoff;
         if (self.completed) |result| return result;
         return null; // loop again
     }
@@ -325,6 +327,7 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
             if (try grantRepairTurn(self)) return null;
             return eval_control.verifier_hard_stop;
         }
+        if (self.yielded) |handoff| return handoff;
         if (self.completed) |result| return result;
         return null;
     }

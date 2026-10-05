@@ -185,3 +185,43 @@ test "#748: error-only OpenAI SSE is an error envelope, not a missing stream" {
     try std.testing.expectEqualStrings("invalid_request_error", root.get("error").?.object.get("type").?.string);
     try std.testing.expectEqualStrings("only auto is supported", root.get("error").?.object.get("message").?.string);
 }
+
+test "yield_turn (#1531): every wire returns the handoff after recording the tool result" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const idle = @import("peer_idle.zig");
+    const was_suppressed = idle.idleWakeSuppressed();
+    const was_waiting = idle.waitingForInput();
+    defer {
+        idle.noteHumanPrompt();
+        if (was_suppressed) idle.noteCompletion();
+        if (was_waiting) idle.noteHandoff();
+    }
+    const cases = .{
+        .{ .openai, "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"y\",\"function\":{\"name\":\"yield_turn\",\"arguments\":\"{\\\"message\\\":\\\"Attach the screenshot on the next prompt.\\\"}\"}}]}}]}" },
+        .{ .anthropic, "{\"content\":[{\"type\":\"tool_use\",\"id\":\"y\",\"name\":\"yield_turn\",\"input\":{\"message\":\"Attach the screenshot on the next prompt.\"}}]}" },
+        .{ .responses, "{\"output\":[{\"type\":\"function_call\",\"call_id\":\"y\",\"name\":\"yield_turn\",\"arguments\":\"{\\\"message\\\":\\\"Attach the screenshot on the next prompt.\\\"}\"}]}" },
+        .{ .interactions, "{\"steps\":[{\"type\":\"function_call\",\"id\":\"y\",\"name\":\"yield_turn\",\"arguments\":{\"message\":\"Attach the screenshot on the next prompt.\"}}]}" },
+    };
+    inline for (cases) |case| {
+        var agent: Agent = .{
+            .gpa = std.testing.allocator,
+            .arena = arena,
+            .io = std.testing.io,
+            .client = undefined,
+            .provider = .{ .id = "test", .kind = case[0], .auth = .bearer, .url = "", .api_key = "", .model = "test", .context = 128000 },
+            .messages = .init(arena),
+            .sub = false,
+            .label = "test",
+            .out = null,
+            .session_name = "", // protocol-only fixture has no durable session
+        };
+        defer agent.tools_used.deinit(std.testing.allocator);
+        const root = try std.json.parseFromSliceLeaky(std.json.Value, arena, case[1], .{});
+        const result = (try @import("agent_steps.zig").stepForWire(&agent, root.object)).?;
+        try std.testing.expectEqualStrings("Attach the screenshot on the next prompt.", result);
+        try std.testing.expect(agent.completed == null);
+        try std.testing.expectEqual(@as(usize, 2), agent.messages.items.len);
+    }
+}

@@ -26,6 +26,22 @@ Responses 16k output cap (#95's sibling) and the per-output handle contract.
   result names path / paste-text / next-prompt fallbacks instead of
   implying the pixels arrived.
 
+## Question-interface capability
+
+The image transport above is not a promise that every question dialog can
+accept an attachment. `ask_user` defaults to text and option selections;
+request images there only when the active interface explicitly supports
+attachments in question replies. Unknown support is not support. When an
+image is essential on a text-only or unknown interface, explain the handoff
+with `yield_turn` so the user can attach it to the next prompt. This explicit
+root-only boundary runs alone, requires no confirmation, and stops completion
+nudges and autonomous continuation without passing a verifier or completing
+a goal. Keep the conversation and unfinished work available; do not claim
+completion. Idle job, worker, schedule and peer notices remain queued rather
+than reopening the handoff on REPL or ACP. The next human prompt clears the
+idle handoff latch and starts a fresh turn; goals and verification stay intact.
+Existing image-capable reply paths keep the transport described above.
+
 ## Consequences
 
 The next model request sees the text result and the pixels. Compaction

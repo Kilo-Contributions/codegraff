@@ -72,6 +72,7 @@ pub fn runTools(self: *Agent, calls: []const ToolCall) ![]ExecResult {
         }
     }
     const results = try self.arena.alloc(ExecResult, calls.len);
+    if (try @import("turn_handoff.zig").rejectMixedBatch(self, calls, results)) return results;
     const eval_index = eval_control.evalCallIndex(calls);
     const blocks_completion = eval_control.batchBlocksCompletion(calls);
     const defer_completion = eval_control.shouldDeferCompletion(calls);
@@ -196,6 +197,7 @@ pub fn rejectToolCall(self: *Agent, call: ToolCall) !?ExecResult {
             if (self.read_miss.shouldRefuse(path)) return try refuseRead(self, call);
         }
     }
+    if (!self.sub and std.mem.eql(u8, call.name, "yield_turn")) return null;
     if (isMetaName(call.name) or local_tools.isInstall(call.name) or schedule.isName(call.name) or std.mem.eql(u8, call.name, "structured_output")) {
         if (self.run_budget) |budget| if (budget.toolRefusal(self.arena, self.tracer)) |denied| {
             self.emitToolRejected(call, "exhausted", denied.text);
@@ -304,6 +306,7 @@ pub fn handleMeta(self: *Agent, call: ToolCall) !ExecResult {
         if (main_mod.plan_mode) return .{ .text = "plan mode is on — schedule_task writes .graff/schedule; switch to act first.", .is_error = true };
         return schedule.handleTool(self, call);
     }
+    if (std.mem.eql(u8, call.name, "yield_turn")) return @import("turn_handoff.zig").handle(self, call);
     if (std.mem.eql(u8, call.name, "attempt_completion")) {
         if (!self.review_mode and self.eval_cmd != null and (!self.eval_verified or self.eval_repair_pending)) {
             const message = if (self.eval_repair_pending)

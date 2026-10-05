@@ -145,6 +145,7 @@ pub fn step(self: *@import("agent.zig").Agent, root: std.json.ObjectMap) !?[]con
             if (try agent_steps.grantRepairTurn(self)) return null;
             return eval_control.verifier_hard_stop;
         }
+        if (self.yielded) |message| return message;
         if (self.completed) |result| return result;
         return null;
     }

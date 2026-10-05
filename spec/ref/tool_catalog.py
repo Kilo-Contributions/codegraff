@@ -28,6 +28,7 @@ LEAN_TOOLS = (
     "codedb",
     "subagent",
     "attempt_completion",
+    "yield_turn",
     "load_tool_schemas",
 )
 OPTIONAL_TOOLS = ("imagegen",)
@@ -63,6 +64,7 @@ ROOT_EXTRAS = (
     "learn_candidate",
     "peer_message",
     "workspace",
+    "yield_turn",
 )
 ROOT_UNIVERSE = BASE_TOOLS + META_TOOLS + ROOT_EXTRAS
 
