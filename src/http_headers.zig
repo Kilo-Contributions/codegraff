@@ -189,6 +189,14 @@ pub fn wantsGrokConvId(provider_id: []const u8) bool {
     return std.mem.eql(u8, provider_id, "xai");
 }
 
+/// ChatGPT sign-in Responses routes send `session_id` equal to the body's
+/// `prompt_cache_key` — the endpoint keys prompt caching on it, and a body
+/// key alone returns zero cached tokens. The API-key `openai` route is
+/// untested and stays without it.
+pub fn wantsSessionIdHeader(provider_id: []const u8) bool {
+    return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "chatgpt-new");
+}
+
 pub fn providerHeaders(io: Io, provider: Provider, bearer: []const u8, buf: *[12]std.http.Header) []const std.http.Header {
     return providerHeadersWithConv(io, provider, bearer, buf, null);
 }
@@ -262,7 +270,11 @@ pub fn providerHeadersWithConv(io: Io, provider: Provider, bearer: []const u8, b
         count += 1;
         buf[count] = .{ .name = "originator", .value = "codex_cli_rs" };
         count += 1;
-        // openai/codex ModelClient: prompt_cache_key defaults to session_id.
+    }
+    // openai/codex ModelClient: prompt_cache_key defaults to session_id.
+    // chatgpt-new's Platform endpoint also caches only with the header; the
+    // account/beta/originator backend identity stays codex-only.
+    if (wantsSessionIdHeader(provider.id)) {
         buf[count] = .{ .name = "session_id", .value = conv_id orelse projectRootId(io) };
         count += 1;
     }
@@ -547,4 +559,38 @@ test "the thinking-binding beta rides only 5.5-era Claude models on the Anthropi
     // An Anthropic-format provider that is not Anthropic never sees it.
     p = .{ .id = "minimax", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "k", .model = "claude-opus-5-5", .context = 1_000_000 };
     try std.testing.expect(beta(providerHeaders(io, p, "", &buf)) == null);
+}
+
+test "chatgpt-new sends session_id equal to the body cache key, without backend identity" {
+    const io = std.testing.io;
+    var buf: [12]std.http.Header = undefined;
+    const p: Provider = .{ .id = "chatgpt-new", .kind = .responses, .auth = .bearer, .url = "https://api.openai.com/v1/responses", .api_key = "k", .model = "gpt-6.1-sol", .context = 272_000 };
+    var ckbuf: [96]u8 = undefined;
+    var agent_ptr: usize = 1;
+    const key = requestCacheKey(io, "main", @ptrCast(&agent_ptr), p, &ckbuf);
+    const headers = providerHeadersWithConv(io, p, "Bearer k", &buf, key);
+    try std.testing.expectEqualStrings(key, headerValue(headers, "session_id") orelse return error.SessionIdHeaderMissing);
+    for (headers) |h| {
+        try std.testing.expect(!std.mem.eql(u8, h.name, "chatgpt-account-id"));
+        try std.testing.expect(!std.mem.eql(u8, h.name, "OpenAI-Beta"));
+        try std.testing.expect(!std.mem.eql(u8, h.name, "originator"));
+    }
+    // One-off posts with no explicit conv still pin the project root id,
+    // the same value a main-label body's prompt_cache_key carries.
+    const headers2 = providerHeaders(io, p, "Bearer k", &buf);
+    try std.testing.expectEqualStrings(projectRootId(io), headerValue(headers2, "session_id") orelse return error.SessionIdHeaderMissing);
+}
+
+test "every subscription-login Responses provider sends session_id" {
+    const io = std.testing.io;
+    var buf: [12]std.http.Header = undefined;
+    var checked: usize = 0;
+    for (@import("provider.zig").provider_specs) |spec| {
+        if (spec.kind != .responses or !spec.sub_login) continue;
+        checked += 1;
+        const p: Provider = .{ .id = spec.id, .kind = spec.kind, .auth = spec.auth, .url = "", .api_key = "k", .model = "m", .context = 1, .account = "acct" };
+        const headers = providerHeaders(io, p, "Bearer k", &buf);
+        try std.testing.expect(headerValue(headers, "session_id") != null);
+    }
+    try std.testing.expect(checked >= 2); // codex + chatgpt-new today
 }

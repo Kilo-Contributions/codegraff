@@ -347,27 +347,14 @@ pub fn postResponsesWs(self: *Agent, body: []const u8) ![]u8 {
     const frame = @import("agent_ws_prewarm.zig").stripTransportFields(frame_full);
 
     const bearer = try std.fmt.allocPrint(arena, "Bearer {s}", .{provider.api_key});
-    // ChatGPT tail is codex-only (#502); xAI takes grok-build's affinity
-    // pair: x-grok-session-id (durable project) + x-grok-conv-id (root/sub
+    // ChatGPT tail is codex-only (#502); other session_id routes send
+    // Authorization + session_id, xAI takes grok-build's affinity pair:
+    // x-grok-session-id (durable project) + x-grok-conv-id (root/sub
     // partition, same value as the Responses body's prompt_cache_key).
     var conv_buf: [96]u8 = undefined;
     const conv = http_headers.requestCacheKey(self.io, self.label, self, provider, &conv_buf);
     var hdrs: [7]ws.Header = undefined;
-    var hn: usize = 1;
-    hdrs[0] = .{ .name = "Authorization", .value = bearer };
-    if (std.mem.eql(u8, provider.id, "codex")) {
-        hdrs[1] = .{ .name = "session_id", .value = conv };
-        hdrs[2] = .{ .name = "chatgpt-account-id", .value = provider.account };
-        hdrs[3] = .{ .name = "OpenAI-Beta", .value = "responses_websockets=2026-02-06" };
-        hdrs[4] = .{ .name = "originator", .value = "codex_cli_rs" };
-        hdrs[5] = .{ .name = "User-Agent", .value = "codex_cli_rs/0.1 (graff)" };
-        hn = 6;
-    } else if (http_headers.wantsGrokConvId(provider.id)) {
-        hdrs[1] = .{ .name = "x-grok-session-id", .value = http_headers.projectRootId(self.io) };
-        hdrs[2] = .{ .name = "x-grok-conv-id", .value = conv };
-        hn = 3;
-    }
-    const headers: []const ws.Header = hdrs[0..hn];
+    const headers: []const ws.Header = @import("agent_ws_headers.zig").handshakeHeaders(self.io, provider, bearer, conv, &hdrs);
     const url = try wssUrl(arena, provider.url);
 
     // Esc watching (root TTY), same gate as postStream.
