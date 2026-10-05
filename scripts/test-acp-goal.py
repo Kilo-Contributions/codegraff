@@ -57,7 +57,7 @@ def main() -> None:
             proc = subprocess.Popen(
                 [binary, "--yolo", "--no-telemetry", "--model", "vercel", "--old", "--no-lean", "acp"],
                 cwd=temp, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, text=True,
+                stderr=subprocess.PIPE, text=True, encoding="utf-8",
             )
             responses = queue.Queue()
 
