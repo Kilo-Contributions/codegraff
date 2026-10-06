@@ -73,6 +73,9 @@ pub fn applyProviderInner(root: *Agent, arena: Allocator, p: Provider, persist: 
             note = "history cleared — /keepcontext on to carry it across formats";
         }
     }
+    // ADR 0256: attempt_completion's description follows the model family.
+    const gemini = @import("gemini_turns.zig");
+    if (gemini.family(root.provider.model) != gemini.family(p.model)) root.invalidateRootTools();
     @import("jev_tool.zig").updateProvider(root, p);
     if (root.reasoning == .none and !@import("effort_route.zig").mimoRoute(p.id, p.model)) {
         root.reasoning = .medium;
