@@ -565,7 +565,7 @@ test { // ── Unit tests (`zig build test`): pull in tests from imported modu
     _ = .{ @import("session_catalog.zig"), @import("session_prompt.zig"), @import("session_discovery.zig"), @import("session_workspaces.zig"), @import("commands_resume.zig"), @import("peer_live.zig"), @import("presence_tests.zig"), @import("mcp_rpc_tests.zig") };
     _ = .{ @import("prompt_astra.zig"), @import("prompt_guidance.zig"), @import("oauth_chatgpt.zig"), @import("chatgpt_reauth.zig") }; // per-model guidance (Astra, GPT-5.6); ChatGPT plan sign-in (ADR 0253)
     _ = .{ @import("agent_empty_completion.zig"), @import("agent_model_loop.zig"), @import("publication_policy_tests.zig"), @import("jobs_completion_tests.zig") };
-    _ = .{ @import("provider_routing_tests.zig"), @import("codegraff_messages_tests.zig"), @import("history_wire.zig"), @import("readline_paste_number_tests.zig"), @import("test_hooks.zig"), @import("peer_wake_loop.zig") };
+    _ = .{ @import("provider_routing_tests.zig"), @import("codegraff_messages_tests.zig"), @import("tool_result_empty_tests.zig"), @import("history_wire.zig"), @import("readline_paste_number_tests.zig"), @import("test_hooks.zig"), @import("peer_wake_loop.zig") };
     _ = .{ @import("list_dir_nearmiss.zig"), @import("tool_preview_tests.zig") };
     _ = @import("repo_map.zig");
     _ = @import("agent_overflow_tests.zig"); // #414: and, through it, agent_overflow.zig's table tests

@@ -86,10 +86,12 @@ pub fn userNote(arena: Allocator, kind: Provider.Kind, text: []const u8) !Value 
     return @import("session_wake.zig").typedMessage(arena, kind, text);
 }
 
+pub const empty_result = "(no output)"; // an empty tool result, on every wire
 pub fn toolResultMessage(arena: Allocator, kind: Provider.Kind, call_id: []const u8, raw_text: []const u8, is_error: bool) !Value {
     // Scrub raw bytes (binary tool output etc.) at the source so the result is a
-    // valid JSON string, not a byte-integer array the API rejects.
-    const text = sanitizeUtf8(arena, raw_text);
+    // valid JSON string, not a byte-integer array the API rejects. An empty one
+    // gets the shell's marker: a hosted route rejects an empty text part.
+    const text = if (raw_text.len == 0) empty_result else sanitizeUtf8(arena, raw_text);
     var obj: std.json.ObjectMap = .empty;
     switch (kind) {
         .interactions => return @import("interactions_steps.zig").fallbackResult(arena, call_id, text, is_error),
