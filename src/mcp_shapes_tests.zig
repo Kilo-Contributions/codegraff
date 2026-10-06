@@ -202,3 +202,28 @@ test "the slim rule says to compute inside the same script (ADR 0240)" {
     try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "run the computation inside the script") != null);
     try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "write_file(\"issues.json\", issues)") != null);
 }
+
+test "a comment fold names the issue every row shares, and only then" {
+    const gpa = std.testing.allocator;
+    const pad: [400]u8 = @splat('x');
+    const pad_s: []const u8 = &pad;
+    const shared = try std.fmt.allocPrint(gpa, "[{{\"issueId\":\"ISS-4\",\"body\":\"{s}\",\"author\":{{\"name\":\"gus\"}},\"createdAt\":\"2026-08-11\"}},{{\"issueId\":\"ISS-4\",\"body\":\"{s}\",\"author\":{{\"name\":\"jay\"}},\"createdAt\":\"2026-08-12\"}}]", .{ pad_s, pad_s });
+    defer gpa.free(shared);
+    const folded = shapes.slim(gpa, shared) orelse return error.ExpectedCommentSlim;
+    defer gpa.free(folded);
+    try std.testing.expectEqualStrings("{\"issue\":\"ISS-4\",\"n\":2,\"latest_author\":\"jay\"}", folded);
+
+    const nested = try std.fmt.allocPrint(gpa, "[{{\"issue\":{{\"id\":\"u1\",\"identifier\":\"ENG-7\"}},\"body\":\"{s}\",\"author\":\"ada\"}},{{\"issue\":{{\"id\":\"u1\",\"identifier\":\"ENG-7\"}},\"body\":\"{s}\",\"author\":\"bev\"}}]", .{ pad_s, pad_s });
+    defer gpa.free(nested);
+    const nested_fold = shapes.slim(gpa, nested) orelse return error.ExpectedCommentSlim;
+    defer gpa.free(nested_fold);
+    try std.testing.expect(std.mem.startsWith(u8, nested_fold, "{\"issue\":\"ENG-7\","));
+
+    // Rows that disagree, or a row without the key, name no issue.
+    const mixed = try std.fmt.allocPrint(gpa, "[{{\"issueId\":\"ISS-1\",\"body\":\"{s}\",\"author\":\"ada\"}},{{\"issueId\":\"ISS-2\",\"body\":\"{s}\",\"author\":\"bev\"}},{{\"body\":\"{s}\",\"author\":\"cam\"}}]", .{ pad_s, pad_s, pad_s });
+    defer gpa.free(mixed);
+    const mixed_fold = shapes.slim(gpa, mixed) orelse return error.ExpectedCommentSlim;
+    defer gpa.free(mixed_fold);
+    try std.testing.expect(std.mem.indexOf(u8, mixed_fold, "issue") == null);
+    try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "\"issue\"") != null);
+}

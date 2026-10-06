@@ -47,9 +47,16 @@ pub fn toolInvalidatesEval(call: ToolCall) bool {
 /// may fail. bash/read/codedb are verify/read — they run first, then
 /// completion is accepted only if none failed (ADR 0024 turn tax vs grok).
 pub fn batchBlocksCompletion(calls: []const ToolCall) bool {
+    return batchBlocksCompletionFor(calls, false);
+}
+
+/// `writes_complete` (ADR 0256): edit_file and write_file are held to the
+/// verify rule instead — they run first and completion follows only if they
+/// succeeded. rlm, subagent and mutating MCP calls still refuse.
+pub fn batchBlocksCompletionFor(calls: []const ToolCall, writes_complete: bool) bool {
     for (calls) |call| {
-        if (std.mem.eql(u8, call.name, "edit_file") or
-            std.mem.eql(u8, call.name, "write_file") or
+        if ((!writes_complete and (std.mem.eql(u8, call.name, "edit_file") or
+            std.mem.eql(u8, call.name, "write_file"))) or
             std.mem.eql(u8, call.name, "rlm") or
             std.mem.eql(u8, call.name, "subagent")) return true;
         if (std.mem.startsWith(u8, call.name, "mcp__") and !companionReadOnly(call.name, call.input)) return true;
@@ -68,8 +75,12 @@ pub fn completionIndex(calls: []const ToolCall) ?usize {
 /// and no workspace mutation. runTools executes those tools first, then
 /// accepts completion only if none failed.
 pub fn shouldDeferCompletion(calls: []const ToolCall) bool {
+    return shouldDeferCompletionFor(calls, false);
+}
+
+pub fn shouldDeferCompletionFor(calls: []const ToolCall, writes_complete: bool) bool {
     if (completionIndex(calls) == null) return false;
-    if (batchBlocksCompletion(calls)) return false;
+    if (batchBlocksCompletionFor(calls, writes_complete)) return false;
     for (calls) |call| {
         if (!isMetaName(call.name)) return true;
     }

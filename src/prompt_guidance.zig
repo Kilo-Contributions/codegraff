@@ -43,6 +43,8 @@ pub fn isGpt56(model: []const u8) bool {
 /// Compose `base` plus the note for the agent's current model, if it has one.
 pub fn append(self: *Agent, base: []const u8) ![]const u8 {
     if (isGpt56(self.provider.model)) return std.mem.concat(self.scratchAlloc(), u8, &.{ base, "\n", gpt56 });
+    const gemini = @import("gemini_turns.zig"); // ADR 0256
+    if (gemini.family(self.provider.model)) return std.mem.concat(self.scratchAlloc(), u8, &.{ base, "\n", gemini.note });
     return @import("prompt_astra.zig").append(self, base);
 }
 

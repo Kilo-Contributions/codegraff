@@ -281,6 +281,9 @@ record only when you need the evidence or the edge cases.
 | [0253](0253-an-interactive-session-signs-in-to-chatgpt-again.md) | When a ChatGPT request is rejected and the refresh cannot replace the token, an interactive root session opens the browser sign-in, waits up to three minutes and retries once; `-p`, piped, `--json`, ACP and sub-agents never do. One unfinished sign-in ends it for the process. |
 | [0254](0254-imported-conversations-use-the-configured-route.md) | Imported Claude history uses the configured graff provider and credentials; source models are metadata, and foreign tool results remain historical receipts. |
 | [0255](0255-codegraff-claude-uses-native-messages.md) | Claude aliases on codegraff use the native Messages endpoint; `isClaudeApi` is the one predicate for the real Claude wire. |
+| [0256](0256-gemini-takes-fewer-requests-per-task.md) | Gemini models get a working note (chained shell steps, no read-backs, no pasted files, check computed answers) and may batch `attempt_completion` with a final check or write; the completion is recorded only if every batched call succeeded. |
+| [0257](0257-a-slimmed-comment-list-names-its-issue.md) | A slimmed MCP comment list keeps the issue id its rows share (`{issue, n, latest_author}`), so parallel results name what they describe. |
+| [0258](0258-gemini-chat-sends-repo-context-once.md) | On the Codegraff chat wire, Gemini root turns send the project instructions and layout as the conversation's first user message (ADR 0243's split), so the system prompt every request repeats no longer carries them. |
 
 ## When to write one
 

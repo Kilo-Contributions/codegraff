@@ -81,3 +81,65 @@ test "ADR 0243: the wire body carries the layout as the first developer item; a 
     try std.testing.expectEqual(@as(usize, 0), warm_parsed.value.object.get("input").?.array.items.len);
     try std.testing.expectEqualStrings(instructions, warm_parsed.value.object.get("instructions").?.string);
 }
+
+fn chatRoot(a: std.mem.Allocator, id: []const u8, model: []const u8, layout: []const u8) !@import("agent.zig").Agent {
+    var agent = try body.testAgentFor(a, id, .openai, model);
+    const base = try std.mem.concat(a, u8, &.{ "BASE", agents_block, layout, "\n\n# Skills\nstatic tail" });
+    agent.sys_base = base;
+    agent.sys_normal = base;
+    agent.repo_map_snapshot = layout;
+    return agent;
+}
+
+test "ADR 0258: Gemini on the Codegraff chat wire sends the per-repo context once, as the first user message" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    hot_context.noteBaked("AGENTS.md", "Use tabs.");
+    defer hot_context.resetForTest();
+
+    var agent = try chatRoot(a, "codegraff", "gemini-3.8-flash", layout_a);
+    const full = try agent.buildBody("[]", false, true, true);
+    defer std.testing.allocator.free(full);
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, full, .{});
+    const messages = parsed.value.object.get("messages").?.array.items;
+    try std.testing.expectEqualStrings("system", messages[0].object.get("role").?.string);
+    const system = messages[0].object.get("content").?.string;
+    try std.testing.expect(std.mem.startsWith(u8, system, "BASE\n\n# Skills\nstatic tail"));
+    try std.testing.expect(std.mem.indexOf(u8, system, "# Project") == null);
+    try std.testing.expectEqualStrings("user", messages[1].object.get("role").?.string);
+    const context = messages[1].object.get("content").?.string;
+    try std.testing.expect(std.mem.startsWith(u8, context, repo_context.chat_frame ++ "# Project instructions (from AGENTS.md)\nUse tabs."));
+    try std.testing.expect(std.mem.indexOf(u8, context, "logs/auth.log") != null);
+    try std.testing.expectEqualStrings("hello", messages[2].object.get("content").?.string);
+
+    // A second repo sends the same system prompt.
+    var other = try chatRoot(a, "codegraff", "google/gemini-3.7-flash", layout_b);
+    try std.testing.expectEqualStrings((try repo_context.split(&agent, agent.sys_normal)).instructions, (try repo_context.split(&other, other.sys_normal)).instructions);
+}
+
+test "ADR 0258: other chat routes and sub-agents keep the per-repo context in the system prompt" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    hot_context.noteBaked("AGENTS.md", "Use tabs.");
+    defer hot_context.resetForTest();
+    const routes = [_]struct { id: []const u8, model: []const u8 }{
+        .{ .id = "codegraff", .model = "deepseek-v4-flash" },
+        .{ .id = "codegraff", .model = "mimo-v2.6-pro" },
+        .{ .id = "openrouter", .model = "google/gemini-3.8-flash" },
+    };
+    for (routes) |r| {
+        var agent = try chatRoot(a, r.id, r.model, layout_a);
+        const full = try agent.buildBody("[]", false, true, true);
+        defer std.testing.allocator.free(full);
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, full, .{});
+        const messages = parsed.value.object.get("messages").?.array.items;
+        // The system prompt still holds the blocks (a model note may follow them).
+        try std.testing.expect(std.mem.startsWith(u8, messages[0].object.get("content").?.string, agent.sys_normal));
+        try std.testing.expectEqual(@as(usize, 2), messages.len);
+    }
+    var sub = try chatRoot(a, "codegraff", "gemini-3.8-flash", layout_a);
+    sub.sub = true;
+    try std.testing.expectEqualStrings(sub.sys_normal, (try repo_context.split(&sub, sub.sys_normal)).instructions);
+}

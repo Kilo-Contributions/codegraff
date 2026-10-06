@@ -51,6 +51,9 @@ const empty_schema =
     \\{"type": "object", "properties": {}}
 ;
 
+/// attempt_completion's description; gemini_turns.withCompletionBatch extends it per model (ADR 0256).
+pub const attempt_completion_desc = "Signal that the task is complete. Put your final answer to the user in the result field. In strict mode use this for completed tasks; use yield_turn instead to stop for missing user input without claiming completion. Completing also closes the standing /goal; if its checklist still has open items you will be asked once to finish or confirm.";
+
 pub const base_specs = [_]ToolSpec{
     .{ .name = shell_tool.tool_name, .desc = shell_tool.tool_desc, .schema = shell_tool.tool_schema },
     .{
@@ -131,7 +134,7 @@ const meta_specs = [_]ToolSpec{
     },
     .{
         .name = "attempt_completion",
-        .desc = "Signal that the task is complete. Put your final answer to the user in the result field. In strict mode use this for completed tasks; use yield_turn instead to stop for missing user input without claiming completion. Completing also closes the standing /goal; if its checklist still has open items you will be asked once to finish or confirm.",
+        .desc = attempt_completion_desc,
         .schema =
         \\{"type": "object", "properties": {"result": {"type": "string", "description": "Final answer to present to the user"}}, "required": ["result"]}
         ,

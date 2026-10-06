@@ -74,8 +74,10 @@ pub fn runTools(self: *Agent, calls: []const ToolCall) ![]ExecResult {
     const results = try self.arena.alloc(ExecResult, calls.len);
     if (try @import("turn_handoff.zig").rejectMixedBatch(self, calls, results)) return results;
     const eval_index = eval_control.evalCallIndex(calls);
-    const blocks_completion = eval_control.batchBlocksCompletion(calls);
-    const defer_completion = eval_control.shouldDeferCompletion(calls);
+    // ADR 0256: only a batch that completes needs the model family.
+    const writes_complete = eval_control.completionIndex(calls) != null and @import("gemini_turns.zig").family(self.provider.model);
+    const blocks_completion = eval_control.batchBlocksCompletionFor(calls, writes_complete);
+    const defer_completion = eval_control.shouldDeferCompletionFor(calls, writes_complete);
 
     // Collect the indices of external (non-meta) calls for parallel exec.
     var ext_idx: std.ArrayList(usize) = .empty;
