@@ -3,6 +3,12 @@
 //! layout) rides as its own developer input item, ahead of the conversation,
 //! so the instructions are byte-identical in every repo and turn 1 in a new
 //! repo reads them from the cache. Other wires keep them in the instructions.
+//!
+//! ADR 0258: Gemini on the Codegraff chat wire continues each conversation on
+//! the server and sends only the new turn, while the system prompt goes again
+//! with every request. There the context rides as the conversation's first
+//! user message instead (a developer or system message would join the system
+//! prompt), so it is sent once rather than with every request.
 
 const std = @import("std");
 const Agent = @import("agent.zig").Agent;
@@ -13,9 +19,20 @@ pub const Split = struct { instructions: []const u8, context: []const u8 = "" };
 /// renders the tools and then the instructions, and caches the instructions
 /// as one unit: a per-repo byte inside them forfeits all of it in a new repo.
 pub fn eligible(self: *const Agent) bool {
-    if (self.sub or self.provider.kind != .responses) return false;
+    if (self.sub) return false;
+    if (statefulChat(self)) return true;
+    if (self.provider.kind != .responses) return false;
     for ([_][]const u8{ "codex", "chatgpt-new", "openai" }) |id| if (std.mem.eql(u8, self.provider.id, id)) return true;
     return false;
+}
+
+/// ADR 0258: the Codegraff chat wire's Gemini models, which the gateway
+/// continues server-side.
+pub fn statefulChat(self: *const Agent) bool {
+    if (self.provider.kind != .openai or !std.mem.eql(u8, self.provider.id, "codegraff")) return false;
+    const model = self.provider.model;
+    const bare = model[if (std.mem.lastIndexOfScalar(u8, model, '/')) |i| i + 1 else 0..];
+    return std.ascii.startsWithIgnoreCase(bare, "gemini-");
 }
 
 /// `instructions` without the per-repo blocks, and the blocks as one text, in
@@ -62,5 +79,18 @@ pub fn writeItem(s: *std.json.Stringify, text: []const u8) !void {
     try s.write(text);
     try s.endObject();
     try s.endArray();
+    try s.endObject();
+}
+
+/// ADR 0258: the context as the chat conversation's first user message,
+/// framed so the model reads it as standing context rather than a request.
+pub const chat_frame = "Repository context for this session (standing instructions and layout, not a request):\n\n";
+
+pub fn writeChatMessage(s: *std.json.Stringify, arena: std.mem.Allocator, text: []const u8) !void {
+    try s.beginObject();
+    try s.objectField("role");
+    try s.write("user");
+    try s.objectField("content");
+    try s.write(try std.mem.concat(arena, u8, &.{ chat_frame, text }));
     try s.endObject();
 }
