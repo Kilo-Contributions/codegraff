@@ -204,8 +204,47 @@ def claude_import(binary):
     print("ACP Claude history import uses graff credentials and retains tool receipts: ok")
 
 
+def plan_login_restore(binary):
+    """#1556: a host switches models by respawning with --model and calling
+    session/load. A save on a plan-login provider outside that --model's scope
+    must still restore."""
+    if os.name == "nt":
+        return
+    record = {"email": "you@example.com", "issuer": "https://auth.openai.com", "subject": "user-1",
+              "client_id": "oaiapp_x", "ext_agent_host_id": "urn:uuid:1", "id_token": "a.b.c",
+              "access_token": "plan-token", "refresh_token": "ref-1", "token_type": "Bearer", "expires_in": 3600,
+              "expires_at": 4102444800, "earliest_refresh_at": 4102444000,
+              "scopes": ["chatgpt.tokens.use.direct", "email", "offline_access", "openid", "profile", "resource.invoke"],
+              "saved_at": "2026-09-30T00:00:00Z"}
+    with tempfile.TemporaryDirectory(prefix="graff-acp-plan-load-") as temporary:
+        cwd = Path(temporary).resolve()
+        home = cwd / "home"
+        credentials = home / ".graff" / "credentials"
+        credentials.mkdir(parents=True, mode=0o700)
+        os.chmod(home / ".graff", 0o700)
+        (credentials / "chatgpt-new.json").write_text(json.dumps(record))
+        os.chmod(credentials / "chatgpt-new.json", 0o600)
+        sessions = cwd / ".graff" / "sessions"
+        sessions.mkdir(parents=True)
+        (sessions / "plan-saved.session.json").write_text(json.dumps({
+            "provider": "chatgpt-new", "model": "gpt-6.1-sol", "workspace": str(cwd),
+            "messages": [{"role": "user", "content": "Plan-saved request."}, {"role": "assistant", "content": "ok"}]}))
+        model = ScriptedModel([{"text": "unused"}])
+        port = model.start(0)
+        client = Acp(binary, cwd, home, port)  # --model vercel: the plan provider is out of scope
+        try:
+            client.request("initialize", {"protocolVersion": 1})
+            loaded = client.request("session/load", {"sessionId": "plan-saved", "cwd": str(cwd), "mcpServers": []})
+            assert "result" in loaded, loaded
+        finally:
+            client.close()
+            model.stop()
+    print("ACP session/load restores a plan-login save after a cross-provider --model respawn: ok")
+
+
 def run(binary):
     claude_import(binary)
+    plan_login_restore(binary)
     with tempfile.TemporaryDirectory(prefix="graff-acp-load-") as temporary:
         cwd = Path(temporary)
         home = cwd / "home"
