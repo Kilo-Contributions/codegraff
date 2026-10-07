@@ -58,6 +58,8 @@ pub const Registry = struct {
     mutex: Io.Mutex = .init,
     servers: []*Server = &.{},
     tools: []Tool = &.{},
+    /// Tools withdrawn after their connection closed (#1523, mcp_call.zig).
+    withdrawn: []const @import("mcp_call.zig").Withdrawn = &.{},
     /// Transport failure withdrew tools; owner thread rebuilds its next catalog.
     catalog_dirty: std.atomic.Value(bool) = .init(false),
     /// Startup connection/failure lines are developer diagnostics, not normal REPL output.

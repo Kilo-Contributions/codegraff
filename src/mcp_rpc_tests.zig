@@ -138,6 +138,43 @@ test "MCP recovery during MRTR withdraws tools without replay" {
     try std.testing.expect(reg.catalog_dirty.load(.acquire));
 }
 
+test "MCP recovery #1523: after a sibling call closes the connection, later calls and loads name the closed service" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    var reg = Registry.empty(std.testing.allocator, std.testing.io);
+    defer reg.deinit();
+    const spawned = try spawnReplying(reg.arena(), reg.io, "read line; exit 0");
+    try fixtureRegistry(&reg, spawned.server);
+    const a = reg.arena();
+    var both: std.ArrayList(@import("mcp.zig").Tool) = .empty;
+    try both.appendSlice(a, reg.tools);
+    var search = reg.tools[0];
+    search.original_name = "search";
+    search.qualified_name = "mcp__fixture__search";
+    try both.append(a, search);
+    reg.tools = both.items;
+    const call_mod = @import("mcp_call.zig");
+    try std.testing.expect(call_mod.unavailableLoad(&reg, a, try parse(a, "{\"tools\":[\"mcp__fixture__search\"]}")) == null);
+
+    const first = try reg.call(std.testing.allocator, "mcp__fixture__whoami", try parse(a, "{}"));
+    defer std.testing.allocator.free(first.text);
+    try std.testing.expect(std.mem.indexOf(u8, first.text, "McpClosed") != null);
+    // The sibling in the same batch reports the same closed service, not an
+    // unregistered tool with a stale schema.
+    const sibling = try reg.call(std.testing.allocator, "mcp__fixture__search", try parse(a, "{}"));
+    defer std.testing.allocator.free(sibling.text);
+    try std.testing.expect(sibling.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, sibling.text, "closed or failed earlier in this session (McpClosed)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, sibling.text, "not registered") == null);
+    try std.testing.expectEqual(@as(i64, 2), spawned.server.next_id); // nothing more was sent
+
+    // Loading its schema now names the unavailable service instead of enabling it.
+    const by_tool = call_mod.unavailableLoad(&reg, a, try parse(a, "{\"tools\":[\"mcp__fixture__search\"]}")) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(std.mem.indexOf(u8, by_tool, "MCP service fixture is unavailable") != null);
+    try std.testing.expect(std.mem.indexOf(u8, by_tool, "McpClosed") != null);
+    try std.testing.expect(call_mod.unavailableLoad(&reg, a, try parse(a, "{\"server\":\"fixture\"}")) != null);
+    try std.testing.expect(call_mod.unavailableLoad(&reg, a, try parse(a, "{\"tools\":[\"mcp__other__x\"]}")) == null);
+}
+
 fn parse(a: std.mem.Allocator, json: []const u8) !Value {
     return std.json.parseFromSliceLeaky(Value, a, json, .{ .allocate = .alloc_always });
 }

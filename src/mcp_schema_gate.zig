@@ -577,6 +577,7 @@ fn listing(arena: Allocator, all: []const mcp.Tool, unknown: []const []const u8)
 pub fn handleLoad(agent: anytype, input: Value) ExecResult {
     if (agent.sub) return .{ .text = "load_tool_schemas is root-only; a subagent has no MCP registry of its own", .is_error = true };
     const reg = agent.registry orelse return .{ .text = "no MCP servers are connected, so there are no schemas to load", .is_error = true };
+    if (@import("mcp_call.zig").unavailableLoad(reg, agent.arena, input)) |text| return .{ .text = text, .is_error = true }; // #1523
     const catalog = reg.snapshotTools(agent.arena) catch return .{ .text = "load_tool_schemas failed to render the requested schemas", .is_error = true };
     const r = loadInto(agent.arena, catalog, input) catch
         return .{ .text = "load_tool_schemas failed to render the requested schemas", .is_error = true };
