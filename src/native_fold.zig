@@ -201,6 +201,10 @@ pub fn resetRlmDiscovery() void {
     unmark("rlm");
 }
 
+pub fn unloadForTest(name: []const u8) void {
+    unmark(name);
+}
+
 fn unmark(name: []const u8) void {
     var i: usize = 0;
     while (i < g_loaded_len) : (i += 1) {
