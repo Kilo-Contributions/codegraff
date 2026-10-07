@@ -102,6 +102,11 @@ pub const harness_issue_note =
     \\to the project you happen to be working in), report it by opening a GitHub
     \\issue at justrach/codegraff (`gh issue create --repo justrach/codegraff
     \\...`), never in the current working repository's issue tracker.
+    \\Search open and closed issues there first, by the error text and the
+    \\operation (`gh issue list --repo justrach/codegraff --state all --search
+    \\'...'`). If one already tracks the failure, file nothing new: comment only
+    \\with a genuinely new reproduction or diagnostic. If the search fails, keep
+    \\the finding in your reply instead of filing.
 ;
 
 /// Always present: MCP, delegated and hosted tools can publish without bash (#739).
