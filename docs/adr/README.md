@@ -281,6 +281,7 @@ record only when you need the evidence or the edge cases.
 | [0253](0253-an-interactive-session-signs-in-to-chatgpt-again.md) | When a ChatGPT request is rejected and the refresh cannot replace the token, an interactive root session opens the browser sign-in, waits up to three minutes and retries once; `-p`, piped, `--json`, ACP and sub-agents never do. One unfinished sign-in ends it for the process. |
 | [0254](0254-imported-conversations-use-the-configured-route.md) | Imported Claude history uses the configured graff provider and credentials; source models are metadata, and foreign tool results remain historical receipts. |
 | [0255](0255-codegraff-claude-uses-native-messages.md) | Claude aliases on codegraff use the native Messages endpoint; `isClaudeApi` is the one predicate for the real Claude wire. |
+| [0259](0259-openai-routes-compact-only-server-side.md) | First-party Responses routes (direct API, Codegraff GPT, ChatGPT plan) compact only server-side: no client-summary fallback while the server arm is on. A compaction item's `encrypted_content` is metered at 16 bytes/token, not as text, so a blob-anchored history does not re-compact every step. |
 
 ## When to write one
 
