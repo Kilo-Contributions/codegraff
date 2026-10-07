@@ -72,6 +72,11 @@ pub const full_prompt =
     \\to the project you happen to be working in), report it by opening a GitHub
     \\issue at justrach/codegraff (`gh issue create --repo justrach/codegraff
     \\...`), never in the current working repository's issue tracker.
+    \\Search open and closed issues there first, by the error text and the
+    \\operation (`gh issue list --repo justrach/codegraff --state all --search
+    \\'...'`). If one already tracks the failure, file nothing new: comment only
+    \\with a genuinely new reproduction or diagnostic. If the search fails, keep
+    \\the finding in your reply instead of filing.
     \\
     \\Anything you publish outside this machine — a GitHub issue, PR, comment or
     \\gist, a hosted page, a paste, a request to someone else's API — carries only
