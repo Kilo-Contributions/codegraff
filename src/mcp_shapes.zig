@@ -494,7 +494,9 @@ fn authorName(item: Value) ?[]const u8 {
 }
 
 fn slimIdentity(alloc: Allocator, items: []const Value) ?[]u8 {
-    if (!hasIdentity(items[0].object)) return null;
+    // #1426: a row known only by an opaque id (a transcript message) is all
+    // content; a cut down to its ids would stand in for nothing readable.
+    if (!hasLabel(items[0].object) or items[0].object.get("role") != null) return null;
     var aw: Io.Writer.Allocating = .init(alloc);
     var s: std.json.Stringify = .{ .writer = &aw.writer };
     s.beginArray() catch {
@@ -532,6 +534,11 @@ fn slimIdentity(alloc: Allocator, items: []const Value) ?[]u8 {
 
 fn hasIdentity(obj: std.json.ObjectMap) bool {
     for (identity_keys) |k| if (obj.get(k) != null) return true;
+    return false;
+}
+
+fn hasLabel(obj: std.json.ObjectMap) bool {
+    for (identity_keys[1..]) |k| if (obj.get(k) != null) return true;
     return false;
 }
 
