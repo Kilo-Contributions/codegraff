@@ -550,7 +550,7 @@ pub fn compactOrRecover(self: *Agent, trim_on_fail: bool) void {
     }
     if (self.compact_pin_degraded and !trim_on_fail) return;
     const has_opaque = @import("compaction_window.zig").latestBlob(self.messages.items) != null;
-    const result = if (has_opaque) server_compact.manualCompact(self) else self.compact();
+    const result = if (has_opaque or server_compact.serverOnly(self.provider)) server_compact.manualCompact(self) else self.compact();
     if (result) |_| {
         self.compact_transport_failures = 0;
         return;
