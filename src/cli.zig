@@ -23,6 +23,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.25
+    \\  • ChatGPT/OpenAI sessions no longer compact before every tool call
+    \\  • OpenAI routes compact only with the provider's own compaction
+    \\  • fewer hosted-model requests per task; empty tool results no longer break a chat
+    \\
     \\0.0.302.24
     \\  • Codegraff sign-in: models on the Messages wire use it natively
     \\  • goals set from the desktop app start immediately; unfinished work survives a question

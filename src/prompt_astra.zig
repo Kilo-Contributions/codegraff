@@ -85,7 +85,7 @@ test "Astra guidance follows model switches, child limits and output schemas" {
     try std.testing.expect(std.mem.indexOf(u8, child, "A JSON output schema is enforced") != null);
     agent.output_schema = null;
     agent.sub = false;
-    for ([_][]const u8{ "gpt-5.5", "gemini-3.7-flash", "gpt-6-astraish" }) |model| { // gpt-5.6 has its own note (prompt_guidance.zig)
+    for ([_][]const u8{ "gpt-5.5", "gpt-6-astraish" }) |model| { // gpt-5.6 and Gemini have their own notes (prompt_guidance.zig)
         agent.provider.model = model;
         try std.testing.expectEqualStrings("BASE", try compose(&agent));
     }

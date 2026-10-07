@@ -559,13 +559,13 @@ const agentJobsReap = subagent.agentJobsReap; // #276 P0-3: background subagents
 const workflow = @import("workflow_test.zig"); // the engine's tests live here (workflow.zig hit the 600-line cap)
 const exec = @import("exec.zig");
 test { // ── Unit tests (`zig build test`): pull in tests from imported modules (mcp.zig)
-    _ = .{ @import("beta_feed.zig"), @import("jev_tool.zig"), @import("jev_model_scope.zig"), @import("jev_provider_switch_tests.zig"), @import("jev_effort_state.zig") };
+    _ = .{ @import("beta_feed.zig"), @import("jev_tool.zig"), @import("jev_model_scope.zig"), @import("jev_provider_switch_tests.zig"), @import("jev_effort_state.zig"), @import("gemini_turns.zig"), @import("gemini_turns_tests.zig") };
     _ = .{ @import("mcp_apps.zig"), @import("html_view.zig"), @import("usage_trace.zig"), @import("providers_confirmation_tests.zig"), @import("repl_model_confirmation_tests.zig"), @import("repl_model_pick_tests.zig"), @import("engine_sink_citation_tests.zig"), @import("cite_markup_stream_tests.zig"), @import("oneshot_citation_tests.zig"), @import("acp_permission.zig"), @import("acp_usage.zig") };
     _ = .{ @import("mcp_server_tests.zig"), @import("main_test.zig"), @import("artifact_claim_command.zig"), @import("cli_path_hint.zig"), @import("run_budget.zig") };
     _ = .{ @import("session_catalog.zig"), @import("session_prompt.zig"), @import("session_discovery.zig"), @import("session_workspaces.zig"), @import("commands_resume.zig"), @import("peer_live.zig"), @import("presence_tests.zig"), @import("mcp_rpc_tests.zig") };
     _ = .{ @import("prompt_astra.zig"), @import("prompt_guidance.zig"), @import("oauth_chatgpt.zig"), @import("chatgpt_reauth.zig") }; // per-model guidance (Astra, GPT-5.6); ChatGPT plan sign-in (ADR 0253)
     _ = .{ @import("agent_empty_completion.zig"), @import("agent_model_loop.zig"), @import("publication_policy_tests.zig"), @import("jobs_completion_tests.zig") };
-    _ = .{ @import("provider_routing_tests.zig"), @import("codegraff_messages_tests.zig"), @import("history_wire.zig"), @import("readline_paste_number_tests.zig"), @import("test_hooks.zig"), @import("peer_wake_loop.zig") };
+    _ = .{ @import("provider_routing_tests.zig"), @import("codegraff_messages_tests.zig"), @import("tool_result_empty_tests.zig"), @import("history_wire.zig"), @import("readline_paste_number_tests.zig"), @import("test_hooks.zig"), @import("peer_wake_loop.zig") };
     _ = .{ @import("list_dir_nearmiss.zig"), @import("tool_preview_tests.zig") };
     _ = @import("repo_map.zig");
     _ = @import("agent_overflow_tests.zig"); // #414: and, through it, agent_overflow.zig's table tests

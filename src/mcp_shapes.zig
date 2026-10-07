@@ -438,34 +438,50 @@ fn latestIndex(items: []const Value) usize {
 }
 
 fn slimComments(alloc: Allocator, items: []const Value) ?[]u8 {
-    const name = authorName(items[latestIndex(items)]);
     var aw: Io.Writer.Allocating = .init(alloc);
-    var s: std.json.Stringify = .{ .writer = &aw.writer };
-    s.beginObject() catch {
-        aw.deinit();
-        return null;
-    };
-    s.objectField("n") catch {
-        aw.deinit();
-        return null;
-    };
-    s.write(items.len) catch {
-        aw.deinit();
-        return null;
-    };
-    s.objectField("latest_author") catch {
-        aw.deinit();
-        return null;
-    };
-    s.write(name orelse "") catch {
-        aw.deinit();
-        return null;
-    };
-    s.endObject() catch {
+    writeCommentFold(&aw.writer, items) catch {
         aw.deinit();
         return null;
     };
     return aw.toOwnedSlice() catch null;
+}
+
+/// `{issue?, n, latest_author}`. `issue` is the parent every row names: the
+/// fold otherwise loses which issue a list belongs to, and a model pairing
+/// parallel results by position credited counts to the wrong issue.
+fn writeCommentFold(w: *Io.Writer, items: []const Value) !void {
+    var s: std.json.Stringify = .{ .writer = w };
+    try s.beginObject();
+    if (sharedParent(items)) |parent| {
+        try s.objectField("issue");
+        try s.write(parent);
+    }
+    try s.objectField("n");
+    try s.write(items.len);
+    try s.objectField("latest_author");
+    try s.write(authorName(items[latestIndex(items)]) orelse "");
+    try s.endObject();
+}
+
+/// The one parent id every row carries (`issueId`, `issue_id`, or a nested
+/// `issue.identifier` / `issue.id`), or null when rows disagree or omit it.
+fn sharedParent(items: []const Value) ?[]const u8 {
+    for ([_][2][]const u8{ .{ "issueId", "" }, .{ "issue_id", "" }, .{ "issue", "identifier" }, .{ "issue", "id" } }) |path| {
+        var shared: ?[]const u8 = null;
+        for (items) |item| {
+            const v = parentField(item, path[0], path[1]) orelse break;
+            if (shared) |prev| if (!std.mem.eql(u8, prev, v)) break;
+            shared = v;
+        } else if (shared) |v| return v;
+    }
+    return null;
+}
+
+fn parentField(item: Value, key: []const u8, sub: []const u8) ?[]const u8 {
+    if (item != .object) return null;
+    var v = item.object.get(key) orelse return null;
+    if (sub.len > 0) v = if (v == .object) (v.object.get(sub) orelse return null) else return null;
+    return if (v == .string) v.string else null;
 }
 
 fn authorName(item: Value) ?[]const u8 {
@@ -547,7 +563,7 @@ pub fn annotate(gpa: Allocator, arena: Allocator, io: Io, cwd: ?[]const u8, text
 /// the full rows, failed on the first missing field, and spent calls finding
 /// the real shape. ADR 0238: rlm binds keep every field; only print() slims.
 /// ADR 0240: computing over the results happens in the same script.
-pub const slim_rule = "\nLarge list results from these tools are shown slimmed: rows keep only id/identifier/title/name, and a comment list becomes {\"n\": count, \"latest_author\": name}. A direct call's result names a handle holding the full result. In rlm a bind keeps every field: print() shows the slim view, project(x, field) reads any field, and write_file(\"f.json\", x) saves the whole result for a script. To compute over results in the same call, save them and run the computation inside the script: issues = tool(); write_file(\"issues.json\", issues); r = bash(\"python3 - <<'EOF'\\n...\\nEOF\"); print(r).";
+pub const slim_rule = "\nLarge list results from these tools are shown slimmed: rows keep only id/identifier/title/name, and a comment list becomes {\"issue\": its issue when the comments name one, \"n\": count, \"latest_author\": name}. A direct call's result names a handle holding the full result. In rlm a bind keeps every field: print() shows the slim view, project(x, field) reads any field, and write_file(\"f.json\", x) saves the whole result for a script. To compute over results in the same call, save them and run the computation inside the script: issues = tool(); write_file(\"issues.json\", issues); r = bash(\"python3 - <<'EOF'\\n...\\nEOF\"); print(r).";
 
 pub fn lookup(io: Io, name: []const u8) ?[]const u8 {
     store.mu.lockUncancelable(io);

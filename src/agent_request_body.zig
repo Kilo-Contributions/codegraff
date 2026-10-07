@@ -159,12 +159,17 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             }
             try s.objectField("messages");
             try s.beginArray();
+            // ADR 0258: on the stateful Gemini chat wire the per-repo context is
+            // the first user message, sent once, not part of every system prompt.
+            const repo_context = @import("repo_context.zig");
+            const repo = try repo_context.split(self, try @import("agent_request_body_responses.zig").schemaAwarePrompt(self));
             try s.beginObject();
             try s.objectField("role");
             try s.write("system");
             try s.objectField("content");
-            try s.write(try @import("agent_request_body_responses.zig").schemaAwarePrompt(self));
+            try s.write(repo.instructions);
             try s.endObject();
+            if (repo.context.len != 0) try repo_context.writeChatMessage(&s, self.scratchAlloc(), repo.context);
             for (self.messages.items) |m| try writeOpenAIMessageNormalized(&s, m);
             try s.endArray();
             // The live Kimi catalog declares thinking support and allowed

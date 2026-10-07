@@ -10,6 +10,23 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.25
+
+### Compaction (hotfix)
+
+- On the ChatGPT-plan sign-in, the OpenAI API and Codegraff's GPT models, a long session no longer compacts before every tool call. The context meter read the provider's encrypted compaction state as text, so a session anchored on it looked over the window on every step, and each compaction produced state of the same size (ADR 0259).
+- These routes now compact only with the provider's own compaction. A failed compaction reports the error instead of falling back to a local summary; `GRAFF_SERVER_COMPACT=0` still opts out.
+
+### Hosted models
+
+- Fewer requests per task for one hosted model family: chained shell steps, no read-backs of a file just written, and the completion may share the final response (ADR 0256).
+- On the stateful hosted chat route, the project instructions and layout are sent once per conversation instead of with every request (ADR 0258).
+- An empty tool result is sent as "(no output)" on every wire, so one empty result no longer makes every later request in a hosted chat conversation fail.
+
+### MCP
+
+- A slimmed comment list keeps the issue its rows belong to, so results fetched in parallel say which issue they describe (ADR 0257).
+
 ## v0.0.302.24
 
 ### Codegraff sign-in
