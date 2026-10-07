@@ -480,6 +480,7 @@ pub fn bindForTest(dir_path: []const u8, identity: []const u8, session: []const 
 }
 
 pub fn unbindForTest() void {
+    g_acked_len = 0;
     g_dir = null;
     g_identity = "";
     g_session = "";
