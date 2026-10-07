@@ -48,6 +48,10 @@ pub const Resolve = union(enum) {
     ambiguous: []const Entry,
 };
 
+test {
+    _ = .{ @import("workspace_display.zig"), @import("session_finalize_tests.zig") }; // #1193
+}
+
 // #1193: a replaced display is retired, not freed — see workspace_display.zig.
 pub const deinitDisplay = @import("workspace_display.zig").deinit;
 const adoptDisplay = @import("workspace_display.zig").adopt;
