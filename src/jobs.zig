@@ -427,7 +427,9 @@ pub fn jobOutput(gpa: Allocator, io: Io, id: u64, wait_ms: u64) !ToolOutput {
             return result;
         }
         g_jobs.mutex.unlock(io);
-        if (Agent.esc_cancel.load(.acquire)) {
+        // #1522 (ADR 0262): a queued follow-up ends the wait the way it
+        // promotes a foreground one — the job keeps running, the user is heard.
+        if (Agent.esc_cancel.load(.acquire) or job_wait.followup_pending.load(.acquire)) {
             interrupted = true; // render current state on the next pass
             continue;
         }

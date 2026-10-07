@@ -149,8 +149,12 @@ pub const Inbox = struct {
                 _ = acp_ask.reply(answer_text, cancelled_answer);
                 return;
             }
-            if (std.mem.eql(u8, r.method, "session/prompt") and self.session_id == null)
-                self.session_id = try self.gpa.dupe(u8, sid orelse "");
+            if (std.mem.eql(u8, r.method, "session/prompt")) {
+                // #1522: a prompt queued behind a live turn is a follow-up, so
+                // a blocking job wait yields to it (the job keeps running).
+                if (self.active) @import("job_wait.zig").noteFollowup();
+                if (self.session_id == null) self.session_id = try self.gpa.dupe(u8, sid orelse "");
+            }
         }
         const copy = try self.gpa.dupe(u8, line);
         errdefer self.gpa.free(copy);
@@ -297,4 +301,22 @@ test "session config selection during a turn queues an ordinary request without 
     const second = (try inbox.wait(arena.allocator())) orelse return error.ExpectedLine;
     try std.testing.expect(std.mem.indexOf(u8, second.line, "session/set_config_option") != null);
     try std.testing.expect(std.mem.indexOf(u8, second.line, "session/prompt") == null);
+}
+
+test "#1522 a prompt queued behind a live turn is a follow-up; the turn's own prompt is not" {
+    const job_wait = @import("job_wait.zig");
+    job_wait.followup_pending.store(false, .release);
+    defer job_wait.followup_pending.store(false, .release);
+    Agent.esc_cancel.store(false, .release);
+    defer Agent.esc_cancel.store(false, .release);
+    var reader: Io.Reader = .fixed("");
+    var inbox: Inbox = .{ .gpa = std.testing.allocator, .io = std.testing.io, .reader = &reader };
+    defer inbox.deinit();
+    try inbox.accept("{\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"s\"}}");
+    try std.testing.expect(!job_wait.followup_pending.load(.acquire));
+    inbox.begin();
+    try inbox.accept("{\"id\":2,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"s\"}}");
+    try std.testing.expect(job_wait.followup_pending.load(.acquire));
+    // A follow-up yields waits; it never cancels the running turn.
+    try std.testing.expect(!Agent.esc_cancel.load(.acquire));
 }

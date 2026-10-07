@@ -333,3 +333,29 @@ test "#199: a pinned job is retained at session end — record kept, tree alive,
     job_registry.forget(io, job_registry.home, pid);
     try std.testing.expectEqual(@as(usize, 0), job_registry.list(io, arena, job_registry.home).len);
 }
+
+test "#1522 a queued follow-up ends a blocking output wait and leaves the job running" {
+    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
+    const Agent = @import("agent.zig").Agent;
+    const job_wait = @import("job_wait.zig");
+    const io = std.testing.io;
+    const gpa = std.testing.allocator;
+    jobs.g_jobs = .{};
+    Agent.esc_cancel.store(false, .release);
+    defer job_wait.followup_pending.store(false, .release);
+    defer jobs.jobsReap(gpa, io);
+    const id = (try jobs.spawnJob(gpa, io, "sleep 20")).id;
+    job_wait.noteFollowup();
+    const started = jobs.nowMs(io);
+    const output = try jobs.jobOutput(gpa, io, id, 3_600_000);
+    defer gpa.free(output.text);
+    // Without the yield this blocks until the job exits.
+    try std.testing.expect(jobs.nowMs(io) - started < 10_000);
+    try std.testing.expect(output.pending);
+    try std.testing.expect(!output.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, output.text, "interrupted") != null);
+    jobs.g_jobs.mutex.lockUncancelable(io);
+    defer jobs.g_jobs.mutex.unlock(io);
+    const job = jobs.g_jobs.find(id) orelse return error.JobLost;
+    try std.testing.expect(!job.done); // the wait yielded; the job was not stopped
+}

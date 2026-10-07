@@ -285,6 +285,7 @@ record only when you need the evidence or the edge cases.
 | [0257](0257-a-slimmed-comment-list-names-its-issue.md) | A slimmed MCP comment list keeps the issue id its rows share (`{issue, n, latest_author}`), so parallel results name what they describe. |
 | [0258](0258-gemini-chat-sends-repo-context-once.md) | On the Codegraff chat wire, Gemini root turns send the project instructions and layout as the conversation's first user message (ADR 0243's split), so the system prompt every request repeats no longer carries them. |
 | [0259](0259-openai-routes-compact-only-server-side.md) | First-party Responses routes (direct API, Codegraff GPT, ChatGPT plan) compact only server-side: no client-summary fallback while the server arm is on. A compaction item's `encrypted_content` is metered at 16 bytes/token, not as text, so a blob-anchored history does not re-compact every step. |
+| [0262](0262-a-follow-up-ends-a-blocking-output-wait.md) | A queued follow-up ends a blocking `action=output` wait like Esc does (the job keeps running and still reports on exit); an ACP prompt arriving mid-turn raises that follow-up without cancelling the turn. Refines ADR 0010. |
 
 ## When to write one
 
