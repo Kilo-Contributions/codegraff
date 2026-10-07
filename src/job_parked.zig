@@ -11,6 +11,7 @@
 //! whose owner died without a final state says exactly that.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const proc_identity = @import("proc_identity.zig");
@@ -181,4 +182,34 @@ test "#1486 a parked job's record answers its handle after its graff is gone" {
     const stopped = describe(gpa, io, 7).?;
     defer gpa.free(stopped.text);
     try std.testing.expect(std.mem.indexOf(u8, stopped.text, "stopped when its graff session ended") != null);
+}
+
+test "#1486 a parked job's handle still answers after the pool that owned it is gone" {
+    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return error.SkipZigTest;
+    const Agent = @import("agent.zig").Agent;
+    const jobs = @import("jobs.zig");
+    const io = std.testing.io;
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    base_override = tmp.dir;
+    defer base_override = null;
+    jobs.g_jobs = .{};
+    Agent.esc_cancel.store(false, .release);
+    const id = (try jobs.spawnJob(gpa, io, "printf parked-out; exit 3")).id;
+    jobs.markParked(io, id); // what the foreground wait does when it parks a command
+    while (true) {
+        jobs.g_jobs.mutex.lockUncancelable(io);
+        const done = jobs.g_jobs.find(id).?.done;
+        jobs.g_jobs.mutex.unlock(io);
+        if (done) break;
+        try io.sleep(.fromMilliseconds(20), .awake);
+    }
+    jobs.jobsReap(gpa, io); // the owning session ends; a continuation asks next
+    const out = try jobs.jobOutput(gpa, io, id, 0);
+    defer gpa.free(out.text);
+    try std.testing.expect(std.mem.indexOf(u8, out.text, "no live owner") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out.text, "exited with code 3") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.text, "parked-out") != null);
+    try std.testing.expect(out.is_error);
 }
