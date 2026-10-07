@@ -98,8 +98,11 @@ pub fn withProgressToken(a: Allocator, line: []const u8, id: i64) ![]const u8 {
     const at = std.mem.indexOf(u8, line, key) orelse return line;
     const after = at + key.len;
     const rest = line[after..];
-    if (std.mem.startsWith(u8, rest, "\"_meta\":{"))
-        return std.fmt.allocPrint(a, "{s}\"_meta\":{{\"progressToken\":{d},{s}", .{ line[0..after], id, rest["\"_meta\":{".len..] });
+    if (std.mem.startsWith(u8, rest, "\"_meta\":{")) {
+        const meta_rest = rest["\"_meta\":{".len..];
+        const meta_sep: []const u8 = if (std.mem.startsWith(u8, meta_rest, "}")) "" else ",";
+        return std.fmt.allocPrint(a, "{s}\"_meta\":{{\"progressToken\":{d}{s}{s}", .{ line[0..after], id, meta_sep, meta_rest });
+    }
     const sep: []const u8 = if (std.mem.startsWith(u8, rest, "}")) "" else ",";
     return std.fmt.allocPrint(a, "{s}\"_meta\":{{\"progressToken\":{d}}}{s}{s}", .{ line[0..after], id, sep, rest });
 }
