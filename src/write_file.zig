@@ -16,7 +16,7 @@ const edit_verify = @import("edit_verify.zig");
 
 const page = std.heap.page_allocator;
 
-/// Absolute paths whose content this process has seen. Process-wide, so a
+/// Canonical paths whose content this process has seen. Process-wide, so a
 /// subagent's read counts for its parent and the other way round.
 var known: std.StringHashMapUnmanaged(void) = .empty;
 var known_lock: std.atomic.Value(bool) = .init(false);
@@ -29,18 +29,31 @@ fn unlock() void {
     known_lock.store(false, .release);
 }
 
-pub fn noteKnown(abs_path: []const u8) void {
+/// #1487: one key per file. A symlinked directory, a `..` segment, or an
+/// absolute spelling of a relative path all name the same file; keying on the
+/// spelling let a read under one form leave a write under another refused as
+/// "not read". A path that does not resolve keeps its own spelling.
+fn keyFor(io: Io, abs_path: []const u8, buf: *[std.fs.max_path_bytes]u8) []const u8 {
+    const n = Io.Dir.cwd().realPathFile(io, abs_path, buf) catch return abs_path;
+    return buf[0..n];
+}
+
+pub fn noteKnown(io: Io, abs_path: []const u8) void {
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const k = keyFor(io, abs_path, &buf);
     lock();
     defer unlock();
-    if (known.contains(abs_path)) return;
-    const key = page.dupe(u8, abs_path) catch return;
+    if (known.contains(k)) return;
+    const key = page.dupe(u8, k) catch return;
     known.put(page, key, {}) catch page.free(key);
 }
 
-fn isKnown(abs_path: []const u8) bool {
+fn isKnown(io: Io, abs_path: []const u8) bool {
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const k = keyFor(io, abs_path, &buf);
     lock();
     defer unlock();
-    return known.contains(abs_path);
+    return known.contains(k);
 }
 
 /// After a successful read_file or edit_file: the model has seen this path.
@@ -48,7 +61,7 @@ pub fn noteInput(ctx: tools.ToolCtx, input: std.json.Value) void {
     const path = tools.strField(input, "path") orelse return;
     const resolved = codedbpro_paths.sessionAbs(ctx.gpa, ctx.io, ctx.agent_cwd, path) catch return;
     defer ctx.gpa.free(resolved);
-    noteKnown(resolved);
+    noteKnown(ctx.io, resolved);
 }
 
 pub fn exec(ctx: tools.ToolCtx, input: std.json.Value) !tools.ToolOutput {
@@ -69,7 +82,7 @@ pub fn exec(ctx: tools.ToolCtx, input: std.json.Value) !tools.ToolOutput {
     // #179: an existing file keeps its mode (e.g. 0755) across the overwrite;
     // a brand-new file (prev_stat == null) keeps the default.
     const prev_stat = Io.Dir.cwd().statFile(io, resolved, .{}) catch null;
-    if (prev_stat) |st| if (st.kind == .file and st.size > 0 and !isKnown(resolved) and !tools.json_args.flag(input, "replace")) return .{
+    if (prev_stat) |st| if (st.kind == .file and st.size > 0 and !isKnown(io, resolved) and !tools.json_args.flag(input, "replace")) return .{
         .text = try std.fmt.allocPrint(gpa, "{s} already exists ({d} bytes) and has not been read in this session; nothing was written. Read it first, or pass replace: true to overwrite it.", .{ path, st.size }),
         .is_error = true,
     };
@@ -86,7 +99,7 @@ pub fn exec(ctx: tools.ToolCtx, input: std.json.Value) !tools.ToolOutput {
         return err;
     };
     edit_verify.preserveMode(io, resolved, prev_stat);
-    noteKnown(resolved);
+    noteKnown(io, resolved);
     const dir = if (made_dir) std.fs.path.dirname(path) else null;
     return .{ .text = try resultText(gpa, path, content, if (prev_stat) |st| st.size else null, dir) };
 }
@@ -193,4 +206,47 @@ test "write_file creates, refuses to clobber an unread file, and replaces a know
     const landed = try tmp.dir.readFileAlloc(io, "docs/deep/FORMAT.md", gpa, .limited(64));
     defer gpa.free(landed);
     try std.testing.expectEqualStrings("# x\n", landed);
+}
+
+test "#1487: a read under one spelling of a path lets write_file replace it under another" {
+    if (@import("builtin").os.tag == .windows) return error.SkipZigTest; // symlinks need privileges there
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(io, "real");
+    try tmp.dir.writeFile(io, .{ .sub_path = "real/f.txt", .data = "old" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "real/g.txt", .data = "old" });
+    try tmp.dir.symLink(io, "real", "link", .{});
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    var client: std.http.Client = undefined;
+    const ctx: tools.ToolCtx = .{ .gpa = gpa, .io = io, .client = &client, .provider = undefined, .registry = null, .from_sub = false, .approvals = null, .tracer = null };
+
+    // Read through the symlinked directory, then write the real path.
+    var read_args: std.json.ObjectMap = .empty;
+    try read_args.put(a, "path", .{ .string = try std.fmt.allocPrint(a, "{s}/link/f.txt", .{dir}) });
+    noteInput(ctx, .{ .object = read_args });
+    var args: std.json.ObjectMap = .empty;
+    try args.put(a, "path", .{ .string = try std.fmt.allocPrint(a, "{s}/real/f.txt", .{dir}) });
+    try args.put(a, "content", .{ .string = "new" });
+    const out = try exec(ctx, .{ .object = args });
+    defer gpa.free(out.text);
+    try std.testing.expect(!out.is_error);
+
+    // An absolute spelling with a `..` segment names the same file as the
+    // relative path the write uses.
+    var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const cwd_len = try std.process.currentPath(io, &cwd_buf);
+    read_args.getPtr("path").?.* = .{ .string = try std.fmt.allocPrint(a, "{s}/{s}/real/../real/g.txt", .{ cwd_buf[0..cwd_len], dir }) };
+    noteInput(ctx, .{ .object = read_args });
+    args.getPtr("path").?.* = .{ .string = try std.fmt.allocPrint(a, "{s}/real/g.txt", .{dir}) };
+    const out2 = try exec(ctx, .{ .object = args });
+    defer gpa.free(out2.text);
+    try std.testing.expect(!out2.is_error);
+    const landed = try tmp.dir.readFileAlloc(io, "real/g.txt", gpa, .limited(64));
+    defer gpa.free(landed);
+    try std.testing.expectEqualStrings("new", landed);
 }
