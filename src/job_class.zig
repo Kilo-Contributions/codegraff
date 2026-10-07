@@ -148,7 +148,10 @@ fn segmentPersistent(segment: []const u8) bool {
     for (w, 0..) |word, i| {
         const at_command = command_pos;
         command_pos = std.mem.indexOfScalar(u8, word, '=') != null and at_command or isWrapper(word);
-        if (std.mem.eql(u8, word, "--watch") or std.mem.eql(u8, word, "--serve")) return true;
+        // #1537: `gh pr checks --watch` exits when the checks finish; it is a
+        // finite wait like `gh run watch`, not a dev-server watcher.
+        if (std.mem.eql(u8, word, "--watch") and !hasProgram(w[0..i], "gh")) return true;
+        if (std.mem.eql(u8, word, "--serve")) return true;
         if (std.mem.eql(u8, word, "-f") or std.mem.eql(u8, word, "-F") or std.mem.eql(u8, word, "--follow")) {
             if (hasProgram(w[0..i], "tail") or hasProgram(w[0..i], "journalctl") or hasWord(w[0..i], "logs")) return true;
         }
@@ -199,6 +202,9 @@ test "finite commands from the reports stay finite (#1324, #1325, #1331)" {
         "npm run build",
         "pnpm install",
         "gh run watch 123 --exit-status",
+        // #1537: gh's own --watch ends when the checks do.
+        "gh pr checks 42 --watch",
+        "gh pr checks --watch --fail-fast --interval 30",
         "vite build",
         "docker compose up -d",
         "docker compose logs web",
