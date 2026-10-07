@@ -19,10 +19,21 @@ pub fn unresolvedCount(agent: *const Agent) usize {
     var n: usize = 0;
     for (agent.todos.items) |t| {
         if (t.epoch != epoch or t.retired) continue;
-        if (std.mem.eql(u8, t.status, "completed")) continue;
+        if (t.closed()) continue; // #1545: cancelled after a scope change is parked, not owed
         if (isVerification(t.content)) n += 1;
     }
     return n;
+}
+
+/// #1545: a verification item the user moved away from is parked, which ends
+/// the obligation to finish it but is never evidence that the task verified.
+fn cancelledVerification(agent: *const Agent) bool {
+    const epoch = goal_state.currentEpoch(agent.goal);
+    for (agent.todos.items) |t| {
+        if (t.epoch != epoch or t.retired) continue;
+        if (std.mem.eql(u8, t.status, "cancelled") and isVerification(t.content)) return true;
+    }
+    return false;
 }
 
 pub fn hasUnresolved(agent: *const Agent) bool {
@@ -33,7 +44,7 @@ pub fn completionGate(arena: Allocator, agent: *Agent) !?[]const u8 {
     if (agent.review_mode or agent.sub) return goal_state.completionGate(arena, agent);
     if (hasUnresolved(agent)) {
         const rendered = goal_state.renderTodos(agent, goal_state.currentEpoch(agent.goal));
-        return try std.fmt.allocPrint(arena, "completion deferred: {d} unresolved verification item(s) remain:\n{s}\nDropping or summarizing them does not satisfy completion. Finish the verification, or have the user change scope.", .{ unresolvedCount(agent), rendered });
+        return try std.fmt.allocPrint(arena, "completion deferred: {d} unresolved verification item(s) remain:\n{s}\nDropping or summarizing them does not satisfy completion. Finish the verification, or have the user change scope. If a newer user message already moved away from this work, set those items to status \"cancelled\" with todo_write (allowed only after a newer user message).", .{ unresolvedCount(agent), rendered });
     }
     return goal_state.completionGate(arena, agent);
 }
@@ -42,7 +53,7 @@ pub fn completionGate(arena: Allocator, agent: *Agent) !?[]const u8 {
 /// goal/eval/verification obligation is vacuously verified so recipe
 /// telemetry for chat turns stays usable.
 pub fn taskVerified(agent: *const Agent) bool {
-    if (hasUnresolved(agent)) return false;
+    if (hasUnresolved(agent) or cancelledVerification(agent)) return false;
     if (agent.eval_cmd != null) return agent.eval_verified and !agent.eval_repair_pending;
     if (goal_state.goalActive(@constCast(agent))) {
         const epoch = goal_state.currentEpoch(agent.goal);
@@ -59,6 +70,7 @@ fn todoRoot(arena: Allocator) Agent {
     root.sub = false;
     root.review_mode = false;
     root.todos = .empty;
+    root.messages = std.json.Array.init(arena); // #1545: applyTodoWrite fingerprints the latest user request
     root.goal = null;
     root.todos_dirty = false;
     root.completion_gate_armed = false;
@@ -149,4 +161,70 @@ test "taskVerified is true for ordinary chat and false with open verification" {
     root.eval_cmd = "true";
     root.eval_verified = false;
     try std.testing.expect(!taskVerified(&root));
+}
+
+test "#1545 a verification item cannot be cancelled within the request that wrote it" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const ar = arena_state.allocator();
+    var root = todoRoot(ar);
+    const textMessage = @import("messages.zig").textMessage;
+    try root.messages.append(try textMessage(ar, "user", "implement the feature and run the tests"));
+    _ = try goal_todo.applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"write the helper","status":"completed"},
+        \\          {"content":"run the tests","status":"pending"}]}
+    ));
+    // Same request, no user message since: the #844 obligation stands.
+    const refused = try goal_todo.applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"run the tests","status":"cancelled"}]}
+    ));
+    try std.testing.expect(std.mem.indexOf(u8, refused.reply(), "were not cancelled") != null);
+    try std.testing.expectEqual(@as(usize, 1), unresolvedCount(&root));
+    const gate = (try completionGate(ar, &root)).?;
+    try std.testing.expect(std.mem.indexOf(u8, gate, "cancelled") != null); // the gate names the way out
+}
+
+test "#1545 after a newer user message, a cancelled verification item is parked, not owed and not verified" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const ar = arena_state.allocator();
+    var root = todoRoot(ar);
+    const textMessage = @import("messages.zig").textMessage;
+    try root.messages.append(try textMessage(ar, "user", "implement the feature and run the tests"));
+    _ = try goal_todo.applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"write the helper","status":"completed"},
+        \\          {"content":"run the tests","status":"pending"}]}
+    ));
+    // The user changes scope; the old verification is no longer the task.
+    try root.messages.append(try textMessage(ar, "user", "stop that, file an issue about it instead"));
+    const res = try goal_todo.applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"run the tests","status":"cancelled"},
+        \\          {"content":"file the issue","status":"completed"}]}
+    ));
+    try std.testing.expect(std.mem.indexOf(u8, res.reply(), "were not cancelled") == null);
+    try std.testing.expect(std.mem.indexOf(u8, res.reply(), "1 cancelled") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.text, "[-] run the tests") != null);
+    try std.testing.expectEqual(@as(usize, 0), unresolvedCount(&root)); // no longer blocks completion
+    try std.testing.expect(!taskVerified(&root)); // ...but never reads as verified
+    // Omitted later, the cancelled item stays as history instead of reviving the obligation.
+    _ = try goal_todo.applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"file the issue","status":"completed"}]}
+    ));
+    try std.testing.expectEqual(@as(usize, 0), unresolvedCount(&root));
+}
+
+test "#1545 ordinary work can be cancelled any time; a brand-new verification item cannot start cancelled" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const ar = arena_state.allocator();
+    var root = todoRoot(ar);
+    const textMessage = @import("messages.zig").textMessage;
+    try root.messages.append(try textMessage(ar, "user", "ship it"));
+    const res = try goal_todo.applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"sketch an alternative","status":"cancelled"},
+        \\          {"content":"verify the fix","status":"cancelled"}]}
+    ));
+    try std.testing.expect(std.mem.indexOf(u8, res.text, "[-] sketch an alternative") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.text, "[ ] verify the fix") != null);
+    try std.testing.expectEqual(@as(usize, 1), unresolvedCount(&root));
 }

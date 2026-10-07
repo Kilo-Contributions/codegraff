@@ -14,19 +14,24 @@ pub fn text(arena: Allocator, todos: []const TodoItem, epoch: u64, incoming: []c
     var done: usize = 0;
     var doing: usize = 0;
     var open: usize = 0;
+    var cancelled: usize = 0;
     for (todos) |t| {
         if (t.epoch != epoch or t.retired) continue;
         if (std.mem.eql(u8, t.status, "completed")) {
             done += 1;
         } else if (std.mem.eql(u8, t.status, "in_progress")) {
             doing += 1;
+        } else if (std.mem.eql(u8, t.status, "cancelled")) {
+            cancelled += 1; // #1545: parked after a scope change, not pending work
         } else {
             open += 1;
         }
     }
     var aw: std.Io.Writer.Allocating = .init(arena);
     const w = &aw.writer;
-    try w.print("Todo list saved: {d} done, {d} in progress, {d} pending.", .{ done, doing, open });
+    try w.print("Todo list saved: {d} done, {d} in progress, {d} pending", .{ done, doing, open });
+    if (cancelled > 0) try w.print(", {d} cancelled", .{cancelled});
+    try w.writeAll(".");
     var kept_header = false;
     for (todos) |t| {
         if (t.epoch != epoch or t.retired or mentions(incoming, t.content)) continue;
@@ -42,6 +47,7 @@ pub fn text(arena: Allocator, todos: []const TodoItem, epoch: u64, incoming: []c
 fn mark(status: []const u8) []const u8 {
     if (std.mem.eql(u8, status, "completed")) return "[x]";
     if (std.mem.eql(u8, status, "in_progress")) return "[~]";
+    if (std.mem.eql(u8, status, "cancelled")) return "[-]";
     return "[ ]";
 }
 
