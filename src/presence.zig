@@ -94,12 +94,20 @@ pub fn ackKey(rec: Owner) u64 {
     return std.hash.Wyhash.hash(0, text);
 }
 
+/// #1424: another live process recorded under this very session (a reloaded
+/// or relaunched session whose earlier process has not exited) is the session
+/// itself, not a peer to coordinate with. Pid alone missed it.
+pub fn ownSessionRecord(rec: Owner, my_session: []const u8) bool {
+    return my_session.len > 0 and std.mem.eql(u8, rec.session_id, my_session);
+}
+
 /// The first live foreign co-owner of `my_identity` that has not been
 /// acknowledged yet, if any. Pure: the probe results and the ack set are the
 /// caller's, so tests need no processes and no filesystem.
-pub fn unackedPeer(peers: Peers, my_identity: []const u8, my_pid: i32, acked: []const u64) ?Owner {
+pub fn unackedPeer(peers: Peers, my_identity: []const u8, my_pid: i32, my_session: []const u8, acked: []const u64) ?Owner {
     for (peers.records, 0..) |rec, i| {
         if (i >= peers.probes.len) break;
+        if (ownSessionRecord(rec, my_session)) continue;
         switch (worktree_lease.ownerVerdict(rec, my_identity, my_pid, peers.probes[i])) {
             .live_foreign, .live_unverified => {
                 const key = ackKey(rec);
@@ -320,7 +328,7 @@ pub fn gateCheckIdentity(io: Io, arena: Allocator, identity: []const u8) ?[]cons
     var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
     defer dir.close(io);
     const peers = listPeers(io, arena, dir);
-    const peer = unackedPeer(peers, identity, proc_identity.selfPid(), g_acked[0..g_acked_len]) orelse return null;
+    const peer = unackedPeer(peers, identity, proc_identity.selfPid(), g_session, g_acked[0..g_acked_len]) orelse return null;
     if (g_acked_len < g_acked.len) {
         g_acked[g_acked_len] = ackKey(peer);
         g_acked_len += 1;
@@ -351,6 +359,7 @@ pub fn liveTreePeers(io: Io, arena: Allocator) []const Owner {
     var live: std.ArrayList(Owner) = .empty;
     for (peers.records, 0..) |rec, i| {
         if (i >= peers.probes.len) break;
+        if (ownSessionRecord(rec, g_session)) continue;
         switch (worktree_lease.ownerVerdict(rec, g_identity, g_self.pid, peers.probes[i])) {
             .live_foreign, .live_unverified => live.append(arena, rec) catch break,
             else => {},
@@ -497,7 +506,7 @@ pub fn liveAllPeers(io: Io, arena: Allocator) []const Owner {
     var live: std.ArrayList(Owner) = .empty;
     for (peers.records, 0..) |rec, i| {
         if (i >= peers.probes.len) break;
-        if (rec.pid == g_self.pid) continue;
+        if (rec.pid == g_self.pid or ownSessionRecord(rec, g_session)) continue;
         switch (peers.probes[i]) {
             .gone => {},
             else => live.append(arena, rec) catch break,

@@ -58,15 +58,15 @@ test "unackedPeer: returns the live foreign co-owner once, then yields to the ac
     const records = [_]Owner{ other_tree, foreign };
     const probes = [_]proc_identity.Probe{ .{ .id = 98 }, .{ .id = 99 } };
     const peers: Peers = .{ .records = &records, .probes = &probes };
-    const found = unackedPeer(peers, my_identity, 1, &.{}) orelse return error.ExpectedPeer;
+    const found = unackedPeer(peers, my_identity, 1, "s-a", &.{}) orelse return error.ExpectedPeer;
     try std.testing.expectEqualStrings("s-b", found.session_id);
     const key = ackKey(found);
-    try std.testing.expect(unackedPeer(peers, my_identity, 1, &.{key}) == null);
+    try std.testing.expect(unackedPeer(peers, my_identity, 1, "s-a", &.{key}) == null);
     // A new session reusing that pid is a NEW peer, not an acked one.
     const reused: Owner = .{ .pid = 4242, .start_id = 100, .session_id = "s-d", .identity = "/repo/.git" };
     const records2 = [_]Owner{reused};
     const probes2 = [_]proc_identity.Probe{.{ .id = 100 }};
-    try std.testing.expect(unackedPeer(.{ .records = &records2, .probes = &probes2 }, my_identity, 1, &.{key}) != null);
+    try std.testing.expect(unackedPeer(.{ .records = &records2, .probes = &probes2 }, my_identity, 1, "s-a", &.{key}) != null);
 }
 
 test "lean one-shots skip the shared-tree checkpoint" {
@@ -74,4 +74,21 @@ test "lean one-shots skip the shared-tree checkpoint" {
     defer no_local_tools.lean = saved;
     no_local_tools.lean = true;
     try std.testing.expect(gateCheck(std.testing.io, std.testing.allocator) == null);
+}
+
+test "the executing session's own records are never a peer, only other sessions are (#1424)" {
+    const my_identity = "/repo/.git";
+    // A second live process of this same session (a reloaded session whose
+    // earlier process is still exiting) and a genuinely separate peer.
+    const own_other_pid: Owner = .{ .pid = 5151, .start_id = 7, .session_id = "s-me", .identity = "/repo/.git" };
+    const separate: Owner = .{ .pid = 5252, .start_id = 8, .session_id = "s-them", .identity = "/repo/.git" };
+    const records = [_]Owner{ own_other_pid, separate };
+    const probes = [_]proc_identity.Probe{ .{ .id = 7 }, .{ .id = 8 } };
+    const peers: Peers = .{ .records = &records, .probes = &probes };
+    const found = unackedPeer(peers, my_identity, 1, "s-me", &.{}) orelse return error.ExpectedPeer;
+    try std.testing.expectEqualStrings("s-them", found.session_id);
+    // Once the real peer is acknowledged, nothing else asks for confirmation.
+    try std.testing.expect(unackedPeer(peers, my_identity, 1, "s-me", &.{ackKey(separate)}) == null);
+    try std.testing.expect(presence.ownSessionRecord(own_other_pid, "s-me"));
+    try std.testing.expect(!presence.ownSessionRecord(own_other_pid, ""));
 }
