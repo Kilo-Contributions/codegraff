@@ -584,7 +584,7 @@ test { // ── Unit tests (`zig build test`): pull in tests from imported modu
     _ = @import("learn_delete.zig"); // #303: its tests were dead until listed here
     _ = .{ @import("additional_tests.zig"), @import("req_stats.zig"), @import("exact_reply.zig"), @import("rlm_order_tests.zig"), @import("async_tool_policy.zig"), @import("agent_async_tools.zig"), @import("request_usage_attempts.zig"), @import("learn_formal.zig") };
     _ = @import("goal_pacing_autonomous_test.zig");
-    _ = @import("goal_state.zig");
+    _ = .{ @import("goal_state.zig"), @import("agent_compact_recover.zig"), @import("agent_clef_compact.zig"), @import("agent_clef_compact_tests.zig"), @import("agent_clef_archive.zig") }; // + compaction recovery split, Clef arm (ADR 0260/0261)
     _ = @import("goal_persist_tests.zig");
     _ = @import("agent_render_cleanup.zig");
     _ = .{ @import("goal_flow.zig"), @import("shell_identity.zig") };

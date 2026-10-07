@@ -285,6 +285,8 @@ record only when you need the evidence or the edge cases.
 | [0257](0257-a-slimmed-comment-list-names-its-issue.md) | A slimmed MCP comment list keeps the issue id its rows share (`{issue, n, latest_author}`), so parallel results name what they describe. |
 | [0258](0258-gemini-chat-sends-repo-context-once.md) | On the Codegraff chat wire, Gemini root turns send the project instructions and layout as the conversation's first user message (ADR 0243's split), so the system prompt every request repeats no longer carries them. |
 | [0259](0259-openai-routes-compact-only-server-side.md) | First-party Responses routes (direct API, Codegraff GPT, ChatGPT plan) compact only server-side: no client-summary fallback while the server arm is on. A compaction item's `encrypted_content` is metered at 16 bytes/token, not as text, so a blob-anchored history does not re-compact every step. |
+| [0260](0260-clef-compaction-replaces-client-summary.md) | `GRAFF_CLEF_COMPACT=1` routes client-summary compactions through the gateway's server-side `POST /v1/compact` (Clef decision-model pruning, text verbatim); OpenAI-family server paths are untouched and any failure falls back to the summary. |
+| [0261](0261-client-summary-stays-the-compactor.md) | The client summary stays the compactor: `GRAFF_CLEF_COMPACT` defaults off (Clef rarely pruned and mostly fell back to the summary in measurement); first-party Responses routes use only the provider's own compaction. Supersedes 0260's default. |
 
 ## When to write one
 
