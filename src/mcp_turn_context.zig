@@ -45,10 +45,9 @@ pub fn params(a: Allocator, server: []const u8, name: []const u8, input: std.jso
     errdefer out.deinit();
     var s: std.json.Stringify = .{ .writer = &out.writer };
     try s.beginObject();
-    try s.objectField("name");
-    try s.write(name);
-    try s.objectField("arguments");
-    try s.write(input);
+    // #1511: `_meta` leads, so the protocol envelope and the progress token
+    // merge into this one object (mcp_protocol.buildRequest,
+    // mcp_notify.withProgressToken) instead of adding a second `_meta` key.
     if (std.mem.eql(u8, server, "cua_repl") or std.mem.eql(u8, server, "node_repl")) {
         if (context) |ctx| {
             try s.objectField("_meta");
@@ -58,6 +57,10 @@ pub fn params(a: Allocator, server: []const u8, name: []const u8, input: std.jso
             try s.endObject();
         }
     }
+    try s.objectField("name");
+    try s.write(name);
+    try s.objectField("arguments");
+    try s.write(input);
     try s.endObject();
     return out.toOwnedSlice();
 }
@@ -113,4 +116,27 @@ test "computer adapters still get turn metadata when the caller omitted it" {
     try std.testing.expect(meta.get("session_id").?.string.len == 36);
     try std.testing.expect(meta.get("turn_id").?.string.len == 36);
     try std.testing.expect(effective(null, std.testing.io, "ordinary") == null);
+}
+
+test "#1511: a computer-use tools/call carries one _meta with the turn context and progress token" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var state: State = .{};
+    state.begin(std.testing.io);
+    const input = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"code\":\"await createBrowserTab()\"}", .{});
+    const p = try params(a, "cua_repl", "js", input, state.value);
+    for ([_]bool{ false, true }) |modern| {
+        // The same steps as mcp_rpc.request for a tools/call.
+        const built = try @import("mcp_protocol.zig").buildRequest(a, 9, "tools/call", p, modern);
+        const line = try @import("mcp_notify.zig").withProgressToken(a, built, 9);
+        // A duplicate key is a parse error here, as it is for a strict server.
+        const v = try std.json.parseFromSliceLeaky(std.json.Value, a, line, .{ .duplicate_field_behavior = .@"error" });
+        const params_obj = v.object.get("params").?.object;
+        try std.testing.expectEqualStrings("js", params_obj.get("name").?.string);
+        const meta = params_obj.get("_meta").?.object;
+        try std.testing.expectEqual(@as(i64, 9), meta.get("progressToken").?.integer);
+        try std.testing.expectEqualStrings(&state.value.?.turn, meta.get("x-codex-turn-metadata").?.object.get("turn_id").?.string);
+        try std.testing.expectEqual(modern, meta.get("io.modelcontextprotocol/protocolVersion") != null);
+    }
 }
