@@ -1,7 +1,7 @@
 {
   "name": "@codegraff/sdk",
-  "version": "0.4.2",
-  "description": "TypeScript / Node SDK for the codegraff agent \u2014 drives `graff --json` over stdio. Types auto-generated from `graff --schema`.",
+  "version": "0.4.3",
+  "description": "TypeScript / Node SDK for the codegraff agent — drives `graff --json` over stdio. Types auto-generated from `graff --schema`.",
   "type": "module",
   "main": "dist/harness.js",
   "types": "dist/harness.d.ts",
@@ -58,12 +58,12 @@
   },
   "license": "Apache-2.0",
   "optionalDependencies": {
-    "@codegraff/graff-darwin-arm64": "0.4.1",
-    "@codegraff/graff-darwin-x64": "0.4.1",
-    "@codegraff/graff-linux-arm64": "0.4.1",
-    "@codegraff/graff-linux-x64": "0.4.1",
-    "@codegraff/graff-win32-arm64": "0.4.1",
-    "@codegraff/graff-win32-x64": "0.4.1"
+    "@codegraff/graff-darwin-arm64": "0.4.3",
+    "@codegraff/graff-darwin-x64": "0.4.3",
+    "@codegraff/graff-linux-arm64": "0.4.3",
+    "@codegraff/graff-linux-x64": "0.4.3",
+    "@codegraff/graff-win32-arm64": "0.4.3",
+    "@codegraff/graff-win32-x64": "0.4.3"
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
