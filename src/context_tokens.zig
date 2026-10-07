@@ -1,6 +1,7 @@
 //! Conservative JSON context estimates that treat inline image bytes as media,
 //! not ordinary text. Providers tokenize images from decoded dimensions/content;
-//! the Base64 transport size is not part of the language-model context.
+//! the Base64 transport size is not part of the language-model context. Server
+//! compaction state gets the same treatment at its own ratio.
 
 const std = @import("std");
 const Io = std.Io;
@@ -11,13 +12,22 @@ const Value = std.json.Value;
 /// compaction's 8k recent-turn preservation budget.
 pub const image_tokens: u64 = 4_096;
 
+/// A server compaction item's `encrypted_content` is compressed, encrypted
+/// state, not text: a 1.4 MB blob reports ~70k input tokens. Counting it at
+/// /4 put a blob-anchored history over the window, so every step re-ran a
+/// compaction that could not shrink it. /16 stays above the observed ratio;
+/// the provider's reported usage remains the authority above this floor.
+pub const compaction_state_bytes_per_token: usize = 16;
+
 const MediaStats = struct {
     payload_bytes: usize = 0,
     images: u64 = 0,
+    compaction_state_bytes: usize = 0,
 
     fn add(self: *MediaStats, other: MediaStats) void {
         self.payload_bytes +|= other.payload_bytes;
         self.images +|= other.images;
+        self.compaction_state_bytes +|= other.compaction_state_bytes;
     }
 };
 
@@ -56,6 +66,12 @@ fn imageBlockPayloadLen(obj: std.json.ObjectMap) ?usize {
     return null;
 }
 
+fn compactionStateLen(obj: std.json.ObjectMap) ?usize {
+    const kind = stringValue(obj.get("type")) orelse return null;
+    if (!std.mem.eql(u8, kind, "compaction") and !std.mem.eql(u8, kind, "compaction_summary")) return null;
+    return (stringValue(obj.get("encrypted_content")) orelse return null).len;
+}
+
 fn mediaStats(value: Value) MediaStats {
     var stats: MediaStats = .{};
     switch (value) {
@@ -65,6 +81,7 @@ fn mediaStats(value: Value) MediaStats {
                 stats.payload_bytes +|= payload_bytes;
                 stats.images +|= 1;
             }
+            if (compactionStateLen(obj)) |state_bytes| stats.compaction_state_bytes +|= state_bytes;
             var it = obj.iterator();
             while (it.next()) |entry| stats.add(mediaStats(entry.value_ptr.*));
         },
@@ -157,12 +174,15 @@ fn escapeExtra(byte: u8) usize {
 
 /// Estimate a JSON container when its serialized byte count is already known.
 /// Inline image payloads are removed from the text estimate and replaced by a
-/// bounded per-image vision estimate; every other byte retains the prior /4
+/// bounded per-image vision estimate, and server compaction state counts at
+/// compaction_state_bytes_per_token; every other byte retains the prior /4
 /// policy so tool output and reasoning overflow protection stays conservative.
 pub fn estimatedTokensFromLen(value: Value, total_bytes: usize) u64 {
     const media = mediaStats(value);
-    const text_bytes = total_bytes -| media.payload_bytes;
-    return @as(u64, @intCast(text_bytes / 4)) +| media.images *| image_tokens;
+    const text_bytes = total_bytes -| media.payload_bytes -| media.compaction_state_bytes;
+    return @as(u64, @intCast(text_bytes / 4)) +|
+        media.images *| image_tokens +|
+        @as(u64, @intCast(media.compaction_state_bytes / compaction_state_bytes_per_token));
 }
 
 pub fn estimatedTokens(value: Value) u64 {
@@ -187,6 +207,34 @@ test "inline image payload size does not masquerade as text context" {
     try std.testing.expect(serializedLen(value) / 4 > 390_000);
     try std.testing.expect(estimatedTokens(value) >= image_tokens);
     try std.testing.expect(estimatedTokens(value) < 5_000);
+}
+
+test "server compaction state does not masquerade as text context" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const state = try arena.alloc(u8, 1_400_000);
+    @memset(state, 'g');
+    var items: std.json.Array = .init(arena);
+    for ([_][]const u8{ "compaction", "compaction_summary" }) |kind| {
+        var blob: std.json.ObjectMap = .empty;
+        try blob.put(arena, "type", .{ .string = kind });
+        try blob.put(arena, "encrypted_content", .{ .string = state });
+        items.clearRetainingCapacity();
+        try items.append(.{ .object = blob });
+        const value: Value = .{ .array = items };
+        // At /4 this one item alone read ~350k tokens, over a 270k window.
+        try std.testing.expect(serializedLen(value) / 4 > 340_000);
+        try std.testing.expect(estimatedTokens(value) >= 1_400_000 / compaction_state_bytes_per_token);
+        try std.testing.expect(estimatedTokens(value) < 100_000);
+    }
+
+    // Reasoning keeps its encrypted_content at /4: a resend pays for it again.
+    var reasoning: std.json.ObjectMap = .empty;
+    try reasoning.put(arena, "type", .{ .string = "reasoning" });
+    try reasoning.put(arena, "encrypted_content", .{ .string = state[0..40_000] });
+    try std.testing.expect(estimatedTokens(.{ .object = reasoning }) >= 10_000);
 }
 
 test "ordinary large strings remain fully counted" {

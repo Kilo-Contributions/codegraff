@@ -12,9 +12,11 @@
 //!
 //! Policy split vs the client-side path (agent_compact.zig):
 //!   - .responses providers: autocompact prunes local history to the newest
-//!     server blob (zero model calls, near-lossless); the client-side summary
-//!     survives only as the near-the-wall (95%) fallback. Manual /compact uses
-//!     OpenAI's standalone endpoint or Codex's forced in-stream directive.
+//!     server blob (zero model calls, near-lossless); near the wall (95%) a
+//!     first-party route forces a server pass. Manual /compact uses OpenAI's
+//!     standalone endpoint or Codex's forced in-stream directive. With the
+//!     server arm on, those routes never fall back to a client summary
+//!     (serverOnly); GRAFF_SERVER_COMPACT=0 is the opt-out.
 //!   - every other provider kind: unchanged legacy policy.
 //!
 //! The opaque blob's server-side lifetime under store:false is unknown; if a
@@ -147,6 +149,12 @@ pub fn manualServerEligible(p: Provider) bool {
     return manualRoute(p) != .local;
 }
 
+/// A first-party OpenAI route on the server arm compacts only into the
+/// provider's own encrypted state: no client summary, automatic or manual.
+pub fn serverOnly(p: Provider) bool {
+    return enabled(p) and manualServerEligible(p);
+}
+
 pub fn compactEndpoint(arena: std.mem.Allocator, responses_url: []const u8) ![]const u8 {
     if (!std.mem.endsWith(u8, responses_url, "/responses")) return error.UnsupportedServerCompaction;
     return std.fmt.allocPrint(arena, "{s}/compact", .{responses_url});
@@ -277,6 +285,10 @@ fn fallbackLocal(self: *Agent, err: anyerror) anyerror!usize {
     if (@import("compaction_window.zig").latestBlob(self.messages.items) != null) {
         if (self.tracer) |tr| tr.note("server_compact_failed", @errorName(err));
         return err; // local summaries cannot replace opaque state; caller reports the failure
+    }
+    if (serverOnly(self.provider)) {
+        if (self.tracer) |tr| tr.note("server_compact_failed", @errorName(err));
+        return err; // the provider's own compaction or none; caller reports the failure
     }
     if (self.tracer) |tr| tr.note("server_compact_fallback", @errorName(err));
     if (!main_mod.json_mode) try self.say("[OpenAI server compaction unavailable; falling back to local summary]\n", .{});
@@ -436,9 +448,10 @@ pub fn autocompactIf(self: *Agent, recovery_meter: u64, server_arm: bool) void {
     }
     if (pruneIf(self, true)) return;
     // No blob yet: the server compacts in-stream at the same threshold, so
-    // trust it at the ordinary compactAt line; the client-side summary (and
-    // its destructive fallback) is reserved for genuinely near the wall, where
-    // shipping the request itself would risk an over-cap hard failure (#163).
+    // trust it at the ordinary compactAt line; a forced pass (server-side on
+    // first-party routes, see serverOnly) is reserved for genuinely near the
+    // wall, where shipping the request itself would risk an over-cap hard
+    // failure (#163).
     if (self.provider.nearContextLimit(recovery_meter))
         self.compactOrRecover(true);
 }
