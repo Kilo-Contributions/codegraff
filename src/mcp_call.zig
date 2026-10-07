@@ -34,6 +34,7 @@ const restart_hint = "Inspect /mcp, restart the service and this session, then r
 pub fn call(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: Value, context: ?@import("mcp_turn_context.zig").Snapshot) !CallResult {
     return invoke(reg, out_alloc, qualified, input, context) catch |err| switch (err) {
         error.McpClosed, error.ReadFailed, error.WriteFailed, error.BrokenPipe, error.ConnectionResetByPeer => blk: {
+            if (try @import("mcp_restart.zig").closeForRestart(reg, out_alloc, qualified, @errorName(err))) |text| break :blk .{ .text = text, .is_error = true };
             try withdrawServer(reg, qualified, @errorName(err));
             break :blk .{
                 .text = try std.fmt.allocPrint(out_alloc, "MCP service connection closed or failed ({s}). Its tools have been withdrawn from the catalog. The tool may not have completed; it was not retried automatically. " ++ restart_hint, .{@errorName(err)}),

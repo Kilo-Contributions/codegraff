@@ -424,6 +424,7 @@ pub const Registry = struct {
             break :blk all.tools;
         };
         try @import("mcp_pages.zig").appendTools(a, tools, server_index, server, tools_v);
+        if (server.transport == .stdio) server.transport.stdio.relaunch = .{ .cfg = try mcp_lazy.cloneMap(a, cfg) }; // ADR 0270
         mcp_rpc.bindNotes(server);
         @import("mcp_pages.zig").listen(server, a); // modern stdio: ask for tools/list_changed
         try servers.append(a, server);
@@ -469,6 +470,7 @@ pub const Registry = struct {
 };
 
 test {
+    _ = @import("mcp_restart.zig"); // ADR 0270
     _ = @import("mcp_cache.zig");
     _ = @import("mcp_boot.zig");
     _ = @import("mcp_elicitation.zig");

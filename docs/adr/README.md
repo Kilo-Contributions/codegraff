@@ -285,6 +285,7 @@ record only when you need the evidence or the edge cases.
 | [0257](0257-a-slimmed-comment-list-names-its-issue.md) | A slimmed MCP comment list keeps the issue id its rows share (`{issue, n, latest_author}`), so parallel results name what they describe. |
 | [0258](0258-gemini-chat-sends-repo-context-once.md) | On the Codegraff chat wire, Gemini root turns send the project instructions and layout as the conversation's first user message (ADR 0243's split), so the system prompt every request repeats no longer carries them. |
 | [0259](0259-openai-routes-compact-only-server-side.md) | First-party Responses routes (direct API, Codegraff GPT, ChatGPT plan) compact only server-side: no client-summary fallback while the server arm is on. A compaction item's `encrypted_content` is metered at 16 bytes/token, not as text, so a blob-anchored history does not re-compact every step. |
+| [0270](0270-a-closed-stdio-mcp-server-restarts-on-its-next-call.md) | A stdio MCP server whose connection closes goes back to dormant with its launch config and restarts on its next call; the failed call is never replayed, and after two restarts in a session its tools are withdrawn as before. |
 
 ## When to write one
 
