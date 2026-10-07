@@ -55,6 +55,8 @@ const knobs = [_]Knob{
     .{ .name = "GRAFF_TOOL_HANDLE_BYTES", .value = "8192" },
     .{ .name = "GRAFF_COMPACT_PCT", .value = "55" },
     .{ .name = "GRAFF_COMPACT_MIX", .value = "1" },
+    .{ .name = "GRAFF_CLEF_COMPACT", .value = "1" },
+    .{ .name = "GRAFF_CLEF_ARCHIVE", .value = "1" },
     .{ .name = "GRAFF_WS_DEBUG", .value = "1" },
     .{ .name = "GRAFF_WS_FORCE_FAIL_ONCE", .value = "1" },
     .{ .name = "GRAFF_WS_FORCE_FAIL_COUNT", .value = "3" },
@@ -120,6 +122,8 @@ const Saved = struct {
     x_search: bool,
     job_idle: job_idle.Policy,
     compact_mix: bool,
+    clef_compact: bool,
+    clef_archive: bool,
 
     fn capture() Saved {
         return .{
@@ -153,6 +157,8 @@ const Saved = struct {
             .x_search = @import("xai_hosted.zig").enabled,
             .job_idle = job_idle.policy,
             .compact_mix = @import("compact_mix.zig").g_enabled,
+            .clef_compact = @import("agent_clef_compact.zig").g_enabled,
+            .clef_archive = @import("agent_clef_archive.zig").g_enabled,
         };
     }
 
@@ -188,6 +194,8 @@ const Saved = struct {
         @import("xai_hosted.zig").enabled = s.x_search;
         job_idle.policy = s.job_idle;
         @import("compact_mix.zig").g_enabled = s.compact_mix;
+        @import("agent_clef_compact.zig").g_enabled = s.clef_compact;
+        @import("agent_clef_archive.zig").g_enabled = s.clef_archive;
     }
 };
 

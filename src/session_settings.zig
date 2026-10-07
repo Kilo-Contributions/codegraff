@@ -31,6 +31,7 @@ const mcp_schema_gate = @import("mcp_schema_gate.zig"); // GRAFF_STABLE_CATALOG 
 const no_local_tools = @import("no_local_tools.zig"); // #330: GRAFF_NO_LOCAL_TOOLS
 const tool_handle = @import("tool_handle.zig"); // #440: GRAFF_TOOL_HANDLE_BYTES
 const server_compact = @import("agent_server_compact.zig"); // GRAFF_SERVER_COMPACT + #compact-ab assignment
+const clef_compact = @import("agent_clef_compact.zig"); // GRAFF_CLEF_COMPACT → g_enabled
 const provider_mod = @import("provider.zig");
 const xai_hosted = @import("xai_hosted.zig"); // GRAFF_XAI_X_SEARCH
 const skills = @import("skills.zig");
@@ -220,6 +221,21 @@ pub fn applyEnvKnobs(arena: Allocator, environ_map: anytype) !void {
     if (environ_map.get("GRAFF_COMPACT_MIX")) |v| {
         const off = std.mem.eql(u8, v, "0") or std.ascii.eqlIgnoreCase(v, "false") or std.ascii.eqlIgnoreCase(v, "off");
         @import("compact_mix.zig").g_enabled = !off;
+    }
+    // GRAFF_CLEF_COMPACT=1 (any value but 0/false/off) routes client-summary
+    // compactions through the gateway's POST /v1/compact (Clef decision-model
+    // pruning). Default off: the client summary is the compactor (ADR 0261).
+    // First-party Responses routes never reach either (ADR 0259).
+    if (environ_map.get("GRAFF_CLEF_COMPACT")) |v| {
+        const off = std.mem.eql(u8, v, "0") or std.ascii.eqlIgnoreCase(v, "false") or std.ascii.eqlIgnoreCase(v, "off");
+        clef_compact.g_enabled = !off;
+    }
+    // GRAFF_CLEF_ARCHIVE=1/true/on: Clef prunes keep the call and archive the
+    // full output to the session's artifact dir (path in the stub) instead of
+    // deleting it. Default off while evals/clef_exp prices it.
+    if (environ_map.get("GRAFF_CLEF_ARCHIVE")) |v| {
+        const off = std.mem.eql(u8, v, "0") or std.ascii.eqlIgnoreCase(v, "false") or std.ascii.eqlIgnoreCase(v, "off");
+        @import("agent_clef_archive.zig").g_enabled = !off;
     }
     // #502: xAI defaults to the Responses wire (api.x.ai/v1/responses) —
     // first-party server compaction + WS turns. GRAFF_XAI_WIRE=chat (anything

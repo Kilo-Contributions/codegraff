@@ -133,8 +133,9 @@ pub const Note = struct {
 
 /// Write `full` to this session's artifact dir; the ABSOLUTE path on success.
 /// Null — i.e. plain truncation — when no durable session is wired, when the
-/// per-session budget is spent, or when any part of the write fails.
-fn spill(arena: Allocator, session: []const u8, full: []const u8) ?[]const u8 {
+/// per-session budget is spent, or when any part of the write fails. Public
+/// for agent_clef_archive.zig, which archives pruned outputs the same way.
+pub fn spill(arena: Allocator, session: []const u8, full: []const u8) ?[]const u8 {
     const sink = g_sink orelse return null;
     if (!safeName(session)) return null;
     if (!reserve(full.len)) return null;
