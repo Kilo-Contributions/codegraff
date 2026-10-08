@@ -23,6 +23,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.26
+    \\  • compaction replies no longer show up in the desktop chat
+    \\  • a question no longer restarts an earlier task's checklist
+    \\  • a model switch across providers keeps the conversation
+    \\  • computer-use and closed stdio MCP servers recover
+    \\
     \\0.0.302.25
     \\  • ChatGPT/OpenAI sessions no longer compact before every tool call
     \\  • OpenAI routes compact only with the provider's own compaction
