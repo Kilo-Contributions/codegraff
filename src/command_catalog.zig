@@ -83,6 +83,7 @@ pub const commands = [_]Item{
     .{ .name = "/keepcontext", .desc = "toggle keeping the conversation when /model switches wire format (default on)" },
     .{ .name = "/effort", .desc = "reasoning depth: low|medium|high|... (codex, deepseek, codegraff; persists)" },
     .{ .name = "/reasoning", .desc = "alias for /effort" },
+    .{ .name = "/compact-at", .usage = "/compact-at [10-95|default]", .desc = "where automatic compaction starts, as % of the context window (default 80; persists)" },
     .{ .name = "/fast", .desc = "codex only: priority service tier for lower latency (toggle, persists)" },
     .{ .name = "/thinking", .desc = "stream reasoning live vs spinner only (toggle, persists)" },
     .{ .name = "/title", .desc = "name the tab from your first prompt (AI session title; toggle, persists)" },

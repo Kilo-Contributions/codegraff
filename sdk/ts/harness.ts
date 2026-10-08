@@ -77,6 +77,8 @@ export interface HarnessOptions {
   maxModelCalls?: number;
   /** Reject duplicate root tool name+normalized-input calls per turn. */
   dedupeToolCalls?: boolean;
+  /** Start automatic compaction at this percent of the context window (10-95; default 80). */
+  compactAt?: number;
   /** Extra raw flags. `--json` is always added. */
   args?: string[];
 }
@@ -151,6 +153,7 @@ function spawnArgs(o: HarnessOptions): string[] {
   if (o.maxToolCalls !== undefined) a.push("--max-tool-calls", String(o.maxToolCalls));
   if (o.maxModelCalls !== undefined) a.push("--max-model-calls", String(o.maxModelCalls));
   if (o.dedupeToolCalls) a.push("--dedupe-tool-calls");
+  if (o.compactAt !== undefined) a.push("--compact-at", String(o.compactAt));
   if (o.systemPrompt) a.push("--system-prompt", o.systemPrompt);
   if (o.appendSystemPrompt) a.push("--append-system-prompt", o.appendSystemPrompt);
   if (o.args) a.push(...o.args);

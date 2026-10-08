@@ -233,6 +233,7 @@ pub const usage_text =
     \\  --json           structured stdio protocol (JSON in, JSONL events out)
     \\  --max-run-tool-calls N  aggregate root/descendant tool ceiling for this invocation
     \\  --max-tool-calls N  reject root tool calls after N per turn (JSON-safe budget)
+    \\  --compact-at PCT    start automatic compaction at PCT% of the context window (10-95, default 80)
     \\  --max-model-calls N total provider calls allowed across this run (default 0 = unlimited; includes children/title/judges)
     \\  --dedupe-tool-calls reject duplicate root tool name+input calls per turn
     \\  --no-telemetry   disable anonymous usage telemetry for this run
