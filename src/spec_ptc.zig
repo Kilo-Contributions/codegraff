@@ -127,7 +127,7 @@ fn printInner(stmt: []const u8) ?[]const u8 {
     return t["print(".len .. t.len - 1];
 }
 
-fn stripComment(stmt: []const u8) []const u8 {
+pub fn stripComment(stmt: []const u8) []const u8 {
     var i: usize = 0;
     var in_str: ?u8 = null;
     var esc = false;
