@@ -23,6 +23,51 @@ their edit histories are visible to everyone.
   not enough because edit history stays visible. Then tell the user what was
   exposed and for how long.
 
+## Issue format: every report states its versions
+
+Every issue, whether a person or an agent files it, opens with this header.
+A report without versions can't be told apart from a bug that a newer release
+already fixed.
+
+```markdown
+**graff:** 0.0.302.25 (latest: 0.0.302.25)
+**Harness:** 0.2.109, or "not used"
+**Surface:** Harness | terminal | `graff -p` | ACP client | SDK
+**Platform:** macOS arm64 | Linux x64 | Windows x64 | ...
+
+## Symptom
+What went wrong, in generic terms, with the tool's own error text verbatim.
+
+## Repro
+The smallest sequence of steps that shows it.
+
+## Root cause
+In code terms (`file.zig::function`), naming the tag or commit the line
+numbers come from. Leave this section out if the cause isn't known.
+
+## Fix
+The expected behavior, or the proposed change.
+```
+
+- **graff:** run the binary that hit the bug. Harness runs its managed copy,
+  not the `graff` on `PATH`: `~/.harness/bin/graff --version` (macOS and
+  Linux). For the latest release, run
+  `gh release view --repo justrach/codegraff --json tagName`.
+- **Harness:** on macOS, run
+  `plutil -extract CFBundleShortVersionString raw /Applications/Harness.app/Contents/Info.plist`.
+- **If the graff that failed is older than the latest release**, check
+  whether the release notes or a closed issue already cover the bug. Reproduce
+  it on the latest release before filing, or say plainly in the header that it
+  wasn't rechecked.
+- **Cite source from a named version.** If a report cites code from a local
+  checkout that isn't the running version, it describes code that may already
+  have changed. Use `v0.0.302.25:src/x.zig:93` (or a commit hash), never a bare
+  line number.
+- **Search before filing.** Search open and closed issues by the error text.
+  Comment on an existing issue only when you have a new repro or diagnostic.
+- **What the header must not contain:** model or provider names, account
+  details, or paths. The public-tracker rules above still apply.
+
 ## Keychain: never dump it
 
 Never run `security dump-keychain` (with or without `-d`), and never walk every

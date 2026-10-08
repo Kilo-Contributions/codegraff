@@ -77,6 +77,11 @@ pub const full_prompt =
     \\'...'`). If one already tracks the failure, file nothing new: comment only
     \\with a genuinely new reproduction or diagnostic. If the search fails, keep
     \\the finding in your reply instead of filing.
+    \\Open the body with the versions it was seen on: the running graff's
+    \\`--version` (inside Harness that is `~/.harness/bin/graff`, not the one on
+    \\PATH) beside the latest release (`gh release view --repo justrach/codegraff
+    \\--json tagName`), the Harness version or "not used", the surface (Harness,
+    \\terminal, ACP client or SDK) and OS/arch. Cite source as `<tag>:file:line`.
     \\
     \\Anything you publish outside this machine — a GitHub issue, PR, comment or
     \\gist, a hosted page, a paste, a request to someone else's API — carries only
