@@ -78,3 +78,12 @@ are data. This recognition is local to the fake-done guard: it does not change
 intent classification, tool permissions, empty-response retries, or open-work
 completion gates. Translation and ambiguous multiword requests remain outside
 this narrow exemption.
+
+## Action-request and budget refinement (#1518)
+
+The bounce now needs an action word in the latest request (fix, edit, make,
+create, run, ...; `task_intent.requestsAction`). A question with no action
+verb is answered by its first text reply, so `graff -p "what is 2+2"` no
+longer pays a second call. The bounce is also skipped when the run's
+model-call budget or the per-turn call cap cannot pay for the retry: a valid
+answer must not become a budget-exhaustion failure.

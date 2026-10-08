@@ -41,11 +41,26 @@ pub fn classify(text: []const u8) Intent {
     var words = std.mem.tokenizeAny(u8, text, " \t\r\n,;:!?()[]{}\"`");
     while (words.next()) |raw| {
         const word = std.mem.trim(u8, raw, ".");
-        if (oneOf(word, &.{ "fix", "edit", "implement", "add", "remove", "delete", "rename", "refactor", "write", "create", "update", "patch", "build", "test", "lint", "run", "merge", "push", "deploy", "commit" })) return .general;
+        if (actionWord(word)) return .general;
         if (oneOf(word, &.{ "summarize", "summarise", "summary", "explain", "describe", "overview", "map", "research", "investigate", "lookup" })) informational = true;
         if (std.ascii.eqlIgnoreCase(word, "read-only")) informational = true;
     }
     return if (informational) .informational else .general;
+}
+
+const action_words = [_][]const u8{ "fix", "edit", "implement", "add", "remove", "delete", "rename", "refactor", "write", "create", "update", "patch", "build", "test", "lint", "run", "merge", "push", "deploy", "commit", "change", "modify", "make", "resolve", "apply", "replace", "rewrite" };
+
+fn actionWord(word: []const u8) bool {
+    return oneOf(word, &action_words);
+}
+
+/// True when the request names something to change or execute. A text-only
+/// first answer is unfinished only for such a request (#1518); a question
+/// with no action verb is answered by its text.
+pub fn requestsAction(text: []const u8) bool {
+    var words = std.mem.tokenizeAny(u8, text, " \t\r\n,;:!?()[]{}\"`");
+    while (words.next()) |raw| if (actionWord(std.mem.trim(u8, raw, "."))) return true;
+    return false;
 }
 
 pub fn current(self: *const Agent) Intent {
@@ -138,4 +153,11 @@ test "summary checkpoint is once, preserves the human request, and respects a ne
     try state.beforeRequest(&agent);
     try std.testing.expect(state.nudged);
     try std.testing.expectEqual(@as(usize, 5), agent.messages.items.len);
+}
+
+test "only a request naming an action counts as one (#1518)" {
+    for ([_][]const u8{ "Fix src/parser.zig", "Make `python3 test.py` print OK. Do not edit the tests.", "Reply with exactly: pong; then create target.txt" }) |text|
+        try std.testing.expect(requestsAction(text));
+    for ([_][]const u8{ "What does parse() return for an empty string?", "Which module owns retries?", "what is 2+2" }) |text|
+        try std.testing.expect(!requestsAction(text));
 }
