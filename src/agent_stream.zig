@@ -508,6 +508,8 @@ pub fn printDelta(self: *Agent, raw_line: []const u8) void {
     // Reasoning/thinking deltas: deepseek streams reasoning_content, anthropic
     // a thinking_delta, codex a summary delta. Presentation is the sink's call:
     // the wire's `reasoning` event, or the live "Thinking" block / spinner.
+    // A compaction request's reply is bookkeeping on every frontend (#1582).
+    if (self.compaction_request) return;
     const sink = engine_sink.forAgent(self);
     const reasoning = reasoningDelta(self.provider.kind, obj);
     if (reasoning.len != 0 or text.len != 0) self.traceFirstToken();
