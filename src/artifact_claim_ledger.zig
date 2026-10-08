@@ -68,6 +68,17 @@ pub fn findIn(claims: []const Claim, kind: Kind, key: []const u8, repo: ?[]const
     return null;
 }
 
+/// Why an acquire refused, for everything but ClaimHeld (which names the
+/// owner). A full ledger is a capacity limit the caller can act on; any
+/// other failure keeps its error name (#1490). No claim changed either way.
+pub fn acquireFailText(arena: Allocator, err: anyerror) []const u8 {
+    return switch (err) {
+        error.ClaimFull => std.fmt.comptimePrint("claim ledger is full ({d} claims); release a finished claim, then retry. No claim changed.", .{max_claims}),
+        error.AmbiguousClaim => "claim repository is ambiguous; specify repo explicitly. No claim changed.",
+        else => std.fmt.allocPrint(arena, "claim acquire failed: {s}. No claim changed.", .{@errorName(err)}) catch "claim acquire failed. No claim changed.",
+    };
+}
+
 pub fn acquireIn(ledger: *Ledger, arena: Allocator, kind: Kind, key: []const u8, me: Owner, now_ms: i64, owner_live: bool, repo: ?[]const u8) ![]const u8 {
     if (ambiguous(ledger.slice(), kind, key, repo)) return error.AmbiguousClaim;
     switch (verdictIn(ledger.slice(), kind, key, me, owner_live, repo)) {
@@ -219,4 +230,26 @@ test "legacy unknown repository claims cannot be bypassed by a new scoped claim"
     try std.testing.expect(!differentRepository(null, "github.com/org/other"));
     _ = try acquireIn(&ledger, arena.allocator(), .branch, "feature", .{ .session = "first" }, 1, true, "github.com/org/first");
     try std.testing.expectEqualStrings("github.com/org/first", ledger.items[0].repo.?);
+}
+
+test "a full ledger names the capacity limit and changes nothing (#1490)" {
+    const claims = @import("artifact_claim.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const ar = arena.allocator();
+    const io = std.testing.io;
+    claims.resetForTest();
+    defer claims.resetForTest();
+    claims.setTestOwner(.{ .session = "s-a", .pid = 11, .start_id = 1 });
+    var i: usize = 0;
+    while (i < max_claims) : (i += 1) {
+        const r = try claims.handleTool(ar, io, "claim", "issue", try std.fmt.allocPrint(ar, "{d}", .{i + 1}), "");
+        try std.testing.expect(!r.is_error);
+    }
+    const full = try claims.handleTool(ar, io, "claim", "issue", "999", "");
+    try std.testing.expect(full.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, full.text, "ledger is full") != null);
+    try std.testing.expectEqual(@as(usize, max_claims), claims.testLedger().len);
+    try std.testing.expect(findIn(claims.testLedger().slice(), .issue, "999", null) == null);
+    try std.testing.expect(std.mem.indexOf(u8, acquireFailText(ar, error.OutOfMemory), "OutOfMemory") != null);
 }
