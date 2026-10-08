@@ -59,7 +59,7 @@ pub fn delta(kind: Kind, value: Value) []const u8 {
 }
 
 pub fn emitText(agent: *Agent, text: []const u8) void {
-    if (text.len == 0) return;
+    if (text.len == 0 or agent.compaction_request) return;
     if (agent.out == null) {
         if (main_mod.unattended and !main_mod.json_mode and !agent.sub) {
             if (main_mod.g_out) |w| {

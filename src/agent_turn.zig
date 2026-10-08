@@ -14,7 +14,7 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
     defer @import("agent_async_tools.zig").reset(self);
     if (!self.sub) @import("peer_idle.zig").noteTurnStart();
     defer if (!self.sub) @import("peer_idle.zig").noteTurnEnd();
-    var pending_work: empty_completion.PendingWork = .{};
+    var pending_work = empty_completion.PendingWork.begin(self);
     var bounced_answer: empty_completion.BounceAnswer = .{};
     self.completed = null;
     self.yielded = null;

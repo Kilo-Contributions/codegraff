@@ -38,9 +38,20 @@ fn oneOf(word: []const u8, choices: []const []const u8) bool {
 /// not a natural-language permission boundary or an enforced tool allowlist.
 pub fn classify(text: []const u8) Intent {
     var informational = false;
+    // "file an issue", "open a GitHub issue", "report it": publishing is work
+    // to do, so an explanation that also asks for one stays general (#1581).
+    var publish_window: u8 = 0;
+    var after_report = false;
     var words = std.mem.tokenizeAny(u8, text, " \t\r\n,;:!?()[]{}\"`");
     while (words.next()) |raw| {
         const word = std.mem.trim(u8, raw, ".");
+        if (after_report and oneOf(word, &.{ "it", "this", "that", "them" })) return .general;
+        if (publish_window > 0) {
+            if (oneOf(word, &.{ "issue", "issues", "ticket", "bug", "pr" })) return .general;
+            publish_window -= 1;
+        }
+        after_report = std.ascii.eqlIgnoreCase(word, "report");
+        if (oneOf(word, &.{ "file", "open", "raise", "post", "submit", "publish", "report" })) publish_window = 3;
         if (actionWord(word)) return .general;
         if (oneOf(word, &.{ "summarize", "summarise", "summary", "explain", "describe", "overview", "map", "research", "investigate", "lookup" })) informational = true;
         if (std.ascii.eqlIgnoreCase(word, "read-only")) informational = true;
@@ -69,7 +80,25 @@ pub fn current(self: *const Agent) Intent {
 
 pub const read_nudge = "You named a source file but have not inspected it. Read the named path if its contents are needed, then answer the informational request. Do not edit it merely to satisfy a completion check.";
 
-pub const checkpoint = "Summary scope checkpoint: review the map and targeted evidence already gathered in this turn. A broad batch of reads also counts as exploration; do not follow it with a shell loop reading every remaining file. For repeated scaffolding, explain the sampled pattern and its limits. Can you now explain the repository's purpose, architecture, and important constraints? If so, answer concisely now. Otherwise read only the specific missing evidence. Do not start implementation, a test suite, or a separate citation pass solely to finish a summary. Respect any newer user request that changes the scope.";
+/// Internal reminders arrive in the user role, so each one says it is not a
+/// new request and points back at the human's own (#1581).
+const reminder_prefix = "Internal reminder, not a new user request. ";
+
+pub const checkpoint = reminder_prefix ++ "Summary scope checkpoint: review the map and targeted evidence already gathered in this turn. A broad batch of reads also counts as exploration; do not follow it with a shell loop reading every remaining file. For repeated scaffolding, explain the sampled pattern and its limits. Can you now explain the repository's purpose, architecture, and important constraints? If so, answer concisely now. Otherwise read only the specific missing evidence. Do not start implementation, a test suite, or a separate citation pass solely to finish a summary. Respect any newer user request that changes the scope.";
+
+/// Every other informational request: bound the exploration without
+/// replacing the question the user asked with a repository overview.
+pub const scope_checkpoint = reminder_prefix ++ "Scope checkpoint: review the evidence already gathered in this turn. Can you now answer the user's latest request, including every deliverable it named? If so, finish it now. Otherwise read only the specific missing evidence. Do not start a repository overview, a test suite, or a separate citation pass unless the user asked for one.";
+
+/// Only a request for a summary or overview gets the repository checkpoint.
+fn summaryRequest(text: []const u8) bool {
+    var words = std.mem.tokenizeAny(u8, text, " \t\r\n,;:!?()[]{}\"`");
+    while (words.next()) |raw| {
+        const word = std.mem.trim(u8, raw, ".");
+        if (oneOf(word, &.{ "summarize", "summarise", "summary", "overview", "map" })) return true;
+    }
+    return false;
+}
 
 pub const State = struct {
     nudged: bool = false,
@@ -84,7 +113,8 @@ pub const State = struct {
         try state.review_progress.beforeRequest(self);
         if (state.nudged or self.sub or current(self) != .informational) return;
         if (self.model_calls_this_turn < 4 and self.tool_calls_this_turn < 6) return;
-        var note = try @import("named_work.zig").userNudge(self.arena, self.provider.kind, checkpoint);
+        const text = if (summaryRequest(@import("messages.zig").latestUserText(self.messages.items))) checkpoint else scope_checkpoint;
+        var note = try @import("named_work.zig").userNudge(self.arena, self.provider.kind, text);
         try note.object.put(self.arena, @import("session_wake.zig").origin_key, .{ .string = "notification" });
         try self.messages.append(note);
         state.nudged = true;
@@ -160,4 +190,39 @@ test "only a request naming an action counts as one (#1518)" {
         try std.testing.expect(requestsAction(text));
     for ([_][]const u8{ "What does parse() return for an empty string?", "Which module owns retries?", "what is 2+2" }) |text|
         try std.testing.expect(!requestsAction(text));
+}
+
+test "#1581 an explanation that also asks to publish stays actionable" {
+    for ([_][]const u8{
+        "Explain why the build fails and file an issue",
+        "Investigate the crash and open a GitHub issue for it",
+        "Explain the error and report it",
+        "Research the regression, then raise a ticket",
+    }) |text| try std.testing.expectEqual(Intent.general, classify(text));
+    try std.testing.expectEqual(Intent.informational, classify("Explain the bug report format"));
+    try std.testing.expectEqual(Intent.informational, classify("Describe the file layout"));
+}
+
+test "#1581 only a summary request gets the repository checkpoint" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const messages = @import("messages.zig");
+    var agent: Agent = undefined;
+    agent.arena = a;
+    agent.messages = .init(a);
+    agent.sub = false;
+    agent.review_mode = false;
+    agent.tracer = null;
+    agent.provider.kind = .openai;
+    agent.model_calls_this_turn = 4;
+    agent.tool_calls_this_turn = 0;
+    try agent.messages.append(try messages.textMessage(a, "user", "Investigate why login fails"));
+    var state = State.begin(&agent);
+    try state.beforeRequest(&agent);
+    const sent = try std.json.Stringify.valueAlloc(a, agent.messages.items[1], .{});
+    try std.testing.expect(std.mem.indexOf(u8, sent, "Internal reminder, not a new user request.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, sent, "every deliverable it named") != null);
+    try std.testing.expect(std.mem.indexOf(u8, sent, "repository's purpose") == null);
+    try std.testing.expectEqualStrings("Investigate why login fails", messages.latestUserText(agent.messages.items));
 }

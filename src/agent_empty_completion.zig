@@ -166,6 +166,30 @@ pub fn handle(self: *Agent, final_text: []const u8, hist_len: usize) !bool {
 pub const PendingWork = struct {
     nudged: bool = false,
     idle: @import("run_idle.zig").Hold = .{},
+    /// The checklist as this turn found it (#1582). An informational request
+    /// that leaves an earlier task's checklist untouched answered a new
+    /// question; that checklist is kept, not resumed.
+    checklist_at_start: ?u64 = null,
+
+    pub fn begin(self: *const Agent) PendingWork {
+        return .{ .checklist_at_start = checklistFingerprint(self) };
+    }
+
+    fn checklistFingerprint(self: *const Agent) u64 {
+        var h = std.hash.Wyhash.init(0x1582);
+        for (self.todos.items) |t| {
+            h.update(t.content);
+            h.update(t.status);
+            h.update(std.mem.asBytes(&t.epoch));
+        }
+        return h.final();
+    }
+
+    fn carriedOver(state: *const PendingWork, self: *const Agent) bool {
+        const start = state.checklist_at_start orelse return false;
+        return start == checklistFingerprint(self) and
+            @import("task_intent.zig").current(self) == .informational;
+    }
 
     pub const note = "Open-work reconciliation: your plain final reply would end root execution, but the current checklist is unfinished. " ++
         "If the user still wants this task done, continue actionable independent work now; collect required background results with agent_output/bash_output and wait_ms>0 when needed, rather than polling or promising future work. " ++
@@ -191,7 +215,7 @@ pub const PendingWork = struct {
     /// provider ignores the reminder or the remaining budget cannot buy it.
     pub fn finish(state: *PendingWork, self: *Agent, text: []const u8) !?[]const u8 {
         if (!self.sub and Agent.esc_cancel.load(.acquire)) return error.Interrupted;
-        const count = open(self);
+        const count = if (state.carriedOver(self)) 0 else open(self);
         // The reminder first, so independent work runs beside the background
         // work; the wait applies once the model stops again.
         if (count > 0 and !state.nudged and canRequest(self)) {
@@ -460,4 +484,26 @@ test "#1518 lean bounce skips questions and a spent model-call budget" {
         const before = self.messages.items.len;
         try std.testing.expectEqual(case[2], try handle(&self, "It returns an empty list.", before));
     }
+}
+
+test "#1582 an informational question does not resume an earlier task's untouched checklist" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var self = pendingFixture(arena.allocator());
+    try self.todos.append(self.arena, .{ .content = "ship the parser fix", .status = "in_progress" });
+    try self.messages.append(try messages.textMessage(self.arena, "user", "Explain how the cache works"));
+    var state = PendingWork.begin(&self);
+    try std.testing.expectEqualStrings("It is an LRU.", (try state.finish(&self, "It is an LRU.")).?);
+    try std.testing.expectEqual(@as(usize, 1), self.messages.items.len); // no reminder
+    try std.testing.expectEqualStrings("in_progress", self.todos.items[0].status); // kept, not resumed
+
+    // An informational turn that changed the checklist owns it.
+    state = PendingWork.begin(&self);
+    self.todos.items[0].status = "pending";
+    try std.testing.expect((try state.finish(&self, "Explained.")) == null);
+
+    // A work request still reconciles the same untouched checklist.
+    try self.messages.append(try messages.textMessage(self.arena, "user", "Keep going and fix it"));
+    state = PendingWork.begin(&self);
+    try std.testing.expect((try state.finish(&self, "Stopping here.")) == null);
 }
