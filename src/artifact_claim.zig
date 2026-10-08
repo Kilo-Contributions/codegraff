@@ -254,7 +254,7 @@ pub fn handleToolIn(arena: Allocator, io: Io, action: []const u8, kind_s: []cons
     if (std.mem.eql(u8, action, "claim") or std.mem.eql(u8, action, "acquire")) {
         const msg = claim_ledger.acquireIn(ledger, storage, kind, key, me, now, live, repo) catch |err| switch (err) {
             error.ClaimHeld => return .{ .text = refuseText(arena, kind, key, existing.?.owner), .is_error = true },
-            else => return .{ .text = "claim acquire failed", .is_error = true },
+            else => |e| return .{ .text = claim_ledger.acquireFailText(arena, e), .is_error = true },
         };
         if (tx) |transaction| transaction.write(try persistJson(scratch.allocator(), ledger)) catch return .{ .text = "claim was NOT persisted; retry before publishing", .is_error = true };
         announceLive(io, scratch.allocator(), ledger);

@@ -15,6 +15,7 @@ const review = @import("review.zig");
 const agent_mod = @import("agent.zig");
 const Agent = agent_mod.Agent;
 const ToolCall = tools_mod.ToolCall;
+const shared_tree_batch = @import("shared_tree_batch.zig");
 const ExecResult = tools_mod.ExecResult;
 
 // #422 slice 1c: every emission here leaves as a typed event; the terminal
@@ -92,6 +93,7 @@ pub fn runTools(self: *Agent, calls: []const ToolCall) ![]ExecResult {
         }
     }
     var miss_batch = read_miss.Batch.init(read_paths.items);
+    var checkpointed = false; // #1553: one shared-tree checkpoint holds every sibling mutation
     for (calls, 0..) |call, i| {
         if (try @import("agent_async_tools.zig").claim(self, call)) |result| {
             results[i] = result;
@@ -121,6 +123,7 @@ pub fn runTools(self: *Agent, calls: []const ToolCall) ![]ExecResult {
             results[i] = try self.handleMeta(call);
         } else if (try self.gateTool(call)) |denied| {
             results[i] = denied;
+            checkpointed = checkpointed or shared_tree_batch.isCheckpoint(denied);
         } else switch (classifyRead(self, &miss_batch, call)) {
             .refuse => results[i] = try refuseRead(self, call),
             .hold => try hold_idx.append(self.gpa, i),
@@ -128,6 +131,7 @@ pub fn runTools(self: *Agent, calls: []const ToolCall) ![]ExecResult {
         }
     }
 
+    if (checkpointed) shared_tree_batch.hold(self.gpa, self.io, self.arena, calls, results, &ext_idx);
     if (ext_idx.items.len > 0) {
         try @import("agent_tool_batch.zig").runExternal(self, calls, ext_idx.items, results);
         brief_diversity.noteSiblingBatch(self.arena, self.tracer, calls, ext_idx.items, results); // #382
@@ -571,4 +575,5 @@ test "rejectToolCall: truncated arguments are a local error, not an executed cal
 
 test {
     _ = @import("agent_tool_batch.zig");
+    _ = @import("shared_tree_batch.zig");
 }

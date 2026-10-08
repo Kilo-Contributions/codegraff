@@ -119,14 +119,16 @@ pub fn dormantFromCache(io: Io, a: Allocator, home: []const u8, name: []const u8
 /// Spawn and handshake a dormant server before its first request. On failure
 /// it stays dormant, so a later call tries again.
 pub fn wake(reg: anytype, server: *mcp_rpc.Server) !void {
-    const cfg = server.transport.dormant.cfg;
+    const dormant = server.transport.dormant;
+    const cfg = dormant.cfg;
     const a = reg.arena();
     const spec = try stdioSpec(reg.io, reg.gpa, a, cfg);
     defer if (spec.env) |m| m.deinit();
     server.transport = try reg.spawnStdio(a, spec.argv, spec.env, spec.cwd);
+    server.transport.stdio.relaunch = dormant;
     errdefer {
         mcp_stdio.stopChild(reg.io, &server.transport.stdio.child);
-        server.transport = .{ .dormant = .{ .cfg = cfg } };
+        server.transport = .{ .dormant = dormant };
         server.initialized = false;
     }
     // Same rule as a cache hit at connect: legacy needs `initialize` on the

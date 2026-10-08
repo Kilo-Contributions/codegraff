@@ -147,6 +147,10 @@ pub fn handle(self: *Agent, final_text: []const u8, hist_len: usize) !bool {
     if (@import("task_intent.zig").current(self) == .informational) return false;
     if (@import("exact_reply.zig").requested(messages.latestUserText(self.messages.items))) return false;
     if (no_local_tools.enabled) return false;
+    // #1518: a question answered in text is done, and a retry the model-call
+    // budget cannot pay for turns a valid answer into a budget failure.
+    if (!@import("task_intent.zig").requestsAction(messages.latestUserText(self.messages.items))) return false;
+    if (!PendingWork.canRequest(self)) return false;
     if (!shouldBounce(main_mod.unattended, no_local_tools.lean, self.text_only, self.review_mode, self.sub, self.tool_calls_this_turn, self.model_calls_this_turn, final_text))
         return false;
     try self.messages.append(try messages.userNote(self.arena, self.provider.kind, bounce_note));
@@ -162,6 +166,30 @@ pub fn handle(self: *Agent, final_text: []const u8, hist_len: usize) !bool {
 pub const PendingWork = struct {
     nudged: bool = false,
     idle: @import("run_idle.zig").Hold = .{},
+    /// The checklist as this turn found it (#1582). An informational request
+    /// that leaves an earlier task's checklist untouched answered a new
+    /// question; that checklist is kept, not resumed.
+    checklist_at_start: ?u64 = null,
+
+    pub fn begin(self: *const Agent) PendingWork {
+        return .{ .checklist_at_start = checklistFingerprint(self) };
+    }
+
+    fn checklistFingerprint(self: *const Agent) u64 {
+        var h = std.hash.Wyhash.init(0x1582);
+        for (self.todos.items) |t| {
+            h.update(t.content);
+            h.update(t.status);
+            h.update(std.mem.asBytes(&t.epoch));
+        }
+        return h.final();
+    }
+
+    fn carriedOver(state: *const PendingWork, self: *const Agent) bool {
+        const start = state.checklist_at_start orelse return false;
+        return start == checklistFingerprint(self) and
+            @import("task_intent.zig").current(self) == .informational;
+    }
 
     pub const note = "Open-work reconciliation: your plain final reply would end root execution, but the current checklist is unfinished. " ++
         "If the user still wants this task done, continue actionable independent work now; collect required background results with agent_output/bash_output and wait_ms>0 when needed, rather than polling or promising future work. " ++
@@ -187,7 +215,7 @@ pub const PendingWork = struct {
     /// provider ignores the reminder or the remaining budget cannot buy it.
     pub fn finish(state: *PendingWork, self: *Agent, text: []const u8) !?[]const u8 {
         if (!self.sub and Agent.esc_cancel.load(.acquire)) return error.Interrupted;
-        const count = open(self);
+        const count = if (state.carriedOver(self)) 0 else open(self);
         // The reminder first, so independent work runs beside the background
         // work; the wait applies once the model stops again.
         if (count > 0 and !state.nudged and canRequest(self)) {
@@ -422,4 +450,60 @@ test "exact reply bypasses only fake done while mixed requests and empty replies
         try std.testing.expectEqual(@as(usize, if (case[2] and !empty) before + 1 else before), self.messages.items.len);
         try std.testing.expectEqual(@as(u8, if (empty) 1 else 0), self.empty_completion_retries);
     }
+}
+
+test "#1518 lean bounce skips questions and a spent model-call budget" {
+    var state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer state.deinit();
+    const old_unattended = main_mod.unattended;
+    const old_lean = no_local_tools.lean;
+    const old_enabled = no_local_tools.enabled;
+    main_mod.unattended = true;
+    no_local_tools.lean = true;
+    no_local_tools.enabled = false;
+    defer {
+        main_mod.unattended = old_unattended;
+        no_local_tools.lean = old_lean;
+        no_local_tools.enabled = old_enabled;
+    }
+    var budget: @import("run_budget.zig").RunBudget = .{ .max_model_calls = 1 };
+    budget.model_calls.store(1, .release);
+    const cases = .{
+        .{ "What does parse() return for an empty string?", false, false },
+        .{ "Fix the off-by-one in fib.py", true, false },
+        .{ "Fix the off-by-one in fib.py", false, true },
+    };
+    inline for (cases) |case| {
+        var self = pendingFixture(state.allocator());
+        self.empty_completion_retries = 0;
+        self.call_kind = .title; // suppress fixture notices without initializing a writer
+        self.tool_calls_this_turn = 0;
+        self.model_calls_this_turn = 1;
+        if (case[1]) self.run_budget = &budget;
+        try self.messages.append(try messages.textMessage(self.arena, "user", case[0]));
+        const before = self.messages.items.len;
+        try std.testing.expectEqual(case[2], try handle(&self, "It returns an empty list.", before));
+    }
+}
+
+test "#1582 an informational question does not resume an earlier task's untouched checklist" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var self = pendingFixture(arena.allocator());
+    try self.todos.append(self.arena, .{ .content = "ship the parser fix", .status = "in_progress" });
+    try self.messages.append(try messages.textMessage(self.arena, "user", "Explain how the cache works"));
+    var state = PendingWork.begin(&self);
+    try std.testing.expectEqualStrings("It is an LRU.", (try state.finish(&self, "It is an LRU.")).?);
+    try std.testing.expectEqual(@as(usize, 1), self.messages.items.len); // no reminder
+    try std.testing.expectEqualStrings("in_progress", self.todos.items[0].status); // kept, not resumed
+
+    // An informational turn that changed the checklist owns it.
+    state = PendingWork.begin(&self);
+    self.todos.items[0].status = "pending";
+    try std.testing.expect((try state.finish(&self, "Explained.")) == null);
+
+    // A work request still reconciles the same untouched checklist.
+    try self.messages.append(try messages.textMessage(self.arena, "user", "Keep going and fix it"));
+    state = PendingWork.begin(&self);
+    try std.testing.expect((try state.finish(&self, "Stopping here.")) == null);
 }

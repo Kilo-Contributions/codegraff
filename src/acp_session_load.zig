@@ -91,7 +91,7 @@ pub fn load(ctx: *anyopaque, arena: Allocator, w: *Io.Writer, req: proto.Request
         return proto.writeError(w, req.id, engine.err_internal, @errorName(err));
     };
     session.loadSession(live.root, live.keys, arena, sid) catch |err| {
-        return proto.writeError(w, req.id, invalid_params, if (err == error.FileNotFound) "Unknown session ID in the selected workspace" else "Saved session could not be loaded");
+        return proto.writeError(w, req.id, invalid_params, loadErrorText(arena, err, if (provider == .string) provider.string else ""));
     };
     // Same precedence as CLI resume: the host respawns with --model to switch.
     if (live.model_override) |p| @import("session_branch.zig").applyModelOverride(live.root, arena, p);
@@ -104,6 +104,28 @@ pub fn load(ctx: *anyopaque, arena: Allocator, w: *Io.Writer, req: proto.Request
     const options = engine.configOptions(d, arena) catch |err| return proto.writeError(w, req.id, engine.err_internal, @errorName(err));
     try proto.writeResult(w, req.id, .{ .configOptions = options, ._meta = acp_workspace.meta(env, arena) });
     try proto.writeAvailableCommands(w, live.session_id, proto.slashCommands());
+}
+
+/// #1557: the save parsed and its fields are present, so a failure here is
+/// rarely an unreadable file. Name the real cause — a missing credential most
+/// of all, which the host would otherwise present as lost context.
+fn loadErrorText(arena: Allocator, err: anyerror, provider_id: []const u8) []const u8 {
+    if (err == error.FileNotFound) return "Unknown session ID in the selected workspace";
+    if (err == error.MissingKey and provider_id.len > 0)
+        return std.fmt.allocPrint(arena, "Saved session is intact, but its provider \"{s}\" has no credential in this process; run `graff login {s}` or `graff key set {s} <key>`, then load it again", .{ provider_id, provider_id, provider_id }) catch "Saved session is intact, but its provider has no credential in this process";
+    return std.fmt.allocPrint(arena, "Saved session could not be loaded ({s})", .{@errorName(err)}) catch "Saved session could not be loaded";
+}
+
+test "loadErrorText names a missing credential instead of blaming the save (#1557)" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const missing = loadErrorText(a, error.MissingKey, "deepseek");
+    try std.testing.expect(std.mem.indexOf(u8, missing, "is intact") != null);
+    try std.testing.expect(std.mem.indexOf(u8, missing, "graff login deepseek") != null);
+    try std.testing.expect(std.mem.indexOf(u8, missing, "could not be loaded") == null);
+    try std.testing.expectEqualStrings("Unknown session ID in the selected workspace", loadErrorText(a, error.FileNotFound, "x"));
+    try std.testing.expectEqualStrings("Saved session could not be loaded (BadSession)", loadErrorText(a, error.BadSession, "x"));
 }
 
 fn replayFromStart(params: std.json.Value) bool {

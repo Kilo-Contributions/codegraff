@@ -283,7 +283,7 @@ fn execToolInner(ctx: ToolCtx, call: ToolCall) !ToolOutput {
             return err;
         };
         switch (outcome) { // ADR 0231: write_file may now replace what the model has seen
-            .text, .truncated, .no_match => write_file.noteKnown(resolved),
+            .text, .truncated, .no_match => write_file.noteKnown(io, resolved),
             else => {},
         }
         return switch (outcome) {

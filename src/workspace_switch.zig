@@ -48,19 +48,13 @@ pub const Resolve = union(enum) {
     ambiguous: []const Entry,
 };
 
-var g_cwd_owned: ?[]u8 = null;
-
-pub fn deinitDisplay(gpa: Allocator) void {
-    if (g_cwd_owned) |old| gpa.free(old);
-    g_cwd_owned = null;
+test {
+    _ = .{ @import("workspace_display.zig"), @import("session_finalize_tests.zig") }; // #1193
 }
 
-fn adoptDisplay(gpa: Allocator, path: []const u8) void {
-    const owned = gpa.dupe(u8, path) catch return;
-    if (g_cwd_owned) |old| gpa.free(old);
-    g_cwd_owned = owned;
-    main_mod.g_cwd_display = owned;
-}
+// #1193: a replaced display is retired, not freed — see workspace_display.zig.
+pub const deinitDisplay = @import("workspace_display.zig").deinit;
+const adoptDisplay = @import("workspace_display.zig").adopt;
 
 fn basename(path: []const u8) []const u8 {
     const trimmed = std.mem.trimEnd(u8, path, "/");

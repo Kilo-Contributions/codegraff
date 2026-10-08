@@ -23,13 +23,21 @@ const McpCall = struct {
 
 pub const CallResult = struct { text: []u8, is_error: bool };
 
+/// A tool whose server connection closed or failed this session (#1523).
+/// Remembered so a later call or schema load names the closed service
+/// instead of reporting a tool that was never registered.
+pub const Withdrawn = struct { qualified_name: []const u8, server: []const u8, reason: []const u8 };
+
+const restart_hint = "Inspect /mcp, restart the service and this session, then reload its tool schemas.";
+
 /// The registry lock is held throughout. Never replay a possibly executed call.
 pub fn call(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: Value, context: ?@import("mcp_turn_context.zig").Snapshot) !CallResult {
     return invoke(reg, out_alloc, qualified, input, context) catch |err| switch (err) {
         error.McpClosed, error.ReadFailed, error.WriteFailed, error.BrokenPipe, error.ConnectionResetByPeer => blk: {
-            try withdrawServer(reg, qualified);
+            if (try @import("mcp_restart.zig").closeForRestart(reg, out_alloc, qualified, @errorName(err))) |text| break :blk .{ .text = text, .is_error = true };
+            try withdrawServer(reg, qualified, @errorName(err));
             break :blk .{
-                .text = try std.fmt.allocPrint(out_alloc, "MCP service connection closed or failed ({s}). Its tools have been withdrawn from the catalog. The tool may not have completed; it was not retried automatically. Inspect /mcp, restart the service and this session, then reload its tool schemas.", .{@errorName(err)}),
+                .text = try std.fmt.allocPrint(out_alloc, "MCP service connection closed or failed ({s}). Its tools have been withdrawn from the catalog. The tool may not have completed; it was not retried automatically. " ++ restart_hint, .{@errorName(err)}),
                 .is_error = true,
             };
         },
@@ -37,21 +45,65 @@ pub fn call(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: 
     };
 }
 
-fn withdrawServer(reg: *Registry, qualified: []const u8) !void {
+fn withdrawServer(reg: *Registry, qualified: []const u8, reason: []const u8) !void {
     const server_index = for (reg.tools) |tool| {
         if (std.mem.eql(u8, tool.qualified_name, qualified)) break tool.server_index;
     } else return;
     var available: std.ArrayList(@import("mcp.zig").Tool) = .empty;
-    for (reg.tools) |tool| if (tool.server_index != server_index) try available.append(reg.arena(), tool);
+    var withdrawn: std.ArrayList(Withdrawn) = .empty;
+    try withdrawn.appendSlice(reg.arena(), reg.withdrawn);
+    for (reg.tools) |tool| {
+        if (tool.server_index != server_index) {
+            try available.append(reg.arena(), tool);
+        } else try withdrawn.append(reg.arena(), .{ .qualified_name = tool.qualified_name, .server = tool.serverName(), .reason = reason });
+    }
     // Replace the slice instead of mutating snapshots held by in-flight callers.
     reg.tools = try available.toOwnedSlice(reg.arena());
+    reg.withdrawn = try withdrawn.toOwnedSlice(reg.arena());
     reg.catalog_dirty.store(true, .release);
+}
+
+fn withdrawnTool(reg: *const Registry, qualified: []const u8) ?Withdrawn {
+    for (reg.withdrawn) |w| if (std.mem.eql(u8, w.qualified_name, qualified)) return w;
+    return null;
+}
+
+fn isLive(reg: *const Registry, qualified: []const u8) bool {
+    for (reg.tools) |t| if (std.mem.eql(u8, t.qualified_name, qualified)) return true;
+    return false;
+}
+
+/// #1523: `load_tool_schemas` for a tool or server whose connection closed
+/// this session answers with the unavailable service, not an enabled schema
+/// or an unknown name. Null when nothing requested was withdrawn.
+pub fn unavailableLoad(reg: *Registry, a: Allocator, input: Value) ?[]const u8 {
+    reg.mutex.lockUncancelable(reg.io);
+    defer reg.mutex.unlock(reg.io);
+    const hit: Withdrawn = found: {
+        if (@import("tools.zig").strField(input, "server")) |want| {
+            const live = for (reg.tools) |t| {
+                if (std.mem.eql(u8, t.serverName(), want)) break true;
+            } else false;
+            if (!live) for (reg.withdrawn) |w| if (std.mem.eql(u8, w.server, want)) break :found w;
+        }
+        if (input == .object) if (input.object.get("tools")) |list| if (list == .array) {
+            for (list.array.items) |item| {
+                if (item != .string or isLive(reg, item.string)) continue;
+                if (withdrawnTool(reg, item.string)) |w| break :found w;
+            }
+        };
+        return null;
+    };
+    return std.fmt.allocPrint(a, "MCP service {s} is unavailable: its connection closed or failed earlier in this session ({s}) and its tools were withdrawn, so nothing was loaded and {s} cannot be called. " ++ restart_hint, .{ hit.server, hit.reason, hit.qualified_name }) catch null;
 }
 
 fn invoke(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: Value, context: ?@import("mcp_turn_context.zig").Snapshot) !CallResult {
     const tool = for (reg.tools) |t| {
         if (std.mem.eql(u8, t.qualified_name, qualified)) break t;
     } else {
+        // #1523: a sibling call in the same batch can close the connection
+        // first; this call then reports the same closed service.
+        if (withdrawnTool(reg, qualified)) |w| return .{ .text = try std.fmt.allocPrint(out_alloc, "MCP service connection closed or failed earlier in this session ({s}). Its tools have been withdrawn from the catalog; this call was not sent. " ++ restart_hint, .{w.reason}), .is_error = true };
         reg.catalog_dirty.store(true, .release);
         return .{ .text = try out_alloc.dupe(u8, "MCP tool is not registered in the current connection. Its loaded schema may be stale. The next catalog will reflect the current registration. Inspect /mcp, restart the session to reconnect the configured service, then reload its schema before retrying."), .is_error = true };
     };

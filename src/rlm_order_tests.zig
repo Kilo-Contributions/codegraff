@@ -301,3 +301,19 @@ test "rlm destructive git in a yolo subagent hits the subagent block (#1292)" {
     try std.testing.expect(std.mem.indexOf(u8, results[0].text, "destructive git is blocked for subagents") != null);
     try std.testing.expectError(error.FileNotFound, f.tmp.dir.openFile(io, "marker", .{}));
 }
+
+test "rlm projection assignments take comments, keywords and sparse fields, then print (#1536)" {
+    var f = try Fixture.init();
+    defer f.deinit();
+    try f.tmp.dir.writeFile(io, .{ .sub_path = "items.json", .data = "[{\"id\":1,\"name\":\"a\"},{\"id\":2}]" });
+    const out = try f.run("items = read_file(\"items.json\")\nids = project(items, \"id\")  # plain ids\nnames = project(x=items, field=\"name\")\nn = len(items) # count\nprint(ids, names, n)");
+    defer gpa.free(out.text);
+    try std.testing.expect(!out.is_error);
+    try std.testing.expectEqualStrings("[1,2]\n[\"a\",null]\n2", out.text);
+
+    const bad = try f.run("t = read_file(\"target.txt\")\nv = project(t, \"id\")\nprint(v)");
+    defer gpa.free(bad.text);
+    try std.testing.expect(bad.is_error);
+    try std.testing.expect(std.mem.indexOf(u8, bad.text, "unsupported statement") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bad.text, "not a JSON array") != null);
+}

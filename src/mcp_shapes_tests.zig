@@ -227,3 +227,20 @@ test "a comment fold names the issue every row shares, and only then" {
     try std.testing.expect(std.mem.indexOf(u8, mixed_fold, "issue") == null);
     try std.testing.expect(std.mem.indexOf(u8, shapes.slim_rule, "\"issue\"") != null);
 }
+
+test "a transcript's messages are never cut to their ids (#1426)" {
+    const gpa = std.testing.allocator;
+    const pad: [900]u8 = @splat('x');
+    const pad_s: []const u8 = &pad;
+    // One long message, and a window of several: both stay readable.
+    const one = try std.fmt.allocPrint(gpa, "{{\"chatId\":\"c1\",\"total\":1,\"messages\":[{{\"id\":\"m1\",\"role\":\"assistant\",\"text\":\"{s}\"}}]}}", .{pad_s});
+    defer gpa.free(one);
+    try std.testing.expect(shapes.slim(gpa, one) == null);
+    const many = try std.fmt.allocPrint(gpa, "{{\"messages\":[{{\"id\":\"m1\",\"role\":\"user\",\"text\":\"{s}\"}},{{\"id\":\"m2\",\"role\":\"assistant\",\"text\":\"done\"}}]}}", .{pad_s});
+    defer gpa.free(many);
+    try std.testing.expect(shapes.slim(gpa, many) == null);
+    // Rows known only by an opaque id are content too.
+    const bare = try std.fmt.allocPrint(gpa, "[{{\"id\":\"r1\",\"text\":\"{s}\"}}]", .{pad_s});
+    defer gpa.free(bare);
+    try std.testing.expect(shapes.slim(gpa, bare) == null);
+}

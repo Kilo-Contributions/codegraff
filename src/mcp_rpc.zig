@@ -1,9 +1,8 @@
 //! MCP JSON-RPC transport plumbing, split out of mcp.zig to keep it under
 //! the repo's 600-line cap: the per-server transport union/state, the
 //! legacy `initialize` handshake, era detection, and raw request/notify
-//! framing over either stdio or Streamable HTTP. mcp.zig keeps the
-//! higher-level `Registry` (server lifecycle, tool discovery, tool
-//! dispatch) and aliases `Server`/`Transport` from here.
+//! framing over either stdio or Streamable HTTP. mcp.zig keeps the higher-level
+//! `Registry` (lifecycle, discovery, dispatch) and aliases `Server`/`Transport`.
 
 const std = @import("std");
 const Io = std.Io;
@@ -24,10 +23,11 @@ pub const StdioTransport = struct {
     child: std.process.Child,
     stdin_writer: Io.File.Writer,
     stdout_reader: Io.File.Reader,
+    relaunch: ?DormantStdio = null, // ADR 0270: how to start it again after it closes
 };
 
-/// A cached stdio server not spawned yet; woken before any request (mcp_lazy.zig).
-pub const DormantStdio = struct { cfg: std.json.ObjectMap };
+/// A stdio server not spawned (yet, or again); woken before any request (mcp_lazy.zig).
+pub const DormantStdio = struct { cfg: std.json.ObjectMap, restarts: u8 = 0 };
 
 pub const Transport = union(enum) {
     stdio: StdioTransport,

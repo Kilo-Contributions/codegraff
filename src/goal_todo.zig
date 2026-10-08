@@ -45,7 +45,7 @@ pub fn clearEpochForReplaceEx(todos: *std.ArrayList(TodoItem), epoch: u64, incom
     var i: usize = 0;
     while (i < todos.items.len) {
         const t = todos.items[i];
-        const done = std.mem.eql(u8, t.status, "completed");
+        const done = t.closed(); // completed or cancelled (#1545): omitted, it stays as history
         const mentioned = mentions(incoming, t.content);
         const verify = !done and goal_verify_kind.isVerification(t.content);
         if (t.epoch != epoch or (done and !mentioned) or (verify and !mentioned)) {
@@ -128,21 +128,69 @@ pub fn applyTodoWrite(root: *Agent, list: ?Value) !WriteResult {
     }
     if (incoming.items.len == 0)
         return .{ .text = "todo_write had no usable items; the list is unchanged. Each item needs a content string and a status. Send your full remaining plan - completed items you omit are kept automatically.", .rejected = true };
+    // #1545: the replace removes re-listed items, so read their prior entry first.
+    const priors = try root.gpa.alloc(?TodoItem, incoming.items.len);
+    defer root.gpa.free(priors);
+    for (incoming.items, priors) |c, *p| p.* = priorItem(root.todos.items, epoch, c);
+    const ask_now = askFingerprint(root);
     const cleared = clearEpochForReplaceEx(&root.todos, epoch, incoming.items);
     goal_state.noteTodoWrite(root); // list changed; open verification still fails allDone (#844)
+    var refused_cancel: usize = 0;
     if (asArray(list)) |items| {
+        var k: usize = 0;
         for (items) |item| {
             const content = contentOf(item) orelse continue;
-            const status = if (item.object.get("status")) |st| (if (st == .string) st.string else "pending") else "pending";
+            const prior = priors[k];
+            k += 1;
+            var status = if (item.object.get("status")) |st| (if (st == .string) st.string else "pending") else "pending";
+            if (!cancelAllowed(status, content, prior, ask_now)) {
+                status = if (prior) |p| p.status else "pending";
+                refused_cancel += 1;
+            }
             try root.todos.append(root.arena, .{
                 .content = try root.arena.dupe(u8, content),
                 .status = try root.arena.dupe(u8, status),
                 .epoch = epoch,
+                .ask_fp = if (prior) |p| p.ask_fp else ask_now, // the request it was FIRST written under
             });
         }
     }
+    var res = try writeResult(root, epoch, incoming.items, cleared);
+    if (refused_cancel > 0) {
+        const note = try std.fmt.allocPrint(root.arena, "\n({d} verification item(s) were not cancelled: a verification item can be cancelled only after a newer user message changes scope; they keep their previous status)", .{refused_cancel});
+        res.text = try std.mem.concat(root.arena, u8, &.{ res.text, note });
+        res.model_text = try std.mem.concat(root.arena, u8, &.{ res.reply(), note });
+    }
+    return res;
+}
+
+/// #1545: cancelling ordinary work is always allowed (omitting it drops it
+/// anyway). A verification item is the #844 obligation, so only the USER can
+/// lift it: the latest user request must differ from the one it was written
+/// under. A brand-new item has nothing to cancel.
+fn cancelAllowed(status: []const u8, content: []const u8, prior: ?TodoItem, ask_now: u64) bool {
+    if (!std.mem.eql(u8, status, "cancelled")) return true;
+    if (!goal_verify_kind.isVerification(content)) return true;
+    const p = prior orelse return false;
+    return p.ask_fp != ask_now;
+}
+
+/// Fingerprint of the latest real user request (notices excluded). Compaction
+/// keeps the current turn's opening message verbatim, so it is stable within
+/// a request and changes when the user sends a new one or steers mid-run.
+fn askFingerprint(root: *const Agent) u64 {
+    const t = @import("messages.zig").latestUserText(root.messages.items);
+    return std.hash.Wyhash.hash(0x1545, t) | 1; // never 0: 0 marks a legacy item
+}
+
+fn priorItem(todos: []const TodoItem, epoch: u64, content: []const u8) ?TodoItem {
+    for (todos) |t| if (t.epoch == epoch and !t.retired and std.mem.eql(u8, t.content, content)) return t;
+    return null;
+}
+
+fn writeResult(root: *Agent, epoch: u64, incoming: []const []const u8, cleared: ReplaceClear) !WriteResult {
     const rendered = goal_state.renderTodos(root, epoch);
-    const reply = try @import("todo_reply.zig").text(root.arena, root.todos.items, epoch, incoming.items, cleared.dropped_open, cleared.kept_verify);
+    const reply = try @import("todo_reply.zig").text(root.arena, root.todos.items, epoch, incoming, cleared.dropped_open, cleared.kept_verify);
     if (cleared.dropped_open == 0 and cleared.kept_verify == 0) return .{ .text = rendered, .model_text = reply };
     if (cleared.kept_verify > 0 and cleared.dropped_open == 0)
         return .{
@@ -180,6 +228,7 @@ fn todoRoot(arena: std.mem.Allocator) Agent {
     root.review_mode = false;
     root.todos = .empty;
     root.goal = null;
+    root.messages = std.json.Array.init(arena); // #1545: applyTodoWrite fingerprints the latest user request
     root.todos_dirty = false;
     root.completion_gate_armed = false;
     return root;

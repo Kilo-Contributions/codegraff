@@ -102,6 +102,14 @@ jobs:
             echo "$msg" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # The per-target signing script; checked out before the download so the
+      # checkout does not clean the downloaded tarballs away.
+      - uses: actions/checkout@v7
+        if: steps.signing.outputs.enabled == 'true'
+        with:
+          sparse-checkout: scripts/release-sign-macos.sh
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v7
         if: steps.signing.outputs.enabled == 'true'
         with:
@@ -135,52 +143,27 @@ jobs:
           echo "Signing as: $identity"
           echo "CODESIGN_IDENTITY=$identity" >>"$GITHUB_ENV"
 
-      - name: Sign and notarize the macOS CLI
+      - name: Write the notary key
         if: steps.signing.outputs.enabled == 'true'
         env:
           AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
-          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
-          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
-        run: |
-          set -euo pipefail
-          # No AppleDouble (._*) members when re-tarring on macOS.
-          export COPYFILE_DISABLE=1
-          key="$RUNNER_TEMP/ac_api_key.p8"
-          printf '%s' "$AC_API_KEY_P8" >"$key"
-          notary=(--key "$key" --key-id "$AC_API_KEY_ID" --issuer "$AC_API_ISSUER_ID")
-          work="$RUNNER_TEMP/notarize"
-          mkdir -p "$work" signed
-          for target in aarch64-macos x86_64-macos; do
-            name="graff-$target"
-            case "$target" in aarch64-*) arch=arm64 ;; *) arch=x86_64 ;; esac
-            tar -xzf "dist/$name.tar.gz" -C "$work"
-            bin="$work/$name/graff"
-            [ "$(lipo -archs "$bin")" = "$arch" ] || { echo "$name: expected $arch, got $(lipo -archs "$bin")" >&2; exit 1; }
-            xattr -cr "$work/$name"
-            # Hardened runtime + secure timestamp are required by the notary service.
-            codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$bin"
-            codesign --verify --strict --verbose=2 "$bin"
+        run: printf '%s' "$AC_API_KEY_P8" >"$RUNNER_TEMP/ac_api_key.p8"
 
-            # ditto, not zip: keep the signed bytes and metadata exact.
-            ditto -c -k --keepParent "$work/$name" "$work/$name.notarize.zip"
-            # notarytool exits 0 even when the submission is Invalid, so the
-            # status field is the gate, not the exit code.
-            xcrun notarytool submit "$work/$name.notarize.zip" "${notary[@]}" \
-              --wait --timeout 30m --output-format json >"$work/$name.notary.json"
-            id="$(plutil -extract id raw -o - "$work/$name.notary.json")"
-            status="$(plutil -extract status raw -o - "$work/$name.notary.json")"
-            echo "$name: notarization $id -> $status"
-            echo "- \`$name\`: notarization \`$id\` $status" >>"$GITHUB_STEP_SUMMARY"
-            if [ "$status" != Accepted ]; then
-              xcrun notarytool log "$id" "${notary[@]}" || true
-              echo "$name: notarization was not Accepted; refusing to ship a signed but unnotarized binary" >&2
-              exit 1
-            fi
-            # Bare CLIs cannot be stapled (stapler error 73); the ticket is
-            # bound to the cdhash and checked online. Ship the accepted bytes.
-            (cd "$work" && tar -czf "$GITHUB_WORKSPACE/signed/$name.tar.gz" "$name")
-          done
-          rm -f "$key"
+      # Each notarization waits minutes on the notary service; the two
+      # targets wait side by side instead of one after the other.
+      - parallel:
+          - name: Sign and notarize aarch64-macos
+            if: steps.signing.outputs.enabled == 'true'
+            env:
+              AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+              AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
+            run: scripts/release-sign-macos.sh aarch64-macos
+          - name: Sign and notarize x86_64-macos
+            if: steps.signing.outputs.enabled == 'true'
+            env:
+              AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+              AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
+            run: scripts/release-sign-macos.sh x86_64-macos
 
       - name: Verify like a user
         if: steps.signing.outputs.enabled == 'true'

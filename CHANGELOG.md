@@ -10,6 +10,36 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.26
+
+### Desktop app and ACP
+
+- The reply to a compaction request no longer shows up in the chat. It is internal bookkeeping, and on its own it could read as the agent saying its terminal and file tools were unavailable.
+- An informational question no longer restarts the checklist of an earlier, unfinished task. The checklist is kept as it was.
+- A request to explain something and file an issue is no longer turned into a repository overview. Scope reminders say they are internal and never replace the user's request.
+- Switching a session to a model from another provider no longer starts a blank conversation when the original provider's sign-in or stored key was not loaded. When a saved session can't be restored, the error names the real cause instead of blaming the save.
+- A message sent while a blocking job wait is running is picked up at the next step, not after the job finishes (ADR 0262).
+- The final session save on exit no longer reads a freed workspace path.
+
+### Tools
+
+- The shared-tree checkpoint holds every file edit in a parallel batch, not just the first one.
+- `gh pr checks --watch` and similar finite watchers are waited on instead of being treated as servers.
+- A newer user message can cancel verification items left over from an earlier task.
+- `write_file` counts a file as read when it was read through a different spelling of its path.
+- `rlm` says why a projection or `len()` statement failed; a failed claim names its cause.
+- `graff -p` asks again after a text-only first answer only when the request asked for an action.
+
+### MCP
+
+- Computer-use tool calls send one `_meta`, so the first call no longer closes the connection.
+- A closed stdio server restarts on its next call (ADR 0270), and a closed service is reported the same way everywhere once its tools are withdrawn.
+- `mcp_search_tools` only searches; it no longer loads what it finds. Transcript messages are no longer slimmed down to their ids.
+
+### Issue reports
+
+- Agents search existing issues before reporting a harness bug, and every report opens with the graff and Harness versions it was seen on.
+
 ## v0.0.302.25
 
 ### Compaction (hotfix)

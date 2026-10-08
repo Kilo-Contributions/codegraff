@@ -58,6 +58,8 @@ pub const Registry = struct {
     mutex: Io.Mutex = .init,
     servers: []*Server = &.{},
     tools: []Tool = &.{},
+    /// Tools withdrawn after their connection closed (#1523, mcp_call.zig).
+    withdrawn: []const @import("mcp_call.zig").Withdrawn = &.{},
     /// Transport failure withdrew tools; owner thread rebuilds its next catalog.
     catalog_dirty: std.atomic.Value(bool) = .init(false),
     /// Startup connection/failure lines are developer diagnostics, not normal REPL output.
@@ -422,6 +424,7 @@ pub const Registry = struct {
             break :blk all.tools;
         };
         try @import("mcp_pages.zig").appendTools(a, tools, server_index, server, tools_v);
+        if (server.transport == .stdio) server.transport.stdio.relaunch = .{ .cfg = try mcp_lazy.cloneMap(a, cfg) }; // ADR 0270
         mcp_rpc.bindNotes(server);
         @import("mcp_pages.zig").listen(server, a); // modern stdio: ask for tools/list_changed
         try servers.append(a, server);
@@ -467,6 +470,7 @@ pub const Registry = struct {
 };
 
 test {
+    _ = @import("mcp_restart.zig"); // ADR 0270
     _ = @import("mcp_cache.zig");
     _ = @import("mcp_boot.zig");
     _ = @import("mcp_elicitation.zig");

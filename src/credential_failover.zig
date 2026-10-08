@@ -104,6 +104,21 @@ pub fn preferPlan(
     source.* = .login;
 }
 
+/// #1556: startup seats plans only for the providers its `--model` selection
+/// can observe. A restored session observes its saved provider too, so seat
+/// that one plan on demand, as an unscoped startup would have: before the
+/// stored-key fill, which only takes empty slots. No-op once it holds a login.
+pub fn preferPlanFor(io: std.Io, gpa: std.mem.Allocator, arena: std.mem.Allocator, home: []const u8, keys: *Keys, provider_id: []const u8) void {
+    if (home.len == 0) return;
+    const i = indexOf(provider_id) orelse return;
+    if (keys.sources[i] == .login) return;
+    preferPlan(io, gpa, arena, home, provider_mod.provider_specs[i], &keys.values[i], &keys.sources[i]);
+}
+
+test {
+    _ = @import("session_load_plan_tests.zig"); // #1556
+}
+
 /// Test-only: the table is process-global, like the key store it mirrors.
 pub fn resetForTest() void {
     g_value = @splat(null);

@@ -372,7 +372,10 @@ fn renderPrint(ctx: ToolCtx, arena: Allocator, inner: []const u8, binds: []const
 fn renderPrintPart(ctx: ToolCtx, arena: Allocator, inner: []const u8, binds: []const Binding, claimed: *std.StringHashMap(ToolOutput), status: *?ToolOutput) ![]const u8 {
     const t = std.mem.trim(u8, inner, " \t");
     if (t.len >= 2 and (t[0] == '"' or t[0] == '\'') and t[t.len - 1] == t[0]) return t[1 .. t.len - 1];
-    if (rlm_reduce.evalExpr(arena, t, binds)) |text| return maybeSlim(arena, text) else |_| {}
+    if (rlm_reduce.evalExpr(arena, t, binds)) |text| return maybeSlim(arena, text) else |err| if (err != error.Miss) {
+        status.* = .{ .text = try rlm_reduce.failText(ctx.gpa, t, err), .is_error = true };
+        return "";
+    }
     var i = binds.len;
     while (i > 0) {
         i -= 1;

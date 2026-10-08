@@ -54,7 +54,7 @@ pub fn currentEpoch(goal: ?agent_mod.Goal) u64 {
 pub fn openCount(todos: []const TodoItem, epoch: u64) usize {
     var n: usize = 0;
     for (todos) |t| {
-        if (t.epoch == epoch and !t.retired and !std.mem.eql(u8, t.status, "completed")) n += 1;
+        if (t.epoch == epoch and !t.retired and !t.closed()) n += 1; // #1545: cancelled is parked, not open
     }
     return n;
 }
@@ -67,7 +67,7 @@ pub fn allDone(todos: []const TodoItem, epoch: u64) bool {
     var seen = false;
     for (todos) |t| {
         if (t.epoch != epoch or t.retired) continue;
-        if (!std.mem.eql(u8, t.status, "completed")) return false;
+        if (!t.closed()) return false; // #1545: a cancelled item closes, but never verifies (goal_verify)
         seen = true;
     }
     return seen;
@@ -304,8 +304,7 @@ pub fn renderTodos(self: *Agent, epoch: u64) []const u8 {
             "[x]"
         else if (std.mem.eql(u8, t.status, "in_progress"))
             "[~]"
-        else
-            "[ ]";
+        else if (std.mem.eql(u8, t.status, "cancelled")) "[-]" else "[ ]";
         w.print("{s} {s}\n", .{ mark, t.content }) catch break;
     }
     return std.mem.trimEnd(u8, aw.writer.buffered(), "\n");

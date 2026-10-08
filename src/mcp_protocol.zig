@@ -95,6 +95,18 @@ pub fn buildRequest(a: Allocator, id: i64, method: []const u8, params: []const u
             \\{{"jsonrpc":"2.0","id":{d},"method":"{s}","params":{{{s}}}}}
         , .{ id, method, modern_meta });
     }
+    // #1511: params that already lead with `_meta` (computer-use turn
+    // context) get the envelope merged in; a second `_meta` key is a
+    // duplicate a strict server rejects.
+    const meta_open = "\"_meta\":{";
+    if (std.mem.startsWith(u8, inner, meta_open)) {
+        const envelope = modern_meta[meta_open.len .. modern_meta.len - 1];
+        const rest = inner[meta_open.len..];
+        const sep: []const u8 = if (std.mem.startsWith(u8, rest, "}")) "" else ",";
+        return std.fmt.allocPrint(a,
+            \\{{"jsonrpc":"2.0","id":{d},"method":"{s}","params":{{{s}{s}{s}{s}}}}}
+        , .{ id, method, meta_open, envelope, sep, rest });
+    }
     return std.fmt.allocPrint(a,
         \\{{"jsonrpc":"2.0","id":{d},"method":"{s}","params":{{{s},{s}}}}}
     , .{ id, method, modern_meta, inner });

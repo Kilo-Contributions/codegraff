@@ -118,6 +118,8 @@ pub fn compactPrelude(self: *Agent) ?usize {
 pub fn compact(self: *Agent) anyerror!usize {
     // An opaque item anywhere in history needs the server, never a local summary.
     if (@import("compaction_window.zig").latestBlob(self.messages.items) != null) return error.ServerCompactionRequired;
+    // Clef gateway pruning replaces the client summary when eligible.
+    if (@import("agent_clef_compact.zig").tryCompact(self)) |n| return n;
     const fork = @import("cache_fork.zig").begin(self); // ADR 0220: read the cached history, not rewrite it
     defer @import("cache_fork.zig").end();
     const pending_tokens = compactPrelude(self) orelse {
@@ -389,7 +391,8 @@ pub fn dropPriorTurnReasoning(self: *Agent) usize {
 
 /// Re-pair the meter after removing locally measurable context. The server-only
 /// delta remains intact, while the current local component reflects the trim.
-fn accountForReclaimedTokens(self: *Agent, reclaimed_tokens: u64) void {
+/// Pub for agent_compact_recover.zig (same split that moved the recovery tail).
+pub fn accountForReclaimedTokens(self: *Agent, reclaimed_tokens: u64) void {
     if (reclaimed_tokens == 0) return;
     self.rebaseContextMeter();
 }
@@ -469,132 +472,8 @@ pub fn capOversizedToolOutputs(self: *Agent, cap: usize) usize {
     return reclaimed;
 }
 
-/// Last-resort context recovery when compact() itself can't run — typically
-/// because the history already overflows the window, so the summarization
-/// request overflows too and fails. Drops the oldest messages at a safe
-/// boundary; returns the count dropped (0 if none). Conservatively reduce the
-/// authoritative meter only by the locally measurable reclaimed tokens: hidden
-/// server-side reasoning may make the true reduction larger, but must never let
-/// a partial trim blind the next pre-send gate.
-pub fn emergencyTrim(self: *Agent) usize {
-    if (emergencyCutIndex(self.messages.items)) |cut| {
-        const before_tokens = self.fullInputEstimateTokens();
-        var fresh = std.json.Array.init(self.arena);
-        for (self.messages.items[cut..]) |m| fresh.append(m) catch return 0;
-        self.messages = fresh;
-        self.goal_note_fp = 0; // trimmed history may have carried the goal note (#318)
-        self.history_rewrites +%= 1; // and the run's checklist gate's pasted copies (#318)
-        // No synthetic message exists here to hang the standing state on (unlike
-        // compact()'s handoff), so it rides the next turn's one-shot slot. Only
-        // when that slot is free: a queued /goal replace|clear note is the USER's
-        // instruction and outranks the harness restating itself (#318).
-        if (self.pending_goal_note == null)
-            self.pending_goal_note = goal_flow.compactionSnapshot(self.arena, self) catch null;
-        const after_tokens = self.fullInputEstimateTokens();
-        accountForReclaimedTokens(self, before_tokens -| after_tokens);
-        return cut;
-    }
-    // #163: no clean user turn to cut at (a runaway tool loop). Don't wedge the
-    // session — reclaim context by truncating the oldest tool outputs in place,
-    // keeping every call/output pair valid. Nonzero = recovered. This too is a
-    // rewrite: the stubbed outputs may include the last todo_write render the
-    // suppressed run note points the model at (#318).
-    if (trimOldestToolOutputs(self) > 0) {
-        self.history_rewrites +%= 1;
-        if (self.pending_goal_note == null)
-            self.pending_goal_note = goal_flow.compactionSnapshot(self.arena, self) catch null;
-        return 1;
-    }
-    return 0;
-}
-
-/// Auto-compaction with recovery. compact() summarizes the whole history in
-/// one request; once context overflows the window that request overflows too
-/// and fails — historically swallowed silently, wedging the session so every
-/// later turn failed at the same huge token count (issue #88). Surface the
-/// failure and, when `trim_on_fail`, emergency-trim so the next turn has
-/// room. Best-effort; never throws into the REPL loop.
-pub fn repeatedOpaqueCompactionFailure(self: *Agent, err: anyerror) bool {
-    const opaque_transport = err == error.ApiError and self.last_request_write_failed;
-    if (opaque_transport)
-        self.compact_transport_failures +|= 1
-    else
-        self.compact_transport_failures = 0;
-    const threshold = self.provider.compactAt();
-    const effective = self.effectiveContextTokens();
-    const locally_over_window = self.provider.context > 0 and self.fullRequestEstimateTokens() >= self.provider.context;
-    return opaque_transport and
-        threshold > 0 and
-        self.compact_transport_failures >= 2 and
-        (self.provider.nearContextLimit(effective) or locally_over_window);
-}
-
-/// #379: two consecutive COMPLETED-but-unusable summaries (empty or truncated)
-/// are provably not transport noise — the model, at this context size, is not
-/// going to produce one, and without escalation the over-cap history is
-/// re-shipped forever. Unlike compact_transport_failures this counter survives
-/// a complete response; only a usable summary (or a trim) resets it.
-pub fn repeatedEmptySummaryFailure(self: *Agent, err: anyerror) bool {
-    const unusable = err == error.EmptySummary or err == error.IncompleteSummary;
-    if (unusable) self.compact_summary_failures +|= 1 else self.compact_summary_failures = 0;
-    const threshold = self.provider.compactAt();
-    return unusable and threshold > 0 and
-        self.compact_summary_failures >= 2 and
-        self.effectiveContextTokens() >= threshold;
-}
-
-pub fn compactOrRecover(self: *Agent, trim_on_fail: bool) void {
-    if (compact_cut.lastIsResolved(self.messages.items)) {
-        self.compact_pin_degraded = false;
-        compact_cut.resetStall(&self.compact_stall);
-    }
-    if (self.compact_pin_degraded and !trim_on_fail) return;
-    const has_opaque = @import("compaction_window.zig").latestBlob(self.messages.items) != null;
-    const result = if (has_opaque or server_compact.serverOnly(self.provider)) server_compact.manualCompact(self) else self.compact();
-    if (result) |_| {
-        self.compact_transport_failures = 0;
-        return;
-    } else |err| {
-        switch (err) {
-            error.Interrupted => {
-                self.compact_transport_failures = 0;
-                return; // user hit Esc mid-compaction
-            },
-            error.EmptySummary, error.IncompleteSummary, error.ActivePromptPinned => {}, // compact() already explained it
-            else => {
-                if (main_mod.json_mode)
-                    self.emit(.{ .type = "error", .message = std.fmt.allocPrint(self.arena, "auto-compaction failed: {s}", .{@errorName(err)}) catch "auto-compaction failed" })
-                else
-                    self.say("[auto-compaction failed: {t}]\n", .{err}) catch {};
-            },
-        }
-        if (has_opaque) return; // server failed: preserve its canonical window, never emergency-trim it
-        const repeated_opaque_overflow = repeatedOpaqueCompactionFailure(self, err);
-        const repeated_empty_summary = repeatedEmptySummaryFailure(self, err);
-        // The caller's policy is computed before compact() makes its summary
-        // request. Override it only for a concrete provider overflow rejection,
-        // after two consecutive WriteFailed compaction attempts when the
-        // effective meter is near 95% (or local bytes prove over-window), or
-        // after two complete-but-unusable summaries while over compact@ (#379).
-        // The first failure and ordinary transport outages preserve history.
-        if (!trim_on_fail and !self.last_request_context_overflow and !repeated_opaque_overflow and !repeated_empty_summary) return;
-        const dropped = self.emergencyTrim();
-        if (dropped > 0) {
-            self.compact_transport_failures = 0;
-            self.compact_summary_failures = 0;
-            // #445: a trim is the harsher half of the same boundary — the model
-            // lost that history WITHOUT even a summary standing in for it, so
-            // the transcript line is worth more here, not less. Hooked at this
-            // call site rather than inside emergencyTrim() because the direct
-            // emergencyTrim callers drive partially-initialized test agents.
-            prompts.noteSessionCompacted(self, self.arena);
-            @import("hot_context.zig").afterCompact(self);
-            if (main_mod.json_mode)
-                self.emit(.{ .type = "compact", .ok = true, .trimmed = dropped })
-            else
-                self.say("[context emergency-trimmed: dropped {d} old message(s) so the session can continue]\n", .{dropped}) catch {};
-        } else if (!main_mod.json_mode) {
-            self.say("[warning: context too large to compact and could not be trimmed safely]\n", .{}) catch {};
-        }
-    }
-}
+/// Re-exported recovery entry points (agent_compact_recover.zig owns them).
+pub const emergencyTrim = @import("agent_compact_recover.zig").emergencyTrim;
+pub const repeatedOpaqueCompactionFailure = @import("agent_compact_recover.zig").repeatedOpaqueCompactionFailure;
+pub const repeatedEmptySummaryFailure = @import("agent_compact_recover.zig").repeatedEmptySummaryFailure;
+pub const compactOrRecover = @import("agent_compact_recover.zig").compactOrRecover;

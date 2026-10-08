@@ -471,7 +471,8 @@ pub fn finalizeSession(gpa: Allocator, io: Io, arena: Allocator, out: *Io.Writer
     // abandoned. Before presence.retire so the event can't outlive the flush.
     @import("task_outcome.zig").noteSessionEnd(root);
     @import("session_globals.zig").release(gpa, io); // retire presence, free gpa-owned globals
-    @import("workspace_switch.zig").deinitDisplay(gpa);
+    // #1193: deferred past the final save, which writes g_cwd_display.
+    defer @import("workspace_switch.zig").deinitDisplay(gpa);
     if (!json_mode and root.messages.items.len > 0) {
         const sink = engine_sink.writerSink(out);
         if (session.saveSession(root, arena, root.session_name)) |_| {

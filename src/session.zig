@@ -493,6 +493,8 @@ pub fn loadSession(root: *Agent, keys: *Keys, arena: Allocator, name: []const u8
     if (cacheKeyFromSession(obj)) |k| http_headers.restoreSessionId(k);
     if (promptCacheKeyFromSession(obj)) |k| http_headers.restoreProjectRootId(k);
 
+    // #1556: an explicit cross-provider --model launch skipped this plan login.
+    if (!claude_import) @import("credential_failover.zig").preferPlanFor(root.io, root.gpa, root.arena, root.home, keys, pid);
     root.ensureStoredKeys(keys);
     if (!claude_import) {
         if (std.mem.eql(u8, pid, "codex")) root.ensureModelCatalog(keys.*);
