@@ -297,6 +297,7 @@ fn codegraffLoginKey(io: Io, arena: Allocator, environ_map: anytype) ?[]const u8
 
 pub fn setupSkillsAndTheme(io: Io, arena: Allocator, environ_map: anytype, out: *Io.Writer, flags: args.Flags, use_color: bool, json_mode: bool, cwd_display: []const u8) !ThemeSetup {
     try applyEnvKnobs(arena, environ_map);
+    @import("compact_at.zig").applyStartup(io, arena); // --compact-at > GRAFF_COMPACT_PCT > saved /compact-at
     @import("python_version.zig").detect(io, environ_map.get("PATH")); // ADR 0242: before any catalog renders
     _ = jev_tool.setCodegraffLoginKey(io, codegraffLoginKey(io, arena, environ_map));
     skills.loadSkillSettings(io, arena); // per-skill opt-outs, also gates the auto-connect

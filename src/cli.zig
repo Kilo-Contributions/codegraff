@@ -23,6 +23,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.27
+    \\  • choose where compaction starts: /compact-at 70, --compact-at, or the desktop setting
+    \\
     \\0.0.302.26
     \\  • compaction replies no longer show up in the desktop chat
     \\  • a question no longer restarts an earlier task's checklist
@@ -233,6 +236,7 @@ pub const usage_text =
     \\  --json           structured stdio protocol (JSON in, JSONL events out)
     \\  --max-run-tool-calls N  aggregate root/descendant tool ceiling for this invocation
     \\  --max-tool-calls N  reject root tool calls after N per turn (JSON-safe budget)
+    \\  --compact-at PCT    start automatic compaction at PCT% of the context window (10-95, default 80)
     \\  --max-model-calls N total provider calls allowed across this run (default 0 = unlimited; includes children/title/judges)
     \\  --dedupe-tool-calls reject duplicate root tool name+input calls per turn
     \\  --no-telemetry   disable anonymous usage telemetry for this run
