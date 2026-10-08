@@ -224,7 +224,8 @@ class Harness:
                  append_system_prompt: Optional[str] = None,
                  max_tool_calls: Optional[int] = None,
                  dedupe_tool_calls: bool = False,
-                 max_model_calls: Optional[int] = None):
+                 max_model_calls: Optional[int] = None,
+                 compact_at: Optional[int] = None):
         binary = binary or _default_binary()
         argv = [binary, "--json"]
         if yolo:
@@ -237,6 +238,8 @@ class Harness:
             argv += ["--max-model-calls", str(max_model_calls)]
         if dedupe_tool_calls:
             argv.append("--dedupe-tool-calls")
+        if compact_at is not None:
+            argv += ["--compact-at", str(compact_at)]
         if system_prompt:
             argv += ["--system-prompt", system_prompt]
         if append_system_prompt:

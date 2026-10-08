@@ -168,6 +168,9 @@ pub fn parse(init: std.process.Init) !Flags {
                 } else if (std.mem.eql(u8, arg, "--max-tool-calls")) {
                     const mv = it.next() orelse std.process.fatal("--max-tool-calls needs a non-negative integer — harness --help", .{});
                     main_mod.max_tool_calls = std.fmt.parseInt(u64, mv, 10) catch std.process.fatal("--max-tool-calls needs a non-negative integer, got '{s}'", .{mv});
+                } else if (std.mem.eql(u8, arg, "--compact-at")) {
+                    const mv = it.next() orelse std.process.fatal("--compact-at needs a percent of the context window (10-95)", .{});
+                    @import("compact_at.zig").g_cli = @import("compact_at.zig").parse(mv) orelse std.process.fatal("--compact-at needs a percent of the context window (10-95), got '{s}'", .{mv});
                 } else if (std.mem.eql(u8, arg, "--max-run-tool-calls")) {
                     const mv = it.next() orelse std.process.fatal("--max-run-tool-calls needs a non-negative integer", .{});
                     @import("run_budget.zig").cli_max_tool_calls = std.fmt.parseInt(u64, mv, 10) catch std.process.fatal("--max-run-tool-calls needs a non-negative integer", .{});
