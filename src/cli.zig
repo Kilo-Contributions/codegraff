@@ -23,6 +23,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.27
+    \\  • choose where compaction starts: /compact-at 70, --compact-at, or the desktop setting
+    \\
     \\0.0.302.26
     \\  • compaction replies no longer show up in the desktop chat
     \\  • a question no longer restarts an earlier task's checklist

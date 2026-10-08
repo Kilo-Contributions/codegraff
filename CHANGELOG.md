@@ -10,6 +10,15 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.27
+
+### Compaction
+
+- You can choose where automatic compaction starts, as a percent of the context window (default 80%, allowed 10-95%). The first of these that is set wins:
+  - `--compact-at PCT` on the command line, or the SDKs' `compactAt` / `compact_at` option.
+  - `GRAFF_COMPACT_PCT`. The desktop app passes its setting this way.
+  - `/compact-at PCT` in a chat. It applies at once and is saved for the workspace. `/compact-at` alone shows the current point, and `/compact-at default` resets it.
+
 ## v0.0.302.26
 
 ### Desktop app and ACP
