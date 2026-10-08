@@ -115,6 +115,9 @@ pub fn dispatch(agent: anytype, call: tools_mod.ToolCall) tools_mod.ExecResult {
 /// request. One call may name folded natives and an MCP server together;
 /// the native answer used to end it, so the server never loaded.
 pub fn loadBoth(agent: anytype, call: tools_mod.ToolCall) tools_mod.ExecResult {
+    // #1425: search lists deferred MCP tools and loads nothing. The native
+    // half's query arm LOADS matching natives, so it never sees a search.
+    if (std.mem.eql(u8, call.name, search_name)) return dispatch(agent, call);
     const native = (@import("native_fold.zig").handleLoadNative(agent, call.input) catch null) orelse return dispatch(agent, call);
     const rest = mcpRemainder(agent.arena, call.input) orelse return native;
     var mcp_call = call;
@@ -181,4 +184,38 @@ test "isName covers only the progressive pair" {
     try std.testing.expect(isName(select_name));
     try std.testing.expect(!isName("load_tool_schemas"));
     try std.testing.expect(!isName("bash"));
+}
+
+test "mcp_search_tools never loads or prints a matching native's schema (#1425)" {
+    const native_fold = @import("native_fold.zig");
+    const Kind = @import("provider.zig").Provider.Kind;
+    const FakeAgent = struct {
+        arena: Allocator,
+        gpa: Allocator,
+        io: Io,
+        agent_cwd: ?[]const u8 = null,
+        sub: bool = false,
+        registry: ?*mcp.Registry = null,
+        provider: struct { kind: Kind } = .{ .kind = .anthropic },
+        rebuilds: usize = 0,
+        pub fn invalidateRootTools(_: *@This()) void {}
+        pub fn ensureRootTools(self: *@This(), _: Kind) !void {
+            self.rebuilds += 1;
+        }
+    };
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const saved = native_fold.enabled;
+    defer native_fold.enabled = saved;
+    native_fold.enabled = true;
+    native_fold.unloadForTest("peer_message");
+    defer native_fold.unloadForTest("peer_message");
+    var agent: FakeAgent = .{ .arena = a, .gpa = std.testing.allocator, .io = std.testing.io };
+    const input = try std.json.parseFromSliceLeaky(Value, a, "{\"query\":\"peer message\"}", .{ .allocate = .alloc_always });
+    const r = loadBoth(&agent, .{ .id = "c1", .name = search_name, .input = input });
+    try std.testing.expect(!native_fold.isLoaded("peer_message"));
+    try std.testing.expectEqual(@as(usize, 0), agent.rebuilds);
+    try std.testing.expect(std.mem.indexOf(u8, r.text, "native tool schema") == null);
+    try std.testing.expect(std.mem.indexOf(u8, r.text, "no MCP servers are connected") != null);
 }
