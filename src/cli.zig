@@ -23,6 +23,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.28
+    \\  • the Codegraff usage page shows which graff version and device sent each request
+    \\
     \\0.0.302.27
     \\  • choose where compaction starts: /compact-at 70, --compact-at, or the desktop setting
     \\

@@ -10,6 +10,15 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.28
+
+### Codegraff gateway
+
+- Requests to the Codegraff gateway now say which graff build sent them (`User-Agent: graff/<version>`), which device they came from, and which app launched graff. The usage page on codegraff.com shows them on each request.
+  - The device is the computer's hostname. A launcher can name it instead with `GRAFF_DEVICE_NAME`; the desktop app passes the name the computer has there.
+  - The app comes from `GRAFF_HOST_APP`. The desktop app sets it to its own version.
+  - `GRAFF_CLIENT_TAGS=off` sends neither the device nor the app. Other providers get none of these headers.
+
 ## v0.0.302.27
 
 ### Compaction
