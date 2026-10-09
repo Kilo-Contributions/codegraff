@@ -54,9 +54,14 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
     var n: usize = 0;
     extras[n] = .{ .name = "content-type", .value = "application/json" };
     n += 1;
-    if (std.mem.eql(u8, provider.id, "kimi")) {
-        extras[n] = .{ .name = "user-agent", .value = main_mod.kimi_user_agent };
-        n += 1;
+    // The same User-Agent choice as the HTTP/1.1 path (kimi's identity, the
+    // gateway's graff/<version>); the rest keep http_zig's default.
+    switch (http_headers.userAgent(provider)) {
+        .override => |ua| {
+            extras[n] = .{ .name = "user-agent", .value = ua };
+            n += 1;
+        },
+        else => {},
     }
     for (extra, 0..) |h, i| {
         if (i >= name_store.len or n >= extras.len) break;

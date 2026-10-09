@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.0.302.29
+
+### Codegraff gateway
+
+- Streamed requests to the Codegraff gateway now carry graff's version (`User-Agent: graff/<version>`) as well. In v0.0.302.28 only the device and app reached the usage page for them.
+
 ## v0.0.302.28
 
 ### Codegraff gateway
