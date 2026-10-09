@@ -201,6 +201,8 @@ pub fn applyEnvKnobs(arena: Allocator, environ_map: anytype) !void {
             if (n > 0) provider_mod.g_context_override = n;
         } else |_| {}
     }
+    // Gateway client tags: the launcher's device name and app (client_tags.zig).
+    @import("client_tags.zig").applyEnv(environ_map.get("GRAFF_DEVICE_NAME"), environ_map.get("GRAFF_HOST_APP"), environ_map.get("GRAFF_CLIENT_TAGS"));
     if (environ_map.get("GRAFF_TOOL_HANDLE_BYTES")) |v| tool_handle.applyEnv(v); // #440: bytes at which a tool result becomes preview + handle
     if (environ_map.get("GRAFF_CONTEXT_LIMIT")) |v| @import("context_limits.zig").applyEnv(v);
     // #204: GRAFF_COMPACT_PCT overrides the auto-compaction threshold as a percent

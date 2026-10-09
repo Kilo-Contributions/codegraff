@@ -6,6 +6,7 @@ const Provider = @import("provider.zig").Provider;
 const root = @import("main.zig");
 const kimi_catalog = @import("kimi_catalog.zig");
 const cache_affinity = @import("cache_affinity.zig"); // ADR 0069: git-root / scratch seed
+const client_tags = @import("client_tags.zig");
 
 var session_id_buf: [36]u8 = undefined;
 var session_id_len: usize = 0;
@@ -180,6 +181,7 @@ pub fn userAgent(provider: Provider) std.http.Client.Request.Headers.Value {
     if (std.mem.eql(u8, provider.id, "kimi")) {
         return .{ .override = root.kimi_user_agent };
     }
+    if (std.mem.eql(u8, provider.id, "codegraff")) return .{ .override = client_tags.user_agent }; // the gateway records the build
     return .default;
 }
 
@@ -241,6 +243,8 @@ pub fn providerHeadersWithConv(io: Io, provider: Provider, bearer: []const u8, b
         const identity = kimi_catalog.identityHeaders(buf[count..]);
         count += identity.len;
     }
+    // The Codegraff gateway records each request's device and launching app.
+    if (std.mem.eql(u8, provider.id, "codegraff")) count += client_tags.headers(buf[count..]).len;
     // Z.AI docs default the response language this way; omit and some
     // accounts still answer, but the cache examples all send it.
     if (std.mem.eql(u8, provider.id, "zai")) {
