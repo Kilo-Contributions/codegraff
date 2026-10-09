@@ -13,7 +13,10 @@ test "codegraff Claude sends bearer + anthropic-version + binding beta, never x-
     var buf: [12]std.http.Header = undefined;
     const p: Provider = .{ .id = "codegraff", .kind = .anthropic, .auth = .bearer, .url = "", .api_key = "k", .model = "claude-opus-5-5", .context = 1_000_000 };
     const headers = http_headers.providerHeaders(io, p, "Bearer k", &buf);
-    try std.testing.expectEqual(@as(usize, 3), headers.len);
+    // Then only the gateway's client tags (client_tags.zig), never x-api-key.
+    try std.testing.expect(headers.len >= 3);
+    for (headers[3..]) |h| try std.testing.expect(std.mem.startsWith(u8, h.name, "X-Codegraff-"));
+    for (headers) |h| try std.testing.expect(!std.ascii.eqlIgnoreCase(h.name, "x-api-key"));
     try std.testing.expectEqualStrings("authorization", headers[0].name);
     try std.testing.expectEqualStrings("Bearer k", headers[0].value);
     try std.testing.expectEqualStrings("anthropic-version", headers[1].name);
