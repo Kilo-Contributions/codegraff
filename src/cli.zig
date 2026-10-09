@@ -23,6 +23,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.0.302.29
+    \\  • streamed requests to the Codegraff gateway carry graff's version too
+    \\
     \\0.0.302.28
     \\  • the Codegraff usage page shows which graff version and device sent each request
     \\
