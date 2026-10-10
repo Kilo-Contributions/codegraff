@@ -358,6 +358,7 @@ test {
     _ = @import("experiment_pool.zig");
     _ = @import("commands_experiment.zig");
     _ = @import("acp_engine.zig");
+    _ = @import("acp_t3_tests.zig"); // T3 Code profile
     _ = @import("acp_config.zig");
     _ = @import("session_start_plugins_test.zig");
     _ = @import("acp_mcp_servers.zig");

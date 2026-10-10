@@ -82,6 +82,9 @@ pub const Dispatch = struct {
     extra: ?ExtraFn = null,
     config: ?ConfigFn = null,
     set_config: ?SetConfigFn = null,
+    /// The `model` option; only T3 Code's profile offers it (acp_model_option.zig).
+    model_config: ?ConfigFn = null,
+    set_model: ?SetConfigFn = null,
     mcp_servers: ?McpServersFn = null,
     error_message: ?*const fn (ctx: *anyopaque, err: anyerror) []const u8 = null,
     cancel_info: ?*const fn (ctx: *anyopaque) ?Cancellation = null,
@@ -118,26 +121,16 @@ fn supportsBackgroundSubagents(params: ?std.json.Value) bool {
 }
 
 pub fn configOptions(d: *Dispatch, arena: Allocator) ![]const ConfigOption {
-    const config = d.config orelse return &.{};
-    const option = try config(d.ctx, arena) orelse return &.{};
-    const items = try arena.alloc(ConfigOption, 1);
-    items[0] = option;
-    return items;
-}
-
-fn sameConfig(before: []const ConfigOption, after: []const ConfigOption) bool {
-    if (before.len != after.len) return false;
-    for (before, after) |a, b| {
-        if (!std.mem.eql(u8, a.currentValue, b.currentValue) or a.options.len != b.options.len) return false;
-        for (a.options, b.options) |av, bv| if (!std.mem.eql(u8, av.value, bv.value)) return false;
-    }
-    return true;
+    var items: std.ArrayList(ConfigOption) = .empty;
+    if (d.model_config) |model| if (try model(d.ctx, arena)) |option| try items.append(arena, option);
+    if (d.config) |config| if (try config(d.ctx, arena)) |option| try items.append(arena, option);
+    return items.items;
 }
 
 pub fn emitConfigChange(d: *Dispatch, arena: Allocator, w: *Io.Writer, sid: []const u8, before: []const ConfigOption) !void {
     if (d.config == null) return;
     const after = try configOptions(d, arena);
-    if (sameConfig(before, after)) return;
+    if (@import("acp_model_option.zig").same(before, after)) return;
     try proto.writeNotification(w, "session/update", .{ .sessionId = sid, .update = .{
         .sessionUpdate = "config_option_update",
         .configOptions = after,
@@ -202,14 +195,15 @@ fn promptTurn(d: *Dispatch, arena: Allocator, w: *Io.Writer, req: proto.Request)
     const config_before = configOptions(d, arena) catch |err| return turnError(d, w, req, err);
     const workspace_before = acp_workspace.snapshot(d.workspace, arena);
     // Before slash handling: an agent's room line must not run as a command.
-    const text = try @import("acp_room.zig").frame(arena, req.params, try flattenPrompt(arena, if (obj) |o| o.get("prompt") else null));
+    const flat = try flattenPrompt(arena, if (obj) |o| o.get("prompt") else null);
+    const text = try @import("acp_room.zig").frame(arena, req.params, flat);
     if (d.slash) |slash| {
-        const reply = slash(d.ctx, arena, text) catch |err| {
+        const reply = slash(d.ctx, arena, @import("acp_t3.zig").slashText(if (obj) |o| o.get("prompt") else null, flat, text)) catch |err| {
             emitConfigChange(d, arena, w, sid, config_before) catch |config_err| return turnError(d, w, req, config_err);
             return turnError(d, w, req, err);
         };
         if (reply) |plain| {
-            if (plain.len > 0) try writeSessionUpdate(w, sid, plain);
+            if (plain.len > 0) try writeSessionUpdate(w, sid, try @import("acp_t3.zig").slashReply(arena, plain));
             emitConfigChange(d, arena, w, sid, config_before) catch |config_err| return turnError(d, w, req, config_err);
             try acp_workspace.emitChange(d.workspace, arena, w, sid, workspace_before);
             try emitMeter(d, w, sid);
@@ -293,6 +287,7 @@ pub fn handleLine(d: *Dispatch, arena: Allocator, w: *Io.Writer, line: []const u
     const req = parseRequest(arena, line) orelse return;
     if (std.mem.eql(u8, req.method, "initialize")) {
         v2.negotiate(req.params, d.seed);
+        @import("acp_t3.zig").note(req.params);
         @import("acp_elicit.zig").configure(req.params);
         @import("acp_compaction.zig").noteInitialize(req.params);
         // The draft child-session RFD is a v1 shape; v2 gets tool-call progress.
@@ -322,7 +317,7 @@ pub fn handleLine(d: *Dispatch, arena: Allocator, w: *Io.Writer, line: []const u
             try respond(w, req, .{ .sessionId = d.session_id.?, ._meta = acp_workspace.meta(env, arena) })
         else
             try respond(w, req, .{ .sessionId = d.session_id.? });
-        try proto.writeAvailableCommands(w, d.session_id.?, proto.slashCommands());
+        try proto.writeAvailableCommands(w, d.session_id.?, try @import("acp_t3.zig").commands(arena, proto.slashCommands()));
         return;
     }
     if ((d.load_session != null and (std.mem.eql(u8, req.method, "session/prompt") or std.mem.eql(u8, req.method, "session/cancel") or std.mem.eql(u8, req.method, "session/close"))) or
@@ -352,9 +347,8 @@ pub fn handleLine(d: *Dispatch, arena: Allocator, w: *Io.Writer, line: []const u
         if (params != .object) return respondError(w, req, -32602, "Invalid configuration option");
         const id = util.strFieldObj(params.object, "configId") orelse return respondError(w, req, -32602, "Invalid configuration option");
         const value = util.strFieldObj(params.object, "value") orelse return respondError(w, req, -32602, "Invalid configuration value");
-        if (!std.mem.eql(u8, id, "thought_level"))
-            return respondError(w, req, -32602, "Invalid configuration value");
-        const accepted = d.set_config.?(d.ctx, value) catch |err| return respondError(w, req, err_internal, @errorName(err));
+        const setter = if (std.mem.eql(u8, id, "thought_level")) d.set_config.? else if (std.mem.eql(u8, id, "model")) d.set_model orelse return respondError(w, req, -32602, "Invalid configuration value") else return respondError(w, req, -32602, "Invalid configuration value");
+        const accepted = setter(d.ctx, value) catch |err| return respondError(w, req, err_internal, @errorName(err));
         if (!accepted) return respondError(w, req, -32602, "Invalid configuration value");
         const options = configOptions(d, arena) catch |err| return respondError(w, req, err_internal, @errorName(err));
         return respond(w, req, .{ .configOptions = options });
