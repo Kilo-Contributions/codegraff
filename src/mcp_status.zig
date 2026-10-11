@@ -178,11 +178,20 @@ pub fn offline(io: Io, arena: Allocator, home: []const u8, merged: mcp_config.Me
         const cfg = e.value_ptr.*.object;
         var row = baseRow(io, arena, home, merged, e.key_ptr.*, cfg);
         _ = applySkip(&row, mcp_state.skipReason(state, row.name, cfg, environ_map, merged.isGlobalOnly(row.name)));
-        if (mcp_cache.lookupAnyAge(io, arena, home, mcp_cache.keyFor(arena, cfg))) |hit| {
+        const key = mcp_cache.keyFor(arena, cfg);
+        if (mcp_cache.lookupAnyAge(io, arena, home, key)) |hit| {
             row.tools = cachedTools(arena, hit.tools);
             row.toolCount = row.tools.len;
             if (row.enabled) row.state = .on_demand;
         }
+        // The last start failed (this session or an earlier one) and nothing
+        // has started it since: say so, keeping its last-known tools.
+        if (row.enabled) if (@import("mcp_failures.zig").get(io, arena, home, key)) |f| {
+            row.state = if (std.mem.eql(u8, f.code, "McpAuthenticationRequired")) .needs_login else .failed;
+            row.@"error" = f.text;
+            row.errorCode = f.code;
+            row.detail = f.detail;
+        };
         try rows.append(arena, row);
     }
     return rows.items;

@@ -77,8 +77,11 @@ def main():
         assert rows['broken']['state'] == 'failed', rows['broken']
         assert rows['broken']['detail'] == 'broken: not licensed. Run: broken activate', rows['broken']
 
-        # Cached per cwd: the next listing keeps each server's own tools.
+        # Cached per cwd: the next listing keeps each server's own tools, and a
+        # failed server stays failed (with its own words) until it starts.
         rows = graff(binary, work, env, 'status')
+        assert rows['broken']['state'] == 'failed', rows['broken']
+        assert rows['broken']['detail'] == 'broken: not licensed. Run: broken activate', rows['broken']
         assert rows['alpha']['state'] == 'on_demand' and rows['alpha']['tools'][0]['name'] == 'alpha_has_path', rows['alpha']
         assert rows['beta']['tools'][0]['name'] == 'beta_has_path', rows['beta']
 

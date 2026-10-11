@@ -429,7 +429,8 @@ fn loginInner(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, server
     defer listener.deinit(io);
     try out.print("\nOpen this URL to authorize (the browser should open automatically):\n\n{s}\n\nWaiting for the callback on {s} …\n", .{ authorization_url, redirect_uri });
     try out.flush();
-    openBrowser(io, authorization_url);
+    // GRAFF_NO_BROWSER: a client (the fullscreen TUI) opens the printed URL itself.
+    if (!@import("main.zig").g_no_browser) openBrowser(io, authorization_url);
 
     // Only this attempt's redirect (its state) ends the wait.
     var read_buffer: [16 * 1024]u8 = undefined;

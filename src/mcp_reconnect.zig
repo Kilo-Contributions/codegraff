@@ -50,7 +50,9 @@ pub fn probe(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, merged:
     }
     for (rows.items, futures) |*row, *fut| if (fut.*) |*f| apply(io, arena, row, f.await(io));
     for (rows.items) |*row| if (row.state == .failed and row.transport[0] == 's' and !std.mem.eql(u8, row.errorCode orelse "", "FileNotFound")) {
-        row.detail = stderrHint(io, gpa, arena, merged.servers.get(row.name).?.object);
+        const cfg = merged.servers.get(row.name).?.object;
+        row.detail = stderrHint(io, gpa, arena, cfg);
+        if (row.detail != null) @import("mcp_failures.zig").record(io, arena, home, mcp_cache.keyFor(arena, cfg), .{ .code = row.errorCode orelse "failed", .text = row.@"error" orelse "failed to start", .detail = row.detail });
     };
     return rows.items;
 }
@@ -94,6 +96,7 @@ fn apply(io: Io, arena: Allocator, row: *mcp_status.Row, outcome: StartOutcome) 
     row.state = .ready;
     row.@"error" = null;
     row.errorCode = null;
+    row.detail = null;
     row.tools = tools.items;
     row.toolCount = tools.items.len;
     mcp_rpc.deinitServer(server, io, .init(io, mcp_teardown.teardown_grace));
@@ -134,9 +137,11 @@ pub fn live(reg: *mcp.Registry, merged: mcp_config.Merged, name: []const u8) Liv
     defer reg.lazy_stdio = lazy;
     reg.startServer(a, &servers, &tools, a.dupe(u8, name) catch return .{ .failed = error.OutOfMemory }, cfg) catch |err| {
         mcp_start.note(name, err);
+        @import("mcp_failures.zig").recordErr(reg.io, reg.gpa, reg.home, cfg, err, null);
         return .{ .failed = err };
     };
     mcp_start.clear(name);
+    @import("mcp_failures.zig").clearCfg(reg.io, reg.gpa, reg.home, cfg);
     return swapIn(reg, index, servers.items[0], tools.items) catch |err| .{ .failed = err };
 }
 

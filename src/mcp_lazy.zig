@@ -131,6 +131,14 @@ pub fn dormantFromCache(io: Io, a: Allocator, home: []const u8, name: []const u8
 /// Spawn and handshake a dormant server before its first request. On failure
 /// it stays dormant, so a later call tries again.
 pub fn wake(reg: anytype, server: *mcp_rpc.Server) !void {
+    const cfg = server.transport.dormant.cfg;
+    wakeInner(reg, server) catch |err| {
+        @import("mcp_failures.zig").recordErr(reg.io, reg.gpa, reg.home, cfg, err, null); // `graff mcp status` says why
+        return err;
+    };
+}
+
+fn wakeInner(reg: anytype, server: *mcp_rpc.Server) !void {
     const dormant = server.transport.dormant;
     const cfg = dormant.cfg;
     const a = reg.arena();
@@ -153,6 +161,7 @@ pub fn wake(reg: anytype, server: *mcp_rpc.Server) !void {
     mcp_rpc.bindNotes(server);
     @import("mcp_pages.zig").listen(server, a);
     if (reg.show_diagnostics) std.debug.print("  [mcp:{s}] started on first use\n", .{server.name});
+    @import("mcp_failures.zig").clearCfg(reg.io, reg.gpa, reg.home, cfg);
     refreshCache(reg, server, cfg);
 }
 

@@ -33,15 +33,16 @@ pub fn task(ctx: Ctx, name: []const u8, cfg: std.json.ObjectMap) StartOutcome {
     return attempt(ctx, name, cfg) catch |first| {
         if (transient(first)) {
             ctx.io.sleep(.fromMilliseconds(ctx.retry_ms), .awake) catch {};
-            if (attempt(ctx, name, cfg)) |outcome| return outcome else |again| return failed(ctx, name, again);
+            if (attempt(ctx, name, cfg)) |outcome| return outcome else |again| return failed(ctx, name, cfg, again);
         }
-        return failed(ctx, name, first);
+        return failed(ctx, name, cfg, first);
     };
 }
 
-fn failed(ctx: Ctx, name: []const u8, err: anyerror) StartOutcome {
+fn failed(ctx: Ctx, name: []const u8, cfg: std.json.ObjectMap, err: anyerror) StartOutcome {
     if (ctx.show_diagnostics) std.debug.print("  [mcp:{s}] failed to start: {t}\n", .{ name, err });
     note(name, err);
+    @import("mcp_failures.zig").recordErr(ctx.io, ctx.gpa, ctx.home, cfg, err, null);
     return .{};
 }
 
@@ -65,6 +66,8 @@ fn attempt(ctx: Ctx, name: []const u8, cfg: std.json.ObjectMap) !StartOutcome {
     defer tmp.arena_state.deinit();
     try tmp.startServer(a, &servers, &tools, name, cfg);
     clear(name);
+    // Restored dormant from the cache is not a start: it proves nothing.
+    if (servers.items[0].transport != .dormant) @import("mcp_failures.zig").clearCfg(ctx.io, ctx.gpa, ctx.home, cfg);
     return .{ .server = servers.items[0], .tools = tools.items, .arena_state = arena_state };
 }
 

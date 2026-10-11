@@ -43,7 +43,11 @@ nothing said why and nothing could fix it short of a new session:
 - **The cache key includes `cwd` and a hash of `env`**, and per-server `env`
   overlays graff's own environment.
 - **A transient start failure is retried once** (`mcp_start.zig`), and every
-  failure is recorded by name so `/mcp` can say why.
+  failure is recorded by name so `/mcp` can say why. The last failure of each
+  server is also kept in `~/.codegraff/mcp-failures.json` (keyed like the
+  cache) until a real start succeeds, so `graff mcp status` reports a server
+  that broke in an earlier session without starting it. A server restored
+  dormant from the cache clears nothing.
 
 ## Consequences
 
