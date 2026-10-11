@@ -170,6 +170,9 @@ pub fn build(b: *std.Build) void {
     const mcp_add_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-add.py" });
     mcp_add_test.addArtifactArg(exe);
     test_step.dependOn(&mcp_add_test.step);
+    const mcp_status_test = b.addSystemCommand(&.{ "python3", "scripts/test-mcp-status.py" });
+    mcp_status_test.addArtifactArg(exe);
+    test_step.dependOn(&mcp_status_test.step);
     const acp_v2_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-v2.py" });
     acp_v2_test.addArtifactArg(exe);
     test_step.dependOn(&acp_v2_test.step);

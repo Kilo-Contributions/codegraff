@@ -55,7 +55,7 @@ test "MCP recovery #1467: first call EOF returns restart guidance without replay
     defer std.testing.allocator.free(result.text);
     try std.testing.expect(result.is_error);
     try std.testing.expect(std.mem.indexOf(u8, result.text, "McpClosed") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result.text, "restart the service and this session") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "/mcp reconnect <server>") != null);
     try std.testing.expectEqual(@as(i64, 2), spawned.server.next_id);
     try std.testing.expectEqual(@as(usize, 0), (try reg.snapshotTools(reg.arena())).len);
     try std.testing.expect(reg.catalog_dirty.load(.acquire));

@@ -216,10 +216,12 @@ pub const Registry = struct {
         try tools.appendSlice(a, reg.tools);
         const before = servers.items.len;
 
+        const state = @import("mcp_state.zig").load(reg.io, a, reg.home);
         var it = merged.servers.iterator();
         while (it.next()) |entry| {
             const name = entry.key_ptr.*;
-            if (entry.value_ptr.* != .object) continue;
+            if (entry.value_ptr.* != .object or state.isDisabled(name)) continue; // switched off: graff mcp disable
+            if (!state.isEnabled(name) and @import("mcp_state.zig").offInConfig(entry.value_ptr.*.object)) continue; // off in its own file
             // Already connected (auto-activated muonry, or a prior /mcp trust)? skip.
             var present = false;
             for (reg.servers) |s| if (std.mem.eql(u8, s.name, name)) {
@@ -229,33 +231,12 @@ pub const Registry = struct {
             if (present) continue;
             reg.startServer(a, &servers, &tools, try a.dupe(u8, name), entry.value_ptr.*.object) catch |err| {
                 if (reg.show_diagnostics) std.debug.print("  [mcp:{s}] failed to start: {t}\n", .{ name, err });
+                @import("mcp_start.zig").note(name, err); // /mcp says why
             };
         }
         reg.servers = try a.dupe(*Server, servers.items);
         reg.tools = try a.dupe(Tool, tools.items);
         return servers.items.len - before;
-    }
-
-    /// How many configured MCP servers are NOT yet connected — drives the
-    /// `/mcp trust` discoverability hint. Mirrors `trustWorkspace`'s
-    /// skip-by-name logic over the same merged (project + global) set;
-    /// best-effort (any read/parse failure contributes nothing).
-    pub fn pendingWorkspace(reg: *Registry, config_path: []const u8) usize {
-        const a = reg.arena();
-        const merged = mcp_config.load(reg.io, a, Io.Dir.cwd(), config_path, reg.global_config_path, reg.home, reg.global_is_override);
-        var n: usize = 0;
-        var it = merged.servers.iterator();
-        while (it.next()) |entry| {
-            if (entry.value_ptr.* != .object) continue;
-            var present = false;
-            for (reg.servers) |s| if (std.mem.eql(u8, s.name, entry.key_ptr.*)) {
-                present = true;
-                break;
-            };
-            // Still connecting in the background is not "not connected" (ADR 0230).
-            if (!present and !mcp_boot.alreadyStarting(reg, entry.key_ptr.*)) n += 1;
-        }
-        return n;
     }
 
     /// Number of tools a given server (by index) contributed — for `/mcp`.
@@ -474,4 +455,11 @@ test {
     _ = @import("mcp_cache.zig");
     _ = @import("mcp_boot.zig");
     _ = @import("mcp_elicitation.zig");
+    _ = @import("mcp_start.zig");
+    _ = @import("mcp_state.zig");
+    _ = @import("mcp_status.zig");
+    _ = @import("mcp_status_cli.zig");
+    _ = @import("mcp_reconnect.zig");
+    _ = @import("mcp_listing.zig");
+    _ = @import("mcp_failures.zig");
 }
