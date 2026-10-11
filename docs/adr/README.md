@@ -289,6 +289,7 @@ record only when you need the evidence or the edge cases.
 | [0260](0260-clef-compaction-replaces-client-summary.md) | `GRAFF_CLEF_COMPACT=1` routes client-summary compactions through the gateway's server-side `POST /v1/compact` (Clef decision-model pruning, text verbatim); OpenAI-family server paths are untouched and any failure falls back to the summary. |
 | [0261](0261-client-summary-stays-the-compactor.md) | The client summary stays the compactor: `GRAFF_CLEF_COMPACT` defaults off (Clef rarely pruned and mostly fell back to the summary in measurement); first-party Responses routes use only the provider's own compaction. Supersedes 0260's default. |
 | [0270](0270-a-closed-stdio-mcp-server-restarts-on-its-next-call.md) | A stdio MCP server whose connection closes goes back to dormant with its launch config and restarts on its next call; the failed call is never replayed, and after two restarts in a session its tools are withdrawn as before. |
+| [0281](0281-anthropic-console-sign-in-reads-the-sdk-profile.md) | Anthropic Console sign-in: graff reads the `user_oauth` profile Anthropic's CLI writes (`ant auth login`), in the SDK's precedence (API key wins), sends it as Bearer, and refreshes through `ant auth print-credentials`; `graff login anthropic` runs `ant auth login`. No claude.ai subscription login. |
 
 ## When to write one
 
