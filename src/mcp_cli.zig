@@ -215,6 +215,9 @@ fn mcpCliUsage(w: *Io.Writer) !void {
         \\  graff mcp add … --everywhere   save to ~/.codegraff/mcp.json (every project) instead of ./.mcp.json
         \\  graff mcp add <name> --url <https://...> [--header KEY=VALUE ...]
         \\  graff mcp login <name>        OAuth login for a remote server
+        \\  graff mcp status [--json]     each server's state and tools, without starting any
+        \\  graff mcp reconnect <name>|--all [--json]   start fresh and refresh the cached tools
+        \\  graff mcp enable|disable <name>   switch a server on or off everywhere
         \\  graff mcp add <name> [--env KEY=VALUE ...] -- <command> [args...]
         \\  graff mcp add <name> <command> [args...]
         \\
@@ -277,6 +280,7 @@ fn addInferred(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, envir
 }
 
 pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, environ_map: anytype, args: []const []const u8) !void {
+    @import("mcp_lazy.zig").remember(environ_map); // add/reconnect start servers too
     if (args.len > 0 and std.mem.eql(u8, args[0], "install")) {
         // The installer sets up a launchd/systemd service; spawning it on
         // Windows failed with a bare FileNotFound.
@@ -324,6 +328,11 @@ pub fn mcpCommand(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, en
         try @import("adopt.zig").command(io, arena, home, cwd, &out.interface);
         return;
     }
+
+    if (args.len > 0) if (@import("mcp_status_cli.zig").verb(args[0])) {
+        const merged = mcp_config.load(io, arena, Io.Dir.cwd(), mcp_config_path, global_path, home, mcp_config.isEnvOverride(environ_map));
+        return @import("mcp_status_cli.zig").run(io, gpa, arena, home, merged, args, &out.interface, environ_map);
+    };
 
     if (args.len == 0 or std.mem.eql(u8, args[0], "list")) {
         const merged = mcp_config.load(io, arena, Io.Dir.cwd(), mcp_config_path, global_path, home, mcp_config.isEnvOverride(environ_map));

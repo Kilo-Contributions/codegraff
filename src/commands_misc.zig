@@ -229,6 +229,15 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
             root.invalidateRootTools();
             try root.ensureRootTools(root.provider.kind);
         }
+        if (std.mem.startsWith(u8, arg, "reconnect")) {
+            if (try @import("mcp_listing.zig").reconnect(reg, arena, out, mcp_config_path, std.mem.trim(u8, arg["reconnect".len..], " \t"))) {
+                root.invalidateRootTools();
+                @import("prompt_cache_hud.zig").noteBust(.mcp);
+                try root.ensureRootTools(root.provider.kind);
+                root.rebaseContextMeter();
+            }
+            return true;
+        }
         if (std.mem.startsWith(u8, arg, "add")) {
             // /mcp add <name> <command> [args...] or <name> --url <URL>
             var it = std.mem.tokenizeAny(u8, arg["add".len..], " \t");
@@ -304,7 +313,6 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
             return true;
         }
         // Plain /mcp: list servers (with tool counts) then tools.
-        const pending = reg.pendingWorkspace(mcp_config_path);
         if (reg.servers.len == 0) {
             try out.writeAll("no MCP servers connected.\n  add one: /mcp add <name> <command> [args...]\n  e.g.   /mcp add fs npx -y @modelcontextprotocol/server-filesystem .\n");
         } else {
@@ -322,9 +330,7 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
             for (reg.tools) |t| try out.print("    {s}{s}{s}{s}\n", .{ style.dim, t.qualified_name, if (mcp_schema_gate.isDeferred(reg.tools, t)) "  schema deferred (#416); the model loads it on demand" else "", style.reset });
             try out.writeAll("  add more: /mcp add <name> <command> [args...]\n");
         }
-        const still = @import("mcp_connect_notice.zig").connecting(reg, arena);
-        if (still.len > 0) try out.print("  {s}still connecting: {s}{s}\n", .{ style.dim, try std.mem.join(arena, ", ", still), style.reset });
-        if (pending > 0) try out.print("  {s}{d} configured server(s) not connected — /mcp trust to connect them{s}\n", .{ style.dim, pending, style.reset });
+        try @import("mcp_listing.zig").notConnected(reg, arena, out, mcp_config_path); // why each other server is not connected
         try out.flush();
         return true;
     }
