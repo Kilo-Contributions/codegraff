@@ -28,7 +28,7 @@ pub const CallResult = struct { text: []u8, is_error: bool };
 /// instead of reporting a tool that was never registered.
 pub const Withdrawn = struct { qualified_name: []const u8, server: []const u8, reason: []const u8 };
 
-const restart_hint = "Inspect /mcp, restart the service and this session, then reload its tool schemas.";
+const restart_hint = "Inspect /mcp; `/mcp reconnect <server>` starts it again without a new session, then reload its tool schemas.";
 
 /// The registry lock is held throughout. Never replay a possibly executed call.
 pub fn call(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: Value, context: ?@import("mcp_turn_context.zig").Snapshot) !CallResult {
@@ -105,7 +105,7 @@ fn invoke(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: Va
         // first; this call then reports the same closed service.
         if (withdrawnTool(reg, qualified)) |w| return .{ .text = try std.fmt.allocPrint(out_alloc, "MCP service connection closed or failed earlier in this session ({s}). Its tools have been withdrawn from the catalog; this call was not sent. " ++ restart_hint, .{w.reason}), .is_error = true };
         reg.catalog_dirty.store(true, .release);
-        return .{ .text = try out_alloc.dupe(u8, "MCP tool is not registered in the current connection. Its loaded schema may be stale. The next catalog will reflect the current registration. Inspect /mcp, restart the session to reconnect the configured service, then reload its schema before retrying."), .is_error = true };
+        return .{ .text = try out_alloc.dupe(u8, "MCP tool is not registered in the current connection. Its loaded schema may be stale. The next catalog will reflect the current registration. Inspect /mcp; `/mcp reconnect <server>` starts the configured service again, then reload its schema before retrying."), .is_error = true };
     };
 
     const server = reg.servers[tool.server_index];

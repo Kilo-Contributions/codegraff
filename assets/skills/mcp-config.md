@@ -57,6 +57,9 @@ graff mcp add <name> --env KEY=VALUE -- <command>    # with env
 graff mcp add <name> --url https://host/mcp          # remote server
 graff mcp add <name> --url https://host/mcp --header KEY=VALUE
 graff mcp login <name>                               # OAuth for a remote server
+graff mcp status [--json]                            # each server's state and tools, starts nothing
+graff mcp reconnect <name> | --all                   # fresh handshake; refreshes its cached tools
+graff mcp enable|disable <name>                      # switch a server on or off everywhere
 ```
 
 `graff mcp add` and `/mcp add` write the project `.mcp.json`; only
@@ -75,6 +78,8 @@ repo) or a token the user supplies at runtime.
   connect one live and persist it
 - `/mcp trust` - connect the servers that were skipped at startup, project and
   global alike
+- `/mcp reconnect <name>` - start one server again (a failed one joins for the
+  first time) without a new session
 
 ## When a server is not connected
 
@@ -84,6 +89,11 @@ starts with an empty but live registry. A global entry gets no extra trust for
 being global - it just follows you into every project. `/mcp trust` is the
 in-session fix and `/mcp` shows what is pending. Remote servers pass the same
 gate, because their arguments leave the machine.
+
+`/mcp` says why each other server is not connected: failed (with the cause),
+off (`graff mcp disable`, or `"enabled": false` in its own entry), optional
+(`graff mcp enable <name>` opts in), or not started (consent). `graff mcp
+reconnect <name>` retries one and prints the server's own last error line.
 
 After that, in likelihood order: the command is not on PATH, the package name
 is wrong, the server needs a token that is not set, the URL is not HTTPS, or

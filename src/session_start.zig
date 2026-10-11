@@ -450,6 +450,7 @@ pub fn initRegistryConsent(io: Io, gpa: Allocator, arena: Allocator, out: *Io.Wr
     // Grok/Codex MCP trees. applyEnvKnobs sets it too, but only after the
     // registry has already connected their servers.
     @import("plugins.zig").applyEnv(environ_map);
+    @import("mcp_lazy.zig").remember(environ_map); // also for /mcp add|trust after a declined consent
     const global_path = mcp_config.globalPath(arena, home, environ_map);
     const sink = engine_sink.writerSink(out);
     // First interactive session copies Claude/Cursor MCP into ~/.codegraff once.

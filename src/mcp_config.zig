@@ -44,6 +44,9 @@ pub const Merged = struct {
     /// The workspace half on its own, so `graff mcp list` can tag an entry the
     /// project does not define as `(global)`.
     project: std.json.ObjectMap = .empty,
+    /// The user-level file's half, so a status row can say where an entry
+    /// came from (project, global, or imported from another client).
+    global: std.json.ObjectMap = .empty,
     /// Whether either file existed. `mcp.Registry.init` returns null (MCP stays
     /// optional) only when neither did.
     found: bool = false,
@@ -130,6 +133,7 @@ pub fn load(io: Io, arena: Allocator, dir: Io.Dir, project_path: []const u8, glo
     // as "no config" and then pick up a project file on a later read.
     if (global_is_override and merged.found and !merged.invalid_global and global.count() == 0)
         return merged;
+    merged.global = global;
 
     merged.project = readServers(io, arena, dir, project_path, &merged.found, &merged.invalid_project);
 
