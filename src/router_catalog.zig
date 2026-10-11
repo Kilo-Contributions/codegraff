@@ -225,14 +225,14 @@ pub fn parseModels(arena: Allocator, provider_id: []const u8, data: []const u8) 
     };
 }
 
-/// Catalog GET auth mirrors the provider's chat auth: OpenAI-style routers
-/// take a bearer token; Anthropic's /v1/models wants the same x-api-key +
-/// anthropic-version pair as the Messages endpoint itself. xAI OAuth user
-/// tokens also need X-XAI-Token-Auth (same as chat — GrokAuthCredentials).
+/// Catalog GET auth mirrors chat auth: Bearer for OpenAI-style routers and an
+/// Anthropic Console sign-in (ADR 0281); an Anthropic API key sends x-api-key +
+/// anthropic-version. xAI OAuth user tokens also need X-XAI-Token-Auth.
 pub fn catalogHeaders(arena: Allocator, spec: provider.ProviderSpec, key: []const u8, source: provider.Keys.CredentialSource, buf: *[4]std.http.Header) ?[]const std.http.Header {
     buf[0] = .{ .name = "Accept", .value = "application/json" };
     if (spec.auth == .x_api_key) {
-        buf[1] = .{ .name = "x-api-key", .value = key };
+        const console = @import("anthropic_profile.zig").bearerToken(spec.id, key);
+        buf[1] = if (console) .{ .name = "Authorization", .value = std.fmt.allocPrint(arena, "Bearer {s}", .{key}) catch return null } else .{ .name = "x-api-key", .value = key };
         buf[2] = .{ .name = "anthropic-version", .value = root.anthropic_version };
         return buf[0..3];
     }

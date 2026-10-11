@@ -310,4 +310,9 @@ test "an expiring Console token is refreshed through ant, and sent as a bearer t
     try testing.expectEqual(provider_mod.Provider.Auth.bearer, p.auth);
     const api_key = keys.build(provider_mod.specFor("anthropic").?, "sk-ant-api03-k", "claude-opus-5-5");
     try testing.expectEqual(provider_mod.Provider.Auth.x_api_key, api_key.auth);
+    // The model list (router_catalog) authenticates the same way.
+    var hb: [4]std.http.Header = undefined;
+    const hs = @import("router_catalog.zig").catalogHeaders(a, provider_mod.specFor("anthropic").?, "sk-ant-oat01-new", .login, &hb).?;
+    try testing.expectEqualStrings("Authorization", hs[1].name);
+    try testing.expectEqualStrings("Bearer sk-ant-oat01-new", hs[1].value);
 }
