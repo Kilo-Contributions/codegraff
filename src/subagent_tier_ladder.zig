@@ -241,8 +241,8 @@ test "#471 a derived ladder offering no real descent yields to the compiled row"
     // measured data outranks the hand-picked default, which is the whole
     // point of #373. Only the empty-after-checking case yields.
     const real = [_]TierLadder{
-        .{ .provider = "anthropic", .frontier = "claude-opus-5", .small = "claude-haiku-4-5" },
+        .{ .provider = "anthropic", .frontier = "claude-opus-5", .small = "claude-haiku-5-5" },
     };
     bench.g_ladders = &real;
-    try std.testing.expectEqualStrings("claude-haiku-4-5", forProvider("anthropic").?.small.?);
+    try std.testing.expectEqualStrings("claude-haiku-5-5", forProvider("anthropic").?.small.?);
 }

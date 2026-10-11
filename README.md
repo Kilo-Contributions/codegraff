@@ -65,6 +65,7 @@ graff login chatgpt             # ChatGPT sign-in (same as: graff login codex)
 graff login kimi
 graff login zai
 graff login xai
+graff login anthropic           # Anthropic Console account (API credits), via Anthropic's `ant` CLI
 graff key set deepseek sk-...   # any provider by API key
 graff --model grok-4.6
 ```

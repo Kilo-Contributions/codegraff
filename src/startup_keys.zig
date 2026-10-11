@@ -254,6 +254,7 @@ fn missingCredentials() noreturn {
         \\no API key found. quickest fixes:
         \\  graff login                         free codegraff key (device-code OAuth)
         \\  graff key set <provider> <key>      store a key (macOS Keychain, else 0600 file)
+        \\  graff login anthropic               Anthropic Console account (its workspace's API credits)
         \\  export ANTHROPIC_API_KEY=sk-ant-…   or CODEGRAFF/DEEPSEEK/OPENAI/MINIMAX/XIAOMI/KIMI/MOONSHOT/XAI/ZAI _API_KEY
         \\a Codex CLI login (~/.codex/auth.json) is also picked up automatically.
     , .{});
@@ -316,6 +317,12 @@ pub fn resolveKeysOptional(io: Io, gpa: Allocator, arena: Allocator, environ_map
     // candidate providers. Load those stored keys now; model/fallback/resume
     // surfaces fill the rest on demand. Aliases/default startup still need all
     // keys because availability participates in their routing tie-break.
+    // Anthropic Console sign-in (anthropic_profile.zig): a profile named by
+    // ANTHROPIC_PROFILE outranks a stored key; the active one fills in after.
+    const ap = @import("anthropic_profile.zig");
+    if (keys.get("anthropic") == null) if (ap.load(io, arena, environ_map, keys_cli.homeEnv(environ_map) orelse "", true)) |t| {
+        _ = keys.set("anthropic", t, .login);
+    };
     const selective_stored_keys = hasSelectiveStoredKeyScope(model_flag);
     var stored_keys_loaded = !selective_stored_keys;
     if (keys_cli.homeEnv(environ_map)) |home| {
@@ -331,6 +338,9 @@ pub fn resolveKeysOptional(io: Io, gpa: Allocator, arena: Allocator, environ_map
         } else keys_cli.loadMissingStoredKeys(io, gpa, arena, home, &keys, .all);
     }
     const home = keys_cli.homeEnv(environ_map) orelse "";
+    if (keys.get("anthropic") == null) if (ap.load(io, arena, environ_map, home, false)) |t| {
+        _ = keys.set("anthropic", t, .login);
+    };
     var model_catalog: models_cache.LazyCodexCatalog = .{ .codex_home = oauth.codexHomeDir(arena, home) orelse "" };
     const saved_model: ?serde.SavedModel = if (model_flag == null) serde.loadModel(io, arena, home) else null;
     // Dynamic Codex discovery is observable only when startup may select
@@ -396,4 +406,8 @@ pub fn resolveKeysOptional(io: Io, gpa: Allocator, arena: Allocator, environ_map
         };
     }
     return .{ .keys = @import("bench_priors.zig").noteKeysAtStartup(keys, io, arena, keys_cli.homeEnv(environ_map)), .default_provider = default_provider, .stale_saved_model = stale_saved_model, .preferred_provider = preferred_provider, .codex_account = codex_account, .model_catalog = model_catalog, .stored_keys_loaded = stored_keys_loaded };
+}
+
+test {
+    _ = @import("anthropic_profile.zig");
 }

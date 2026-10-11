@@ -275,7 +275,7 @@ pub const Provider = struct {
         return .{
             .id = spec.id,
             .kind = if (is_kimi_anthropic or @import("provider_codegraff.zig").usesMessages(spec.id, model)) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
-            .auth = if (is_kimi_anthropic) .x_api_key else spec.auth,
+            .auth = if (is_kimi_anthropic) .x_api_key else if (@import("anthropic_profile.zig").bearerToken(spec.id, base.api_key)) .bearer else spec.auth,
             .url = resolvedUrl(spec, model),
             .api_key = base.api_key,
             .model = model,
@@ -371,7 +371,7 @@ pub const Keys = struct {
         return .{
             .id = spec.id,
             .kind = if (is_kimi_anthropic or @import("provider_codegraff.zig").usesMessages(spec.id, model)) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
-            .auth = if (is_kimi_anthropic) .x_api_key else spec.auth,
+            .auth = if (is_kimi_anthropic) .x_api_key else if (@import("anthropic_profile.zig").bearerToken(spec.id, key)) .bearer else spec.auth,
             .url = resolvedUrl(spec, model),
             .api_key = key,
             .model = model,

@@ -345,6 +345,7 @@ pub fn refreshOAuthKey(io: Io, gpa: Allocator, arena: Allocator, home: []const u
     const is_xai = std.mem.eql(u8, provider_id, "xai");
     const is_codex = std.mem.eql(u8, provider_id, "codex");
     const is_chatgpt = std.mem.eql(u8, provider_id, "chatgpt-new");
+    if (std.mem.eql(u8, provider_id, "anthropic")) return .{ .key = @import("anthropic_profile.zig").fresh(io, gpa, arena, force) orelse return null };
     if (!is_kimi and !is_xai and !is_codex and !is_chatgpt) return null;
     oauth_refresh_mutex.lockUncancelable(io);
     defer oauth_refresh_mutex.unlock(io);
