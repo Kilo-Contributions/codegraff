@@ -10,6 +10,23 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.30
+
+Releases are now tagged with three parts (`v0.302.N`). `graff update` treats v0.302.30 as newer than every v0.0.302.N.
+
+### MCP servers
+
+- Every configured MCP server now reports its state: ready, starts on first use, failed (with the server's own error), needs sign-in, off, or optional. `graff mcp status [--json]` reads it without starting anything, and `/mcp` shows the same rows inside a session. `/mcp` only suggests `/mcp trust` when consent is what's missing (#1606).
+- `graff mcp reconnect <name>|--all` and `/mcp reconnect <name>` run a fresh handshake and refresh the server's cached tool list. A failed reconnect shows the server's last stderr line.
+- `graff mcp enable|disable <name>` switch a server on or off without editing its config (kept in `~/.codegraff/mcp-state.json`). Entries their own file marks `"enabled": false` are no longer started.
+- Fixed: servers that share a launcher command and differ only in `cwd` no longer advertise each other's tools; a server's `env` now adds to graff's environment instead of replacing it, so `npx` servers with an env var start; a transient start failure is retried once. The last failure is remembered until the server starts.
+- `GRAFF_NO_BROWSER=1` makes `graff mcp login` print the sign-in URL instead of opening a browser.
+
+### Anthropic
+
+- `graff login anthropic` signs in with an Anthropic Console account through Anthropic's `ant` CLI, so requests bill to that account's API credits. graff reads the profile `ant auth login` writes, sends it as a Bearer token, and refreshes it through `ant`. An `ANTHROPIC_API_KEY` still wins (#1607).
+- Claude Haiku 5.5 replaces Claude Haiku 4.5 in the catalog: 1M-token context, long-context pricing above 100k prompt tokens, adaptive thinking and effort (#1608).
+
 ## v0.0.302.29
 
 ### Codegraff gateway

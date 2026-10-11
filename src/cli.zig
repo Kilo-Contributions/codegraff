@@ -23,6 +23,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.30
+    \\  • graff mcp status / reconnect / enable / disable, and /mcp reconnect in a session
+    \\  • graff login anthropic: use an Anthropic Console account
+    \\  • Claude Haiku 5.5 replaces Haiku 4.5
+    \\
     \\0.0.302.29
     \\  • streamed requests to the Codegraff gateway carry graff's version too
     \\
