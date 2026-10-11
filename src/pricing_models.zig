@@ -24,7 +24,7 @@ pub const rows = [_]ModelInfo{
     .{ .provider = "anthropic", .name = "claude-opus-4-7", .context = 1_000_000 },
     .{ .provider = "anthropic", .name = "claude-opus-4-6", .context = 1_000_000 },
     .{ .provider = "anthropic", .name = "claude-sonnet-4-6", .context = 1_000_000 },
-    .{ .provider = "anthropic", .name = "claude-haiku-4-5", .context = 200_000 },
+    .{ .provider = "anthropic", .name = "claude-haiku-5-5", .context = 1_000_000 },
     .{ .provider = "anthropic", .name = "claude-opus-4-5", .context = 200_000 },
     .{ .provider = "anthropic", .name = "claude-sonnet-4-5", .context = 200_000 },
     .{ .provider = "deepseek", .name = "deepseek-v4-pro", .context = 1_000_000 },
