@@ -258,6 +258,7 @@ pub fn parse(init: std.process.Init) !Flags {
                 try flags.positionals.append(arena, try arena.dupe(u8, arg));
             }
         }
+        acpLoginIsLogin(&flags.positionals);
         if (flags.positionals.items.len > 0 and std.mem.eql(u8, flags.positionals.items[0], "login")) flags.login_flag = true;
         if (flags.login_flag and flags.positionals.items.len > 1) {
             const name = flags.positionals.items[1];
@@ -320,6 +321,15 @@ pub fn parse(init: std.process.Init) !Flags {
 /// <name>` alike. Every ChatGPT name, codex included, is the plan's sign-in,
 /// chatgpt-new: the Codex client's login no longer works (ADR 0229). Null:
 /// not a login.
+/// ACP Terminal Auth advertises `args: ["login"]`. The v1 schema appends them
+/// to the agent command (`graff acp login`); the registry's docs say they
+/// replace it (`graff login`). Both must sign in, never start the server.
+pub fn acpLoginIsLogin(positionals: *std.ArrayList([]const u8)) void {
+    const items = positionals.items;
+    if (items.len > 1 and std.mem.eql(u8, items[0], "acp") and std.mem.eql(u8, items[1], "login"))
+        _ = positionals.orderedRemove(0);
+}
+
 pub fn loginTarget(name: []const u8) ?[]const u8 {
     const aliases = [_][2][]const u8{
         .{ "codex", "chatgpt-new" }, .{ "chatgpt", "chatgpt-new" }, .{ "openai", "chatgpt-new" },  .{ "gpt", "chatgpt-new" },
@@ -342,6 +352,24 @@ test "loginTarget: every ChatGPT name, codex included, is the plan's sign-in; un
     try std.testing.expectEqualStrings("anthropic", loginTarget("anthropic").?);
     try std.testing.expect(loginTarget("chatgptt") == null);
     try std.testing.expect(loginTarget("") == null);
+}
+
+test "acp login is login, with or without a target; plain acp stays acp" {
+    const gpa = std.testing.allocator;
+    for ([_]struct { in: []const []const u8, first: []const u8, len: usize }{
+        .{ .in = &.{ "acp", "login" }, .first = "login", .len = 1 },
+        .{ .in = &.{ "acp", "login", "chatgpt" }, .first = "login", .len = 2 },
+        .{ .in = &.{"acp"}, .first = "acp", .len = 1 },
+        .{ .in = &.{ "acp", "--yolo" }, .first = "acp", .len = 2 },
+        .{ .in = &.{"login"}, .first = "login", .len = 1 },
+    }) |case| {
+        var list: std.ArrayList([]const u8) = .empty;
+        defer list.deinit(gpa);
+        try list.appendSlice(gpa, case.in);
+        acpLoginIsLogin(&list);
+        try std.testing.expectEqualStrings(case.first, list.items[0]);
+        try std.testing.expectEqual(case.len, list.items.len);
+    }
 }
 
 test "tui is a reserved subcommand, not a one-shot prompt" {
