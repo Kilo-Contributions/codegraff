@@ -259,3 +259,30 @@ jobs:
       - name: smoke --help
         shell: cmd
         run: zig-out\bin\graff.exe --help
+
+      # graff update on Windows runs the release's install.ps1 (there is no
+      # /bin/sh). It must replace the RUNNING graff.exe: install.ps1 renames it
+      # aside. This branch's install.ps1 is served locally; the release asset it
+      # installs is the latest published one.
+      - name: graff update replaces a running graff.exe (Windows)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'graff-update'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Copy-Item zig-out\bin\graff.exe (Join-Path $dir 'graff.exe')
+          $server = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1' -WorkingDirectory $PWD -PassThru
+          Start-Sleep -Seconds 2
+          try {
+            $env:GRAFF_INSTALL_PS1_URL = 'http://127.0.0.1:8765/install.ps1'
+            & (Join-Path $dir 'graff.exe') update --force
+            if ($LASTEXITCODE -ne 0) { throw "graff update exited $LASTEXITCODE" }
+          } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          }
+          $after = & (Join-Path $dir 'graff.exe') --version | Select-Object -First 1
+          $latest = (Invoke-RestMethod https://api.github.com/repos/justrach/codegraff/releases/latest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" }).tag_name.TrimStart('v')
+          if ($after -ne "graff $latest") { throw "expected 'graff $latest' after the update, got '$after'" }
+          if (-not (Test-Path (Join-Path $dir 'graff.exe.old'))) { throw 'the running graff.exe was not renamed aside' }
+          Write-Host "graff update on Windows: $after installed over the running build"

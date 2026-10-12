@@ -140,6 +140,9 @@ pub fn build(b: *std.Build) void {
     const acp_goal_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-goal.py" });
     acp_goal_test.addArtifactArg(exe);
     test_step.dependOn(&acp_goal_test.step);
+    const acp_meta_status_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-meta-tool-status.py" });
+    acp_meta_status_test.addArtifactArg(exe);
+    test_step.dependOn(&acp_meta_status_test.step);
     const acp_startup_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-startup.py" });
     acp_startup_test.addArtifactArg(exe);
     test_step.dependOn(&acp_startup_test.step);

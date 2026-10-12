@@ -9,6 +9,7 @@
 //! since they're only ever printed from within main().
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
@@ -23,6 +24,10 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.31
+    \\  • tool rows for todo_write, peer_message and schema loads finish in ACP clients
+    \\  • graff update works on Windows
+    \\
     \\0.302.30
     \\  • graff mcp status / reconnect / enable / disable, and /mcp reconnect in a session
     \\  • graff login anthropic: use an Anthropic Console account
@@ -170,6 +175,7 @@ pub const usage_text =
     \\  graff [-p] "prompt"              one-shot: run the prompt, print the answer, exit
     \\  graff login                      get a codegraff key (device-code OAuth)
     \\  graff login chatgpt              ChatGPT sign-in (also: codex, openai)
+    \\  graff login anthropic            Anthropic Console sign-in (runs `ant auth login`)
     \\  graff login kimi                 Kimi Code OAuth login (device-code)
     \\  graff login xai                  Grok/SuperGrok OAuth login (device-code)
     \\  graff login zai                  Z.AI Coding Plan OAuth login
@@ -363,6 +369,8 @@ pub fn updateCommand(
         try out.writeAll("could not determine latest version; running installer anyway…\n");
     }
     try out.flush();
+
+    if (builtin.os.tag == .windows) return @import("update_windows.zig").run(io, gpa, environ, out);
 
     // Delegate download/codesign/atomic swap to install.sh. Inherit our stdio
     // so its progress (and any sudo prompt) reaches the terminal directly.
