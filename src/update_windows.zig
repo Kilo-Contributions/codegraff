@@ -43,6 +43,10 @@ pub fn run(io: Io, gpa: Allocator, environ: *const std.process.Environ.Map, out:
     try env.put("GRAFF_INSTALL_DIR", dir);
     // Updating keeps the install where it is; PATH already finds it.
     try env.put("GRAFF_NO_PATH", "1");
+    // Started from PowerShell 7, graff carries its PSModulePath, and Windows
+    // PowerShell then cannot load its own modules (Get-FileHash is "not
+    // recognized"). Without it powershell.exe uses its defaults.
+    _ = env.swapRemove("PSModulePath");
 
     var child = std.process.spawn(io, .{
         .argv = &.{ "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script },
