@@ -94,8 +94,13 @@ if ($env:GRAFF_NO_PATH -ne '1') {
     if (($env:Path -split ';') -notcontains $dir) { $env:Path = "$env:Path;$dir" }
 }
 
-$version = & (Join-Path $dir 'graff.exe') --version 2>&1 | Select-Object -First 1
-if ($LASTEXITCODE -ne 0) { Fail "graff.exe did not start: $version" }
+# Capture everything before taking the first line: `| Select-Object -First 1`
+# closes the pipe while graff still prints its what's-new list, and the write
+# error made a working graff.exe exit non-zero ("did not start").
+$output = & (Join-Path $dir 'graff.exe') --version 2>&1
+$code = $LASTEXITCODE
+$version = $output | Select-Object -First 1
+if ($code -ne 0) { Fail "graff.exe did not start: $version" }
 Write-Host "  version   $version"
 
 Write-Host ''
