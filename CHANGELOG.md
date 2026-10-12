@@ -10,6 +10,25 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.32
+
+### ACP
+
+- A `yield_turn` handoff is delivered once. Clients showed the agent's closing message twice, and the handoff's tool row stayed "in progress" (#1615).
+- After `/resume` or `--branch`, the prompt result reports the save the session moved onto (`_meta["graff/durableSessionId"]`), so a client restoring after a restart loads the right conversation instead of failing with "Unknown session ID" (#1529).
+- `graff acp login` signs in instead of starting the ACP server, for clients that run ACP Terminal Auth's `login` argument after `acp` (#1601).
+- A client named `t3-code…` gets a profile: slash commands as the first prompt block, the client's working folder kept as given, a `model` option listing reachable models (#1603).
+
+### Sign-in
+
+- `graff login anthropic` works when no browser on this machine can finish it: driven by a client such as the desktop app, over SSH, or on a server without a display. It used to wait forever for a browser callback; it now has Anthropic's page show a code to paste back.
+
+### Installing and running
+
+- `graff tui` finds a client installed by the desktop app and, with none installed, offers to download and verify one (#1444).
+- The Linux MCP service unit is valid: its working directory was quoted, which systemd rejects (#1593).
+- When something stops graff with SIGTERM, graff names the sending process on stderr before exiting (#1596).
+
 ## v0.302.31
 
 ### ACP
