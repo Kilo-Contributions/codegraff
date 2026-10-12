@@ -163,6 +163,18 @@ pub fn bearerToken(provider_id: []const u8, key: []const u8) bool {
     return std.mem.eql(u8, provider_id, "anthropic") and std.mem.startsWith(u8, key, "sk-ant-oat");
 }
 
+/// `ant auth login` by default waits for the browser on a loopback callback,
+/// which only a browser on this same machine can reach. With `--no-browser`
+/// Anthropic's page shows a code to paste instead, which works from anywhere:
+/// a client driving graff (Harness pipes the code in), SSH, or a server with
+/// no display.
+pub fn pastesCode(environ_map: anytype) bool {
+    if (environ_map.get("GRAFF_NO_BROWSER") != null) return true;
+    if (environ_map.get("SSH_CONNECTION") != null or environ_map.get("SSH_TTY") != null) return true;
+    if (builtin.os.tag != .linux) return false;
+    return environ_map.get("DISPLAY") == null and environ_map.get("WAYLAND_DISPLAY") == null;
+}
+
 /// `graff login anthropic`: Anthropic's CLI signs in (browser, Console
 /// account, workspace); graff then reads what it wrote.
 pub fn login(io: Io, arena: Allocator, environ_map: anytype, home: []const u8) !void {
@@ -170,7 +182,11 @@ pub fn login(io: Io, arena: Allocator, environ_map: anytype, home: []const u8) !
     var buf: [1024]u8 = undefined;
     var w = Io.File.stdout().writerStreaming(io, &buf);
     const out = &w.interface;
-    var child = std.process.spawn(io, .{ .argv = &.{ ant_bin, "auth", "login" }, .stdin = .inherit, .stdout = .inherit, .stderr = .inherit }) catch |err| switch (err) {
+    const argv: []const []const u8 = if (pastesCode(environ_map))
+        &.{ ant_bin, "auth", "login", "--no-browser" }
+    else
+        &.{ ant_bin, "auth", "login" };
+    var child = std.process.spawn(io, .{ .argv = argv, .stdin = .inherit, .stdout = .inherit, .stderr = .inherit }) catch |err| switch (err) {
         error.FileNotFound => {
             try out.writeAll(
                 \\graff signs in to an Anthropic Console account through Anthropic's CLI, `ant`, which isn't installed.
@@ -315,4 +331,19 @@ test "an expiring Console token is refreshed through ant, and sent as a bearer t
     const hs = @import("router_catalog.zig").catalogHeaders(a, provider_mod.specFor("anthropic").?, "sk-ant-oat01-new", .login, &hb).?;
     try testing.expectEqualStrings("Authorization", hs[1].name);
     try testing.expectEqualStrings("Bearer sk-ant-oat01-new", hs[1].value);
+}
+
+test "sign-in pastes a code whenever no local browser can finish it" {
+    var env: std.process.Environ.Map = .init(std.testing.allocator);
+    defer env.deinit();
+    try env.put("DISPLAY", ":0");
+    try std.testing.expect(!pastesCode(&env));
+    try env.put("GRAFF_NO_BROWSER", "1");
+    try std.testing.expect(pastesCode(&env));
+    _ = env.swapRemove("GRAFF_NO_BROWSER");
+    try env.put("SSH_CONNECTION", "10.0.0.1 22 10.0.0.2 22");
+    try std.testing.expect(pastesCode(&env));
+    _ = env.swapRemove("SSH_CONNECTION");
+    _ = env.swapRemove("DISPLAY");
+    try std.testing.expectEqual(builtin.os.tag == .linux, pastesCode(&env));
 }
