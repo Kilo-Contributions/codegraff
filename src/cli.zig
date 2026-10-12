@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.32
+    \\  • a yield_turn handoff shows once in ACP clients
+    \\  • graff login anthropic works from the desktop app, SSH and servers
+    \\  • graff tui installs its client on first use
+    \\
     \\0.302.31
     \\  • tool rows for todo_write, peer_message and schema loads finish in ACP clients
     \\  • graff update works on Windows
