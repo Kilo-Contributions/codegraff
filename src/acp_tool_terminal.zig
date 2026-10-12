@@ -164,3 +164,41 @@ test "EventSink: every announced id ends once, meta tools included (#1600)" {
     try testing.expectEqual(@as(usize, 1), terminal_for.count(out, "td1", "\"status\":\"failed\""));
     try testing.expect(std.mem.indexOf(u8, out, "\"toolCallId\":\"ac\"") == null);
 }
+
+test "EventSink: a yield_turn handoff stays delivered past its tool's end (#1615)" {
+    const stream = @import("acp_stream.zig");
+    var buf: [8192]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    var sid: []const u8 = "s1";
+    var saw = false;
+    var sink: stream.EventSink = undefined;
+    sink.init(testing.allocator, &w, &sid, &saw);
+    defer sink.deinit();
+    // tool start -> handoff text -> terminal status: the handoff is the answer
+    // already on the wire, so the turn's returned handoff must not repeat it.
+    for ([_][]const u8{
+        "{\"type\":\"tool_call\",\"id\":\"y1\",\"name\":\"yield_turn\",\"input\":{\"message\":\"HANDOFF\"}}",
+        "{\"type\":\"text\",\"text\":\"HANDOFF\"}",
+        "{\"type\":\"tool_call_finished\",\"id\":\"y1\",\"name\":\"yield_turn\",\"is_error\":false,\"ms\":1}",
+    }) |line| {
+        try sink.writer.writeAll(line);
+        try sink.writer.writeAll("\n");
+    }
+    try sink.writer.flush();
+    try testing.expect(saw);
+    try testing.expect(std.mem.indexOf(u8, w.buffered(), "\"status\":\"completed\"") != null);
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, w.buffered(), "\"text\":\"HANDOFF\""));
+
+    // A preamble followed by a tool still leaves the real answer to come.
+    for ([_][]const u8{
+        "{\"type\":\"text\",\"text\":\"Let me check.\"}",
+        "{\"type\":\"tool_call\",\"id\":\"r1\",\"name\":\"read_file\",\"input\":{\"path\":\"a\"}}",
+        "{\"type\":\"tool_result\",\"id\":\"r1\",\"name\":\"read_file\",\"is_error\":false,\"text\":\"x\"}",
+        "{\"type\":\"tool_call_finished\",\"id\":\"r1\",\"name\":\"read_file\",\"is_error\":false,\"ms\":1}",
+    }) |line| {
+        try sink.writer.writeAll(line);
+        try sink.writer.writeAll("\n");
+    }
+    try sink.writer.flush();
+    try testing.expect(!saw);
+}

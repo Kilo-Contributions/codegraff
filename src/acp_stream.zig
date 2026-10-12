@@ -127,7 +127,9 @@ fn lastId(id_buf: *const [64]u8) []const u8 {
     return if (n == 0) "call-1" else id_buf[0..n];
 }
 
-pub const Kind = enum { none, thought, text, tool, notice };
+/// `tool` starts work (the answer is still to come); `tool_end` closes a
+/// call and leaves already-streamed answer text standing (#1615).
+pub const Kind = enum { none, thought, text, tool, tool_end, notice };
 const terminal = @import("acp_tool_terminal.zig");
 
 /// Translate one --json event object into zero or one session/update.
@@ -200,7 +202,7 @@ pub fn translateTracked(
     // meta tool's finish is its only end (#1600, acp_tool_terminal.zig).
     if (std.mem.eql(u8, typ, "tool_call_finished")) {
         _ = try terminal.finish(w, session_id, ev.object, resolved);
-        return .tool;
+        return .tool_end;
     }
     if (std.mem.eql(u8, typ, "tool_result") or std.mem.eql(u8, typ, "tool_rejected")) {
         const result_name = util.strFieldObj(ev.object, "name") orelse "";
@@ -216,10 +218,10 @@ pub fn translateTracked(
         // native edit keeps its announced diff instead of "replaced 1 …".
         if (!is_error and (std.mem.eql(u8, result_name, "edit_file") or std.mem.eql(u8, result_name, "write_file"))) {
             try writeToolStatus(w, session_id, use_id, "completed");
-            return .tool;
+            return .tool_end;
         }
         try writeToolDone(w, session_id, use_id, is_error, text);
-        return .tool;
+        return .tool_end;
     }
     if (std.mem.eql(u8, typ, "ask_user")) {
         if (acp_elicit.mode == .elicitation) {
@@ -318,6 +320,9 @@ pub const EventSink = struct {
                 self.saw_text.* = false;
                 if (self.step) |step| step.run(step.ctx, self.out);
             },
+            // A call ending is no new work: text it streamed (a yield_turn
+            // handoff) is still the answer, or it would be delivered twice.
+            .tool_end => if (self.step) |step| step.run(step.ctx, self.out),
             else => {},
         }
         self.out.flush() catch {};
@@ -396,7 +401,7 @@ test "translateEvent: an id-less tool_call_started updates the announced call" {
     w = .fixed(&buf);
     const finished = try std.json.parseFromSlice(Value, a, "{\"type\":\"tool_call_finished\",\"name\":\"bash\",\"is_error\":false,\"ms\":12}", .{});
     defer finished.deinit();
-    try testing.expectEqual(.tool, try translateEvent(&w, "s1", finished.value, &id_buf, &next));
+    try testing.expectEqual(.tool_end, try translateEvent(&w, "s1", finished.value, &id_buf, &next));
     try testing.expectEqual(@as(usize, 0), w.buffered().len);
 }
 
@@ -497,7 +502,7 @@ test "translateEvent: tool_call then tool_result share a minted id" {
     w = .fixed(&buf);
     const result = try std.json.parseFromSlice(Value, a, "{\"type\":\"tool_result\",\"name\":\"read_file\",\"is_error\":false,\"text\":\"fn main\"}", .{});
     defer result.deinit();
-    try testing.expectEqual(.tool, try translateEvent(&w, "s1", result.value, &id_buf, &next));
+    try testing.expectEqual(.tool_end, try translateEvent(&w, "s1", result.value, &id_buf, &next));
     try testing.expect(std.mem.indexOf(u8, w.buffered(), "tool_call_update") != null);
     try testing.expect(std.mem.indexOf(u8, w.buffered(), "call-1") != null);
     try testing.expect(std.mem.indexOf(u8, w.buffered(), "completed") != null);
