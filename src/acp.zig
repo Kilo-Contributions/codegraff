@@ -540,6 +540,7 @@ test {
     _ = @import("transport_gate.zig");
     _ = @import("acp_mcp_app.zig");
     _ = @import("acp_view_meta.zig");
+    _ = @import("acp_tool_terminal.zig");
     _ = @import("model_maker.zig");
 }
 

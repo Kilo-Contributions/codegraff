@@ -127,15 +127,24 @@ fn lastId(id_buf: *const [64]u8) []const u8 {
     return if (n == 0) "call-1" else id_buf[0..n];
 }
 
+pub const Kind = enum { none, thought, text, tool, notice };
+const terminal = @import("acp_tool_terminal.zig");
+
 /// Translate one --json event object into zero or one session/update.
 /// `id_buf` holds the last minted toolCallId when the event has no `id`.
-pub fn translateEvent(
+pub fn translateEvent(w: *Io.Writer, session_id: []const u8, ev: Value, id_buf: *[64]u8, next_tool: *u32) !Kind {
+    return translateTracked(w, session_id, ev, id_buf, next_tool, null);
+}
+
+/// `translateEvent`, closing meta tools whose only end is a finish (#1600).
+pub fn translateTracked(
     w: *Io.Writer,
     session_id: []const u8,
     ev: Value,
     id_buf: *[64]u8,
     next_tool: *u32,
-) !enum { none, thought, text, tool, notice } {
+    resolved: ?*terminal.Resolved,
+) !Kind {
     if (ev != .object) return .none;
     const typ = util.strFieldObj(ev.object, "type") orelse return .none;
     if (std.mem.eql(u8, typ, "review_checkpoint")) {
@@ -187,14 +196,17 @@ pub fn translateEvent(
         try writeToolCall(w, session_id, id, name, input);
         return .tool;
     }
-    // The engine closes every call with tool_result and then
-    // tool_call_finished (timing only, no text): the result already sent the
-    // terminal update, so a second one would only duplicate it (#1288).
-    if (std.mem.eql(u8, typ, "tool_call_finished")) return .tool;
+    // An ordinary call's result already sent its terminal update (#1288); a
+    // meta tool's finish is its only end (#1600, acp_tool_terminal.zig).
+    if (std.mem.eql(u8, typ, "tool_call_finished")) {
+        _ = try terminal.finish(w, session_id, ev.object, resolved);
+        return .tool;
+    }
     if (std.mem.eql(u8, typ, "tool_result") or std.mem.eql(u8, typ, "tool_rejected")) {
         const result_name = util.strFieldObj(ev.object, "name") orelse "";
         if (std.mem.eql(u8, result_name, "attempt_completion")) return .none;
         const use_id = if (util.strFieldObj(ev.object, "id")) |given| given else lastId(id_buf);
+        if (resolved) |r| r.add(use_id);
         const text = util.strFieldObj(ev.object, "text") orelse util.strFieldObj(ev.object, "message") orelse "";
         const is_error = switch (ev.object.get("is_error") orelse .null) {
             .bool => |b| b,
@@ -246,6 +258,7 @@ pub const EventSink = struct {
     /// context meter (acp_context_meter.zig).
     step: ?@import("acp_context_meter.zig").Step = null,
     last_id: [64]u8 = @splat(0),
+    resolved: terminal.Resolved = .{},
     buf: [4096]u8 = undefined,
     writer: Io.Writer = undefined,
 
@@ -287,7 +300,7 @@ pub const EventSink = struct {
         // transport writer. Both acquire this per-turn lock before output.
         if (self.output_lock) |lock| lock.lockUncancelable(self.output_io.?);
         defer if (self.output_lock) |lock| lock.unlock(self.output_io.?);
-        const kind = translateEvent(self.out, self.session_id.*, parsed.value, &self.last_id, &self.next_tool) catch return;
+        const kind = translateTracked(self.out, self.session_id.*, parsed.value, &self.last_id, &self.next_tool, &self.resolved) catch return;
         // saw_text means "the last thing streamed was answer text". A tool
         // event resets it: a completion-tool turn streams its preamble, THEN
         // runs tools, and the real answer only exists in the turn's final
