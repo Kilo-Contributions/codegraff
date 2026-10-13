@@ -61,6 +61,24 @@ pub fn split(self: *Agent, instructions: []const u8) !Split {
     return .{ .instructions = rest, .context = ctx.items };
 }
 
+/// ADR 0282: the offset where the per-repo blocks begin in `instructions`
+/// (the same blocks `split` moves), or `instructions.len` when neither is
+/// present. The Anthropic wire ends its cached system block here, so every
+/// repo shares the tools + instructions prefix and only the rest is written.
+pub fn staticEnd(self: *Agent, instructions: []const u8) usize {
+    var end = instructions.len;
+    const baked = @import("hot_context.zig").bakedSection();
+    const blocks = [_]?[]const u8{ if (baked.len != 0) baked else null, @import("session_prompt.zig").snapshot(self) };
+    for (blocks) |maybe| {
+        const block = maybe orelse continue;
+        if (block.len == 0) continue;
+        var at = std.mem.indexOf(u8, instructions, block) orelse continue;
+        if (block[0] != '\n' and at >= 2 and std.mem.eql(u8, instructions[at - 2 .. at], "\n\n")) at -= 2;
+        end = @min(end, at);
+    }
+    return end;
+}
+
 /// The context as a developer message, the role ADR 0208 gives mid-session
 /// context on Responses. Written with the conversation's first item only:
 /// chained requests already hold it server-side.
