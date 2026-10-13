@@ -353,6 +353,14 @@
     "model_prefix": "codegraff",
     "note": "scripted graff repl on the Codegraff gateway (CODEGRAFF_API_KEY); pass --model"
   },
+  "graff-anthropic-repl": {
+    "cmd": ["{repo}/zig-out/bin/graff", "repl", "--model", "{model}", "--yolo"],
+    "stdin": "\u001b[200~{prompt}\u001b[201~\n",
+    "answer": "stdout",
+    "usage": "graff-stderr",
+    "env": {"GRAFF_POST_DEADLINE_SECS": "90", "GRAFF_NO_TELEMETRY": "1"},
+    "note": "scripted graff repl on the Anthropic API (ANTHROPIC_API_KEY); pass --provider anthropic and a claude-* --model"
+  },
   "pi-codex": {
     "cmd": ["pi", "-p", "--mode", "json", "--provider", "openai-codex", "--model", "{model}", "--thinking", "low", "--no-session", "{prompt}"],
     "answer": "pi-json",
