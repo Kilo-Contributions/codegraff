@@ -24,6 +24,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.33
+    \\  • Claude: a new repo reads graff's tools and instructions from the prompt cache
+    \\
     \\0.302.32
     \\  • a yield_turn handoff shows once in ACP clients
     \\  • graff login anthropic works from the desktop app, SSH and servers
