@@ -292,6 +292,7 @@ record only when you need the evidence or the edge cases.
 | [0278](0278-t3-code-acp-profile.md) | An ACP client named `t3-code…` gets a profile: slash commands are the first prompt block, the client's `cwd` is never swapped for an auto-isolated tree, a `model` config option lists reachable models, and `/model` and `/yolo` are not advertised. |
 | [0280](0280-mcp-servers-report-state-and-reconnect.md) | Every configured MCP server has one status row (`graff mcp status --json`, `/mcp`); `graff mcp reconnect` / `/mcp reconnect` run a real handshake and refresh its catalog; `graff mcp enable|disable` live in `~/.codegraff/mcp-state.json`; the catalog cache keys on cwd + env, and server `env` overlays graff's own. |
 | [0281](0281-anthropic-console-sign-in-reads-the-sdk-profile.md) | Anthropic Console sign-in: graff reads the `user_oauth` profile Anthropic's CLI writes (`ant auth login`), in the SDK's precedence (API key wins), sends it as Bearer, and refreshes through `ant auth print-credentials`; `graff login anthropic` runs `ant auth login`. No claude.ai subscription login. |
+| [0282](0282-claude-system-breakpoint-closes-before-the-repo-context.md) | On Claude, the system prompt is two text blocks with the same bytes: the cache breakpoint closes the static instructions, before the project instructions and layout, so every repo shares the tools + instructions prefix. |
 
 ## When to write one
 

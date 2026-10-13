@@ -84,17 +84,16 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             const sys = try @import("agent_request_body_responses.zig").schemaAwarePrompt(self);
             const cc = @import("cache_ttl.zig").control(self); // #1320: 1h when calls outlive 5m
             if (is_claude or is_kimi) {
+                // ADR 0282: on Claude the breakpoint closes the static block and
+                // the per-repo tail (layout, project instructions, skills,
+                // constraints) follows as a second block, so a new repo reads
+                // tools + instructions from the cache. The bytes are unchanged;
+                // the last-message breakpoint still covers the tail.
+                const at = if (is_claude) @import("repo_context.zig").staticEnd(self, sys) else sys.len;
+                const head = if (at == 0) sys else sys[0..at];
                 try s.beginArray();
-                try s.beginObject();
-                try s.objectField("type");
-                try s.write("text");
-                try s.objectField("text");
-                try s.write(sys);
-                if (cc) |c| {
-                    try s.objectField("cache_control");
-                    try s.print("{s}", .{c});
-                }
-                try s.endObject();
+                try writeSystemBlock(&s, head, cc);
+                if (head.len < sys.len) try writeSystemBlock(&s, sys[head.len..], null);
                 try s.endArray();
             } else {
                 try s.write(sys);
@@ -505,6 +504,20 @@ test "openai-wire bodies send a sticky prompt_cache_key; children isolate" {
     const ob = try oai.buildBody(null, false, true, true);
     defer std.testing.allocator.free(ob);
     try std.testing.expect(std.mem.indexOf(u8, ob, needle) != null);
+}
+
+/// One Anthropic system text block, with a breakpoint when `cc` is set.
+fn writeSystemBlock(s: *std.json.Stringify, text: []const u8, cc: ?[]const u8) !void {
+    try s.beginObject();
+    try s.objectField("type");
+    try s.write("text");
+    try s.objectField("text");
+    try s.write(text);
+    if (cc) |c| {
+        try s.objectField("cache_control");
+        try s.print("{s}", .{c});
+    }
+    try s.endObject();
 }
 
 test { // Claude request-shape tests (ADR 0219) live beside this file
