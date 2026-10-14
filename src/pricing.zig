@@ -29,8 +29,13 @@ pub fn priceFor(model: []const u8) ?ModelPrice {
 }
 
 /// Gateway aliases have their own prices; vendor overlays must not replace them.
+/// The gateway's live catalog wins over the baked snapshot, so a model or price
+/// it adds bills correctly without a graff release.
 pub fn priceForProvider(provider: []const u8, model: []const u8) ?ModelPrice {
-    if (std.mem.eql(u8, provider, "codegraff")) return @import("pricing_gateway.zig").find(model);
+    if (std.mem.eql(u8, provider, "codegraff")) {
+        if (modelInfoFor(provider, model)) |info| if (info.price) |p| return @import("catalog_price.zig").asModelPrice(info.name, p);
+        return @import("pricing_gateway.zig").find(model);
+    }
     return priceFor(model);
 }
 
@@ -162,7 +167,12 @@ pub const ModelInfo = struct {
     /// Codex catalog `default_verbosity` (ADR 0226): the `text.verbosity` the
     /// route's own client sends for this model.
     default_verbosity: ?[]const u8 = null,
+    /// What the route charges, when its own catalog publishes it (catalog_price.zig).
+    price: ?CatalogPrice = null,
 };
+
+/// USD per 1M tokens, with the optional whole-request long-context tier.
+pub const CatalogPrice = struct { in: f64, out: f64, cache: f64, high_at: u64 = 0, high_in: f64 = 0, high_out: f64 = 0, high_cache: f64 = 0 };
 
 pub const ModelProtocol = enum { provider_default, kimi, anthropic };
 pub const ThinkingSupport = enum { unknown, no, both, only };
