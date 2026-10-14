@@ -10,6 +10,13 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.37
+
+### Sign-in
+
+- A returning ChatGPT sign-in no longer puts the saved ID token in the sign-in URL. The browser opener received that URL as a process argument any local process could read. The issued app id still skips the consent screen, and the URL is now always printed, so the sign-in for a headless machine can be opened on another computer (#1635).
+- A ChatGPT token renewal that comes back for a different account is refused and recorded, not used (#1635).
+
 ## v0.302.36
 
 ### Workspaces
