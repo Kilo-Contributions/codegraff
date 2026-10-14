@@ -24,6 +24,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.38
+    \\  • Windows: faster start, and the companion is found on PATH
+    \\
     \\0.302.37
     \\  • ChatGPT sign-in keeps your saved token out of the sign-in URL and always prints it
     \\
