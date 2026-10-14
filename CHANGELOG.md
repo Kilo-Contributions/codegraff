@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.38
+
+### Windows
+
+- graff finds programs on PATH the Windows way. Lookups split PATH on `:`, so on Windows (where the delimiter is `;` and entries hold drive colons) they probed fragments of entries, and one that read as a network path cost seconds at every start before `graff acp` answered; a bare name also never matched the `.exe`, so the code-intelligence companion was never found. Lookups now split on the platform delimiter and try `.exe`, `.cmd`, `.bat` and `.com` (#1637).
+
 ## v0.302.37
 
 ### Sign-in
