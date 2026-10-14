@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.34
+    \\  • Gemini API key sign-in works again
+    \\  • Gemini 4 Argon shows its cost; /effort minimal runs as low on Gemini
+    \\  • a gateway timeout mid-answer is retried instead of ending the turn
+    \\
     \\0.302.33
     \\  • Claude: a new repo reads graff's tools and instructions from the prompt cache
     \\
