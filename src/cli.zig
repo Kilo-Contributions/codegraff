@@ -24,6 +24,9 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.36
+    \\  • new worktrees link .agents/linked files and run .agents/prepare
+    \\
     \\0.302.35
     \\  • gateway models are priced from the gateway itself; new models show their cost
     \\  • graff models shows each gateway model's real rate
