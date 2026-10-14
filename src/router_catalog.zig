@@ -195,9 +195,8 @@ pub fn parseModels(arena: Allocator, provider_id: []const u8, data: []const u8) 
         if (context == 0) context = positiveInt(item.object, "contextLength");
         // Vercel AI Gateway (and some OpenAI-compat hosts) use context_window.
         if (context == 0) context = positiveInt(item.object, "context_window");
-        // Anthropic declares the input window as max_input_tokens. Its sibling
-        // max_tokens is the OUTPUT cap (128k on Opus 5) — never read it as a
-        // window, or a 1M-context model would compact at ~102k.
+        // Anthropic's input window is max_input_tokens; its sibling max_tokens is the
+        // OUTPUT cap (128k on Opus 5), never a window, or 1M would compact at ~102k.
         if (context == 0) context = positiveInt(item.object, "max_input_tokens");
         // Google's window. Its sibling outputTokenLimit is the OUTPUT cap, never this.
         if (context == 0) context = positiveInt(item.object, "inputTokenLimit");
@@ -207,6 +206,7 @@ pub fn parseModels(arena: Allocator, provider_id: []const u8, data: []const u8) 
             .name = arena.dupe(u8, id) catch continue,
             .context = context,
             .supports_reasoning = listsReasoning(item.object) or boolField(item.object, "supports_reasoning"),
+            .price = @import("catalog_price.zig").parse(item.object),
         }) catch continue;
     }
     const owned = rows.toOwnedSlice(arena) catch return null;
@@ -317,7 +317,7 @@ pub fn cacheDocument(io: Io, arena: Allocator, spec: provider.ProviderSpec, mode
         aw.writer.writeAll("{\"name\":") catch return null;
         var name_stringify: std.json.Stringify = .{ .writer = &aw.writer };
         name_stringify.write(model.name) catch return null;
-        aw.writer.print(",\"context\":{d},\"supports_reasoning\":{}}}", .{ model.context, model.supports_reasoning }) catch return null;
+        @import("catalog_price.zig").writeCacheTail(&aw.writer, model) catch return null;
     }
     aw.writer.writeAll("]}\n") catch return null;
     return aw.writer.buffered();

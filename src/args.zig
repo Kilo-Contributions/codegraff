@@ -167,7 +167,7 @@ pub fn parse(init: std.process.Init) !Flags {
                 } else if (std.mem.eql(u8, arg, "--json")) {
                     main_mod.json_mode = true;
                 } else if (std.mem.eql(u8, arg, "--max-tool-calls")) {
-                    const mv = it.next() orelse std.process.fatal("--max-tool-calls needs a non-negative integer — harness --help", .{});
+                    const mv = it.next() orelse std.process.fatal("--max-tool-calls needs a non-negative integer — graff --help", .{});
                     main_mod.max_tool_calls = std.fmt.parseInt(u64, mv, 10) catch std.process.fatal("--max-tool-calls needs a non-negative integer, got '{s}'", .{mv});
                 } else if (std.mem.eql(u8, arg, "--compact-at")) {
                     const mv = it.next() orelse std.process.fatal("--compact-at needs a percent of the context window (10-95)", .{});
@@ -211,48 +211,48 @@ pub fn parse(init: std.process.Init) !Flags {
                 } else if (std.mem.eql(u8, arg, "--beta")) {
                     flags.update_beta = true;
                 } else if (std.mem.eql(u8, arg, "--resume")) {
-                    const rv = it.next() orelse std.process.fatal("--resume needs a session name — harness --help", .{});
+                    const rv = it.next() orelse std.process.fatal("--resume needs a session name — graff --help", .{});
                     flags.resume_flag = try arena.dupe(u8, rv);
                 } else if (std.mem.eql(u8, arg, "--branch")) {
-                    const bv = it.next() orelse std.process.fatal("--branch needs a destination session name — harness --help", .{});
+                    const bv = it.next() orelse std.process.fatal("--branch needs a destination session name — graff --help", .{});
                     flags.branch_flag = try arena.dupe(u8, bv);
                 } else if (std.mem.eql(u8, arg, "--no-resume")) {
                     flags.no_resume_flag = true;
                 } else if (std.mem.eql(u8, arg, "--new")) {
                     flags.new_session_flag = true;
                 } else if (std.mem.eql(u8, arg, "--model")) {
-                    const mv = it.next() orelse std.process.fatal("--model needs a value — harness --help", .{});
+                    const mv = it.next() orelse std.process.fatal("--model needs a value — graff --help", .{});
                     flags.model_flag = try arena.dupe(u8, mv);
                 } else if (std.mem.eql(u8, arg, "--subagent-provider")) {
-                    const pv = it.next() orelse std.process.fatal("--subagent-provider needs a value — harness --help", .{});
+                    const pv = it.next() orelse std.process.fatal("--subagent-provider needs a value — graff --help", .{});
                     flags.subagent_provider_flag = try arena.dupe(u8, pv);
                 } else if (std.mem.eql(u8, arg, "--subagent-model")) {
-                    const mv = it.next() orelse std.process.fatal("--subagent-model needs a value — harness --help", .{});
+                    const mv = it.next() orelse std.process.fatal("--subagent-model needs a value — graff --help", .{});
                     flags.subagent_model_flag = try arena.dupe(u8, mv);
                 } else if (std.mem.eql(u8, arg, "--allow-cross-provider-subagents")) {
                     flags.allow_cross_provider_subagents_flag = true;
                 } else if (std.mem.eql(u8, arg, "--no-subagent-tier")) {
                     flags.no_subagent_tier_flag = true;
                 } else if (std.mem.eql(u8, arg, "--system-prompt")) {
-                    const sv = it.next() orelse std.process.fatal("--system-prompt needs a value — harness --help", .{});
+                    const sv = it.next() orelse std.process.fatal("--system-prompt needs a value — graff --help", .{});
                     flags.system_prompt_flag = try arena.dupe(u8, sv);
                 } else if (std.mem.eql(u8, arg, "--append-system-prompt")) {
-                    const av = it.next() orelse std.process.fatal("--append-system-prompt needs a value — harness --help", .{});
+                    const av = it.next() orelse std.process.fatal("--append-system-prompt needs a value — graff --help", .{});
                     flags.append_system_flag = try arena.dupe(u8, av);
                 } else if (std.mem.eql(u8, arg, "--host")) {
-                    const hv = it.next() orelse std.process.fatal("--host needs a value — harness --help", .{});
+                    const hv = it.next() orelse std.process.fatal("--host needs a value — graff --help", .{});
                     flags.host_flag = try arena.dupe(u8, hv);
                 } else if (std.mem.eql(u8, arg, "--port")) {
-                    const pv = it.next() orelse std.process.fatal("--port needs a value — harness --help", .{});
+                    const pv = it.next() orelse std.process.fatal("--port needs a value — graff --help", .{});
                     flags.port_flag = std.fmt.parseInt(u16, pv, 10) catch std.process.fatal("--port needs a number 1-65535, got '{s}'", .{pv});
                 } else if (std.mem.eql(u8, arg, "--token")) {
-                    const tv = it.next() orelse std.process.fatal("--token needs a value — harness --help", .{});
+                    const tv = it.next() orelse std.process.fatal("--token needs a value — graff --help", .{});
                     flags.token_flag = try arena.dupe(u8, tv);
                 } else if (std.mem.eql(u8, arg, "--name")) {
-                    const nv = it.next() orelse std.process.fatal("--name needs a value — harness --help", .{});
+                    const nv = it.next() orelse std.process.fatal("--name needs a value — graff --help", .{});
                     flags.name_flag = try arena.dupe(u8, nv);
                 } else {
-                    std.process.fatal("unknown flag '{s}' — harness --help lists them", .{arg});
+                    std.process.fatal("unknown flag '{s}' — graff --help lists them", .{arg});
                 }
             } else {
                 try flags.positionals.append(arena, try arena.dupe(u8, arg));
