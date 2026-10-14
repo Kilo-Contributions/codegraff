@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.33
+
+### Claude
+
+- On the Anthropic API, a new repo reads graff's tools and instructions from the prompt cache instead of rewriting them. The system prompt goes as two blocks with the same text, and the cache breakpoint now ends before the project instructions and layout. The first session in a repo the cache had not seen wrote 1.2k cache tokens instead of 10.1k on Claude Sonnet 5.5, about half the session's cost (ADR 0282).
+
 ## v0.302.32
 
 ### ACP
