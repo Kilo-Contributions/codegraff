@@ -57,11 +57,13 @@ test "resolveWith splits on the platform delimiter and tries Windows extensions"
     try tmp.dir.writeFile(io, .{ .sub_path = "win/codedb.exe", .data = "" });
     var buf: [1024]u8 = undefined;
 
-    // POSIX: ':' separated, the bare name.
-    const posix = try std.fmt.allocPrint(a, "{s}/missing:{s}:{s}/bin", .{ root, root, root });
-    defer a.free(posix);
-    const p = resolveWith(io, posix, ':', &.{}, "codedb", &buf) orelse return error.TestExpectedResolve;
-    try std.testing.expect(std.mem.endsWith(u8, p, "bin/codedb"));
+    // POSIX: ':' separated, the bare name. (Windows temp paths hold a drive colon.)
+    if (builtin.os.tag != .windows) {
+        const posix = try std.fmt.allocPrint(a, "{s}/missing:{s}:{s}/bin", .{ root, root, root });
+        defer a.free(posix);
+        const p = resolveWith(io, posix, ':', &.{}, "codedb", &buf) orelse return error.TestExpectedResolve;
+        try std.testing.expect(std.mem.endsWith(u8, p, "bin/codedb"));
+    }
 
     // Windows: ';' separated (each entry may hold a colon), quoted entries, and `.exe` found for a bare name.
     const win = try std.fmt.allocPrint(a, "{s}/missing;\"{s}/win\"", .{ root, root });
@@ -72,6 +74,6 @@ test "resolveWith splits on the platform delimiter and tries Windows extensions"
     try std.testing.expect(resolveWith(io, win, ';', &windows_exts, "codedb.exe", &buf) != null);
 
     // Splitting a ';' PATH on ':' (the old bug) finds nothing.
-    try std.testing.expect(resolveWith(io, win, ':', &windows_exts, "codedb", &buf) == null);
+    if (builtin.os.tag != .windows) try std.testing.expect(resolveWith(io, win, ':', &windows_exts, "codedb", &buf) == null);
     try std.testing.expect(resolveWith(io, "", ':', &.{}, "codedb", &buf) == null);
 }
