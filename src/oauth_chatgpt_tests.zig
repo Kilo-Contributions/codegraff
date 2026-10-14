@@ -44,11 +44,12 @@ test "ChatGPT sign-in: a returning sign-in reuses the issued app id with account
         .nonce = "no",
         .challenge = "ch",
         .host_id = host,
-        .id_token_hint = "a.b.c",
         .login_hint = "you@example.com",
     });
-    for ([_][]const u8{ "client_id=oaiapp_x&", "id_token_hint=a.b.c", "login_hint=you%40example.com", "127.0.0.1%3A1456" }) |part|
+    for ([_][]const u8{ "client_id=oaiapp_x&", "login_hint=you%40example.com", "127.0.0.1%3A1456" }) |part|
         try std.testing.expect(std.mem.indexOf(u8, url, part) != null);
+    // A saved token never rides in the URL: openers expose it in argv.
+    try std.testing.expect(std.mem.indexOf(u8, url, "id_token_hint") == null);
     // The name hint is for first registrations only.
     try std.testing.expect(std.mem.indexOf(u8, url, "agent_name_hint") == null);
 }
