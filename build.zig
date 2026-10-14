@@ -206,6 +206,9 @@ pub fn build(b: *std.Build) void {
     const workspace_lifecycle_test = b.addSystemCommand(&.{ "python3", "scripts/test-workspace-lifecycle.py" });
     workspace_lifecycle_test.addArtifactArg(exe);
     test_step.dependOn(&workspace_lifecycle_test.step);
+    const agents_prepare_test = b.addSystemCommand(&.{ "python3", "scripts/test-agents-prepare.py" });
+    agents_prepare_test.addArtifactArg(exe);
+    test_step.dependOn(&agents_prepare_test.step);
     const acp_workspace_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-workspace.py" });
     acp_workspace_test.addArtifactArg(exe);
     test_step.dependOn(&acp_workspace_test.step);
