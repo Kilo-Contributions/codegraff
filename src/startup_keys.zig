@@ -387,6 +387,13 @@ pub fn resolveKeysOptional(io: Io, gpa: Allocator, arena: Allocator, environ_map
             // message must point at the right login rather than "see /models".
             var pbuf: [provider_mod.provider_specs.len + 1][]const u8 = undefined;
             const serving = provider_mod.catalogProvidersFor(&pbuf, nm);
+            // The gateway also serves it: name that route too, since a gateway
+            // user never set up the direct provider (#294 keeps the bare name
+            // from switching to the gateway on its own).
+            if (serving.len > 0 and keys.get("codegraff") != null and @import("pricing_gateway.zig").find(nm) != null) std.process.fatal(
+                "'{s}' is served by {s}, which has no valid credential — run `graff login {s}`, or use your Codegraff sign-in with `--model codegraff/{s}`",
+                .{ nm, serving[0], serving[0], nm },
+            );
             if (serving.len > 0) std.process.fatal(
                 "'{s}' is served by {s}, which has no valid credential — run `graff login {s}` or `graff key set {s} <key>`",
                 .{ nm, serving[0], serving[0], serving[0] },
