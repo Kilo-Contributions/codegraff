@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.36
+
+### Workspaces
+
+- New task worktrees honor the tool-neutral `.agents/` setup. Each gitignored path `.agents/linked` lists becomes a symlink to the main checkout's copy, so a `.env` edited once is current in every worktree; tracked paths, `..`, globs and missing paths are skipped and nothing is moved or deleted. `.agents/prepare` runs from the new checkout when `.graff/workspace.toml` names no setup script. `graff worktree create` reports the linked count (#1633, ADR 0283).
+
 ## v0.302.35
 
 ### Hosted gateway
