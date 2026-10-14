@@ -165,6 +165,7 @@ pub const rows = [_]ModelInfo{
     // contextFor falls to default_context and a 1M model compacts at 160k.
     // Efforts mirror the compat layer's own rejection message: "Valid values
     // are: high, low, medium, minimal, none".
+    .{ .provider = "google", .name = "gemini-4-argon", .context = 1_048_576, .supports_reasoning = true, .thinking_support = .both, .support_efforts = &.{ "low", "medium", "high" }, .default_effort = "medium" },
     .{ .provider = "google", .name = "gemini-3.8-flash", .context = 1_048_576, .supports_reasoning = true, .thinking_support = .both, .support_efforts = &.{ "minimal", "low", "medium", "high" }, .default_effort = "medium" },
     .{ .provider = "google", .name = "gemini-3.7-flash", .context = 1_048_576, .supports_reasoning = true, .thinking_support = .both, .support_efforts = &.{ "minimal", "low", "medium", "high" }, .default_effort = "medium" },
     .{ .provider = "google", .name = "gemini-3.6-flash", .context = 1_048_576, .supports_reasoning = true, .thinking_support = .both },

@@ -24,12 +24,12 @@ const std = @import("std");
 const Agent = @import("agent.zig").Agent;
 const serde = @import("serde.zig");
 
-/// graff's effort tag → Interactions `thinking_level`. The endpoint names its
-/// own accepted set in the rejection: high, low, medium, minimal, none.
+/// graff's effort tag → Interactions `thinking_level`. Current models accept
+/// only low, medium and high ("'minimal' is not a supported thinking level for
+/// this model"), so minimal and none ride as low.
 pub fn thinkingLevel(effort: []const u8) []const u8 {
     if (std.mem.eql(u8, effort, "max") or std.mem.eql(u8, effort, "high")) return "high";
     if (std.mem.eql(u8, effort, "medium")) return "medium";
-    if (std.mem.eql(u8, effort, "minimal") or std.mem.eql(u8, effort, "none")) return "minimal";
     return "low";
 }
 
@@ -65,13 +65,13 @@ pub fn write(self: *Agent, s: *std.json.Stringify, tools: ?[]const u8, force_too
 }
 
 test "thinking_level maps graff's efforts onto the accepted set" {
-    // The set is the endpoint's own: "Valid values are: high, low, medium,
-    // minimal, none" — anything else 400s the request.
+    // Current models take low, medium and high; anything else 400s the request.
     try std.testing.expectEqualStrings("high", thinkingLevel("max"));
     try std.testing.expectEqualStrings("high", thinkingLevel("high"));
     try std.testing.expectEqualStrings("medium", thinkingLevel("medium"));
     try std.testing.expectEqualStrings("low", thinkingLevel("low"));
-    try std.testing.expectEqualStrings("minimal", thinkingLevel("minimal"));
+    try std.testing.expectEqualStrings("low", thinkingLevel("minimal"));
+    try std.testing.expectEqualStrings("low", thinkingLevel("none"));
     // An unknown tag degrades to a level the endpoint accepts, never to a 400.
     try std.testing.expectEqualStrings("low", thinkingLevel("nonsense"));
 }
