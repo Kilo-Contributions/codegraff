@@ -152,6 +152,85 @@ pub fn step(self: *@import("agent.zig").Agent, root: std.json.ObjectMap) !?[]con
     return final_text;
 }
 
+/// Role-shaped messages in Interactions history, rewritten as steps. The
+/// prompt, image prompts, adopted conversations and compaction summaries are
+/// built as `{"role":…,"content":…}` for every wire. The endpoint reads a
+/// role-shaped list as the turn list it no longer accepts ("use step_list
+/// input format instead of turn_list") and refuses a mix ("The 'type'
+/// parameter is required"), so every request failed on its first message.
+/// A user message becomes a user_input step and assistant text a model_output
+/// step; content parts keep only the text and image shapes this wire takes.
+pub fn normalizeHistory(a: Allocator, history: *std.json.Array) void {
+    for (history.items) |*item| {
+        if (item.* != .object or item.object.get("type") != null) continue;
+        const role = item.object.get("role") orelse continue;
+        const content = item.object.get("content") orelse continue;
+        if (role != .string) continue;
+        const user = std.mem.eql(u8, role.string, "user");
+        if (!user and !std.mem.eql(u8, role.string, "assistant")) continue;
+        item.* = roleStep(a, user, content, item.object.get(@import("session_wake.zig").origin_key)) catch continue;
+    }
+}
+
+fn roleStep(a: Allocator, user: bool, content: Value, origin: ?Value) !Value {
+    var parts = std.json.Array.init(a);
+    switch (content) {
+        .string => |s| try parts.append(try textPart(a, s)),
+        .array => |blocks| for (blocks.items) |block| {
+            if (block != .object) continue;
+            const kind = stepType(block);
+            if (std.mem.eql(u8, kind, "image") and block.object.get("data") != null) {
+                try parts.append(block);
+            } else if (block.object.get("text")) |t| {
+                if (t == .string and t.string.len > 0) try parts.append(try textPart(a, t.string));
+            }
+        },
+        else => {},
+    }
+    if (parts.items.len == 0) try parts.append(try textPart(a, "(no content)"));
+    var obj: std.json.ObjectMap = .empty;
+    try obj.put(a, "type", .{ .string = if (user) "user_input" else "model_output" });
+    // A lone text part stays a plain string, the shape userInput writes.
+    const lone_text = user and parts.items.len == 1 and std.mem.eql(u8, stepType(parts.items[0]), "text");
+    try obj.put(a, "content", if (lone_text) parts.items[0].object.get("text").? else .{ .array = parts });
+    if (origin) |o| try obj.put(a, @import("session_wake.zig").origin_key, o);
+    return .{ .object = obj };
+}
+
+fn textPart(a: Allocator, text: []const u8) !Value {
+    var part: std.json.ObjectMap = .empty;
+    try part.put(a, "type", .{ .string = "text" });
+    try part.put(a, "text", .{ .string = text });
+    return .{ .object = part };
+}
+
+test "normalizeHistory turns role messages into steps and leaves steps alone" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const parsed = try std.json.parseFromSlice(Value, arena,
+        \\[{"role":"user","content":"fix fib"},
+        \\ {"type":"thought","signature":"OPAQUE"},
+        \\ {"role":"assistant","content":"summary so far"},
+        \\ {"role":"user","content":[{"type":"input_text","text":"look"},{"type":"image","data":"AAAA","mime_type":"image/png"},{"type":"tool_result"}]},
+        \\ {"role":"user","content":[]}]
+    , .{});
+    var history = parsed.value.array;
+    normalizeHistory(arena, &history);
+    const h = history.items;
+    try std.testing.expectEqualStrings("user_input", h[0].object.get("type").?.string);
+    try std.testing.expectEqualStrings("fix fib", h[0].object.get("content").?.string);
+    try std.testing.expect(h[0].object.get("role") == null);
+    try std.testing.expectEqualStrings("OPAQUE", h[1].object.get("signature").?.string);
+    try std.testing.expectEqualStrings("model_output", h[2].object.get("type").?.string);
+    try std.testing.expectEqualStrings("summary so far", h[2].object.get("content").?.array.items[0].object.get("text").?.string);
+    const mixed = h[3].object.get("content").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), mixed.len);
+    try std.testing.expectEqualStrings("look", mixed[0].object.get("text").?.string);
+    try std.testing.expectEqualStrings("image", mixed[1].object.get("type").?.string);
+    try std.testing.expectEqualStrings("(no content)", h[4].object.get("content").?.string);
+}
+
 test "userInput and functionResult build the shapes the endpoint requires" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();

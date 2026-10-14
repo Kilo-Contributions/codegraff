@@ -13,6 +13,7 @@ pub const rows = [_]ModelPrice{
     .{ .name = "deepseek-v4-pro", .in = 0.435, .out = 0.87, .cache = 0.0036, .cache_write_multiplier = 1 },
     .{ .name = "gemini-3.7-flash", .in = 0.75, .out = 3.75, .cache = 0.075, .cache_write_multiplier = 1 },
     .{ .name = "gemini-3.8-flash", .in = 0.75, .out = 3.75, .cache = 0.075, .cache_write_multiplier = 1 },
+    .{ .name = "gemini-4-argon", .in = 2.2, .out = 11.0, .cache = 0.11, .cache_write_multiplier = 1 },
     .{ .name = "glm-5.2", .in = 1.68, .out = 5.28, .cache = 0.312, .cache_write_multiplier = 1 },
     .{ .name = "glm-5.3", .in = 1.68, .out = 5.28, .cache = 0.312, .cache_write_multiplier = 1 },
     .{ .name = "glm-5.3-flash", .in = 0.075, .out = 0.25, .cache = 0.015, .cache_write_multiplier = 1 },

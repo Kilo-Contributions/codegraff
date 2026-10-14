@@ -187,7 +187,9 @@ pub const max_server_retries: usize = 3; // #opencode-parity: bounded retries fo
 /// #opencode-parity: an in-band error event (an SSE {"type":"error"} or a JSON
 /// error envelope) naming a TRANSIENT server condition — Anthropic overloaded_error,
 /// OpenAI server_error / server_is_overloaded, plain "overloaded", or xAI's
-/// mid-stream "Internal error during token parsing" (ADR 0148) — is a 5xx that
+/// mid-stream "Internal error during token parsing" (ADR 0148), or the Codegraff
+/// gateway's gateway_timeout (its stall guard gave up on the upstream and says
+/// to retry) — is a 5xx that
 /// surfaced mid-stream and should be retried, not hard-failed. Billing / quota /
 /// invalid-input errors are NOT transient and fall through to a hard fail.
 pub fn isTransientServerError(etype: []const u8, code: ?[]const u8, msg: []const u8) bool {
@@ -195,7 +197,7 @@ pub fn isTransientServerError(etype: []const u8, code: ?[]const u8, msg: []const
     // ChatGPT plan usage or user data temporarily unavailable (503, possibly
     // mid-stream): keep the credentials and back off like an overload.
     if (quota.isPlanTransient(code)) return true;
-    const needles = [_][]const u8{ "overloaded", "server_error", "server_is_overloaded", "token parsing" };
+    const needles = [_][]const u8{ "overloaded", "server_error", "server_is_overloaded", "token parsing", "gateway_timeout" };
     for (needles) |n| {
         if (util.indexOfIgnoreCase(etype, n) != null) return true;
         if (util.indexOfIgnoreCase(msg, n) != null) return true;
@@ -206,7 +208,8 @@ pub fn isTransientServerError(etype: []const u8, code: ?[]const u8, msg: []const
 
 /// The user-facing name for the wait. xAI's token-parse 500 arrives after
 /// output began and is not an overload; calling it one misled #1019.
-fn transientServerLabel(msg: []const u8) []const u8 {
+fn transientServerLabel(etype: []const u8, msg: []const u8) []const u8 {
+    if (util.indexOfIgnoreCase(etype, "gateway_timeout") != null) return "gateway timed out";
     return if (util.indexOfIgnoreCase(msg, "token parsing") != null) "provider error mid-response" else "server overloaded";
 }
 
@@ -260,7 +263,7 @@ pub fn retryTransientServerError(self: *Agent, etype: []const u8, code: ?[]const
     retries.* += 1;
     self.partial_text.clearRetainingCapacity(); // fresh re-stream after the retry, no concat
     const delay_ms = jitter.ms(self.io, serverRetryDelayMs(msg) orelse RetryPlan.delayMs(true, retries.* - 1)); // 1·2·4s, or the provider's wait; +jitter (#1274)
-    const label = if (quota.isPlanTransient(code)) "ChatGPT plan temporarily unavailable" else transientServerLabel(msg);
+    const label = if (quota.isPlanTransient(code)) "ChatGPT plan temporarily unavailable" else transientServerLabel(etype, msg);
     try announceTransientRetry(self, label, delay_ms, retries.*);
     if (self.tracer) |tr| tr.note("retry", label);
     if (telemetry.g_telem) |t| t.errorEvent("server_overloaded", if (msg.len > 0) msg else etype);
@@ -340,6 +343,9 @@ test "structured context overflow wins over gateway flake wording" {
 test "isTransientServerError (#opencode-parity): overload/server_error retry; quota/invalid/auth do not" {
     // transient server conditions → retry like a 5xx
     try std.testing.expect(isTransientServerError("overloaded_error", null, ""));
+    // The gateway's stall guard: an in-stream 504 that says to retry.
+    try std.testing.expect(isTransientServerError("gateway_timeout", "gateway_timeout", "Codegraff timed out while generating this response. Retry the request."));
+    try std.testing.expectEqualStrings("gateway timed out", transientServerLabel("gateway_timeout", ""));
     try std.testing.expect(isTransientServerError("api_error", "server_error", ""));
     try std.testing.expect(isTransientServerError("", "server_is_overloaded", ""));
     try std.testing.expect(isTransientServerError("", null, "The server is Overloaded, please try again")); // case-insensitive, in message
@@ -369,8 +375,8 @@ test "ADR 0148 (reverses #1019): token-parse 500 rides the transient server ladd
     try std.testing.expect(!isBodyParseRejection(msg));
     try std.testing.expect(isShortGatewayFlake("", null, msg));
     // Wording: the retry line names a mid-response provider error, not an overload.
-    try std.testing.expectEqualStrings("provider error mid-response", transientServerLabel(msg));
-    try std.testing.expectEqualStrings("server overloaded", transientServerLabel("The server is overloaded"));
+    try std.testing.expectEqualStrings("provider error mid-response", transientServerLabel("", msg));
+    try std.testing.expectEqualStrings("server overloaded", transientServerLabel("", "The server is overloaded"));
 }
 
 test "serverRetryDelayMs honors try-again/retry-after seconds, ignores 0 and >60s" {
