@@ -10,6 +10,18 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.35
+
+### Hosted gateway
+
+- Gateway models are priced from the gateway's own catalog, which now publishes each model's rate. A model the gateway adds is priced on day one, and a changed rate bills correctly without a graff release; the baked snapshot stays the offline fallback (#1631).
+- `graff models` shows gateway models at the gateway's rate. It had looked them up by their direct-provider price, so many showed `(unpriced)` or the wrong number (#1631).
+
+### Models
+
+- `--model` on a model whose direct provider has no credential now also names the hosted route, `--model codegraff/<model>`, when the gateway serves it (#1630).
+- Flag errors say `graff --help` (#1631).
+
 ## v0.302.34
 
 ### Google Gemini

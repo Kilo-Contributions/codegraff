@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.35
+    \\  • gateway models are priced from the gateway itself; new models show their cost
+    \\  • graff models shows each gateway model's real rate
+    \\  • a model without its provider's login names --model codegraff/<model>
+    \\
     \\0.302.34
     \\  • Gemini API key sign-in works again
     \\  • Gemini 4 Argon shows its cost; /effort minimal runs as low on Gemini
