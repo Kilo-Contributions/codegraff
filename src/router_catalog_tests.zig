@@ -424,7 +424,7 @@ test "router discovery replaces only its provider slice" {
     try std.testing.expect(pricing.providerModelInTable("codegraff", "kimi-k3"));
     try std.testing.expect(!pricing.providerModelInTable("codegraff", "claude-opus-4.8"));
     try std.testing.expect(pricing.providerModelInTable("anthropic", "claude-opus-4-8"));
-    try std.testing.expect(pricing.providerModelInTable("codex", "gpt-5.6-sol"));
+    try std.testing.expect(pricing.providerModelInTable("codex", "gpt-6-sol"));
 }
 
 test "startup catalog loads fan out concurrently with Kimi" {
@@ -450,7 +450,7 @@ test "providerFor (#377): family-prefixed spelling routes to the direct provider
     try std.testing.expectEqualStrings("kimi", p.id);
     try std.testing.expectEqualStrings("k3", p.model);
     // Exact catalog names keep absolute priority over the family alias.
-    try std.testing.expectEqualStrings("gpt-5.6-sol", (try all.providerFor("gpt-5.6-sol")).model);
+    try std.testing.expectEqualStrings("gpt-6-sol", (try all.providerFor("gpt-6-sol")).model);
     // Without the kimi credential, Moonshot's platform id `kimi-k3` is an
     // exact catalog row — not the gateway.
     var values: [provider.provider_specs.len]?[]const u8 = @splat("k");
@@ -499,11 +499,11 @@ test "xAI defaults to the Responses wire; GRAFF_XAI_WIRE=chat opts out (#502)" {
     try std.testing.expectEqual(Provider.Kind.responses, moved.kind);
     try std.testing.expectEqualStrings(provider.xai_responses_url, moved.url);
     // codex keeps in-stream compaction — never the explicit endpoint.
-    const codex = try all.providerById("codex", "gpt-5.6-sol");
+    const codex = try all.providerById("codex", "gpt-6-sol");
     try std.testing.expect(codex.serverCompactUrl() == null);
     // every other provider is untouched by the knob: openai keeps its native
     // Responses wire (default since v0.0.250) and its own endpoint.
-    const oai = try all.providerById("openai", "gpt-5.6");
+    const oai = try all.providerById("openai", "gpt-6-sol");
     try std.testing.expectEqual(Provider.Kind.responses, oai.kind);
     try std.testing.expect(std.mem.indexOf(u8, oai.url, "api.openai.com") != null);
 }

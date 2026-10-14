@@ -324,12 +324,12 @@ test "pricing Astra has metered catalog entries and cache write premium" {
 }
 
 test "pricing gateway aliases do not inherit vendor rates or cache writes" {
-    const gateway = pricing.priceForProvider("codegraff", "gpt-5.5").?;
-    const direct = pricing.priceForProvider("openai", "gpt-5.5").?;
-    try std.testing.expectEqual(@as(f64, 4), gateway.in);
-    try std.testing.expectEqual(@as(f64, 5), direct.in);
+    const gateway = pricing.priceForProvider("codegraff", "gpt-6-sol").?;
+    const direct = pricing.priceForProvider("openai", "gpt-6-sol").?;
+    try std.testing.expectApproxEqAbs(@as(f64, 2.2), gateway.in, 1e-9);
+    try std.testing.expectEqual(@as(f64, 2), direct.in);
     const astra = pricing.priceForProvider("codegraff", "gpt-6-astra").?;
-    try std.testing.expectApproxEqAbs(@as(f64, 1), pricing.usdForUsage(astra, astra.name, 0, 0, 100_000, 0), 1e-9);
+    try std.testing.expectApproxEqAbs(@as(f64, 1.1), pricing.usdForUsage(astra, astra.name, 0, 0, 100_000, 0), 1e-9);
 }
 
 test "pricing gateway tally respects priced and free rows without vendor fallback" {
@@ -338,7 +338,9 @@ test "pricing gateway tally respects priced and free rows without vendor fallbac
     try std.testing.expectApproxEqAbs(@as(f64, 0.13086), tally.usd, 1e-9);
     const zero = pricing.priceForProvider("codegraff", "ling-3.0-flash-fin").?;
     try std.testing.expectEqual(@as(f64, 0), pricing.usdFor(zero, 100, 100, 100));
-    try std.testing.expect(pricing.priceForProvider("codegraff", "gpt-6-sol") == null);
+    // A retired gateway alias has no gateway row and never borrows the vendor's.
+    try std.testing.expect(pricing.priceFor("gpt-5.5") != null);
+    try std.testing.expect(pricing.priceForProvider("codegraff", "gpt-5.5") == null);
 }
 
 test "pricing gateway overrides name-only runtime prices and long bands" {

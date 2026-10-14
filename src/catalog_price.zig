@@ -129,13 +129,13 @@ test "a gateway catalog price wins over the baked snapshot; other providers are 
     defer pricing.active_model_table = saved;
     pricing.active_model_table = &.{
         .{ .provider = "codegraff", .name = "gemini-3.8-flash", .context = 1_048_576, .price = .{ .in = 1, .out = 2, .cache = 0.1 } },
-        .{ .provider = "codegraff", .name = "gpt-5.5", .context = 1_050_000 },
+        .{ .provider = "codegraff", .name = "gpt-6-sol", .context = 1_050_000 },
     };
     const live = pricing.priceForProvider("codegraff", "gemini-3.8-flash").?;
     try std.testing.expect(approx(live.in, 1) and approx(live.out, 2));
     // No catalog price: the baked gateway row still answers.
-    const baked = pricing.priceForProvider("codegraff", "gpt-5.5").?;
-    try std.testing.expect(approx(baked.in, 4));
+    const baked = pricing.priceForProvider("codegraff", "gpt-6-sol").?;
+    try std.testing.expect(approx(baked.in, 2.2));
     // A direct provider never reads the gateway's catalog.
     try std.testing.expect(pricing.priceForProvider("google", "gemini-3.8-flash") == null or !approx(pricing.priceForProvider("google", "gemini-3.8-flash").?.in, 1));
 }
