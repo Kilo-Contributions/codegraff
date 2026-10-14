@@ -10,6 +10,18 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.34
+
+### Google Gemini
+
+- Signing in with a Gemini API key works again. The endpoint now rejects role-shaped history ("use step_list input format instead of turn_list"), so every request failed on its first message; graff now sends the prompt, image prompts, resumed sessions and compaction summaries as Interactions steps (#1628).
+- `/effort minimal` and `none` run as `low`: current Gemini models accept only low, medium and high.
+- Gemini 4 Argon is listed with its 1M context, its effort levels and its price, so the usage footer shows its cost.
+
+### Reliability
+
+- An in-stream timeout from the hosted gateway, which says to retry, now takes the server-error retry ladder instead of ending the turn (#1628).
+
 ## v0.302.33
 
 ### Claude
