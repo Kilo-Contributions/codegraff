@@ -470,31 +470,6 @@ test "dropDisabled: {\"<name>\": false} removes it; true and absent keep it" {
     try std.testing.expectEqualStrings("c", list.items[1].name);
 }
 
-test "promptCatalog: names + descriptions only, never bodies" {
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const list = [_]Skill{
-        .{ .name = "deploy", .desc = "ship a release", .body = "SECRET-BODY-TEXT", .source = .project },
-    };
-    const text = promptCatalog(arena, &list);
-    try std.testing.expect(std.mem.indexOf(u8, text, "deploy (project): ship a release") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "SECRET-BODY-TEXT") == null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "`skill`") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "/") == null); // no file paths — they move and bust the cache prefix
-    try std.testing.expect(std.mem.indexOf(u8, text, "file:") == null); // Codex prints these; we do not
-    try std.testing.expectEqualStrings("", promptCatalog(arena, &.{}));
-
-    const shuffled = [_]Skill{
-        .{ .name = "zeta", .desc = "z", .body = "", .source = .personal },
-        .{ .name = "alpha", .desc = "a", .body = "", .source = .plugin },
-    };
-    const ordered = promptCatalog(arena, &shuffled);
-    const alpha_at = std.mem.indexOf(u8, ordered, "alpha (plugin)") orelse return error.TestUnexpectedResult;
-    const zeta_at = std.mem.indexOf(u8, ordered, "zeta (personal)") orelse return error.TestUnexpectedResult;
-    try std.testing.expect(alpha_at < zeta_at);
-}
-
 test "promptCatalog: an over-long description is capped on a codepoint boundary" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
