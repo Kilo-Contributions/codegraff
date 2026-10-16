@@ -49,6 +49,7 @@ pub const Flags = struct {
     help_flag: bool = false,
     version_flag: bool = false,
     print_flag: bool = false,
+    stream_json_flag: bool = false, // --output-format stream-json: one-shot lifecycle + result
     update_force: bool = false, // graff update --force
     selftest_spinner_flag: bool = false, // --selftest-spinner: headless spinner render for the PTY anti-stealth test
     selftest_markdown_flag: bool = false, // --selftest-markdown: render the real streaming markdown fixture in a PTY
@@ -166,6 +167,11 @@ pub fn parse(init: std.process.Init) !Flags {
                     main_mod.show_cost = true;
                 } else if (std.mem.eql(u8, arg, "--json")) {
                     main_mod.json_mode = true;
+                } else if (std.mem.eql(u8, arg, "--output-format")) {
+                    const format = it.next() orelse std.process.fatal("--output-format needs text|stream-json", .{});
+                    if (!std.mem.eql(u8, format, "text") and !std.mem.eql(u8, format, "stream-json"))
+                        std.process.fatal("--output-format needs text|stream-json", .{});
+                    flags.stream_json_flag = std.mem.eql(u8, format, "stream-json");
                 } else if (std.mem.eql(u8, arg, "--max-tool-calls")) {
                     const mv = it.next() orelse std.process.fatal("--max-tool-calls needs a non-negative integer — graff --help", .{});
                     main_mod.max_tool_calls = std.fmt.parseInt(u64, mv, 10) catch std.process.fatal("--max-tool-calls needs a non-negative integer, got '{s}'", .{mv});
@@ -284,6 +290,10 @@ pub fn parse(init: std.process.Init) !Flags {
         flags.oneshot_prompt = try std.mem.join(arena, " ", flags.positionals.items);
     }
     if (flags.print_flag and flags.oneshot_prompt == null) std.process.fatal("-p needs a prompt: harness -p \"do something\"", .{});
+    if (flags.stream_json_flag) {
+        if (flags.oneshot_prompt == null) std.process.fatal("--output-format stream-json needs a one-shot prompt", .{});
+        main_mod.json_mode = true;
+    }
     if (flags.branch_flag != null and flags.resume_flag == null) std.process.fatal("--branch needs --resume <source>", .{});
     if (flags.branch_flag != null and (flags.new_session_flag or flags.no_resume_flag)) std.process.fatal("--branch cannot be combined with --new or --no-resume", .{});
 

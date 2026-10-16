@@ -187,6 +187,7 @@ pub fn failoverEligible(provider_id: []const u8, detail: []const u8) bool {
     for (needles) |needle| if (util.indexOfIgnoreCase(detail, needle) != null) return true;
     if (!std.mem.eql(u8, provider_id, "codegraff")) return false;
     const gateway_billing = [_][]const u8{
+        @import("agent_request_quota.zig").quota_cap_marker,
         "insufficient_quota",
         "quota exceeded",
         "credits exhausted",
@@ -231,7 +232,8 @@ pub fn runTurnWithFallback(root: *Agent, keys: *Keys, arena: Allocator, out: ?*I
         } else |err| {
             // A Codex-shaped review is an isolated one-shot, not a provider switch for its parent.
             if (root.review_mode) return err;
-            if (err != error.ApiError or root.partial_text.items.len != 0 or root.tool_calls_this_turn != 0)
+            const account_failure = err == error.ProviderQuotaExceeded or err == error.ProviderAuthenticationFailed or err == error.ProviderAccessDenied;
+            if ((err != error.ApiError and !account_failure) or root.partial_text.items.len != 0 or root.tool_calls_this_turn != 0)
                 return err;
             const detail = root.last_api_error orelse return err;
             if (!failoverEligible(root.provider.id, detail)) return err;
@@ -411,6 +413,7 @@ test "failoverEligible: billing needles only fire for the gateway (#294)" {
         "billing limit reached",
         "quota exceeded for this account",
         "insufficient_quota",
+        "provider quota/billing cap: credit or allowance exhausted; retry requires account action",
     };
     for (billing) |detail| {
         try std.testing.expect(failoverEligible("codegraff", detail));

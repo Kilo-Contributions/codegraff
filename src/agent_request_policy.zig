@@ -206,7 +206,7 @@ pub fn retryWithout(self: *Agent, msg: []const u8, force: *bool, stream_usage: *
 /// have helped either, so it does not earn a retry. Neither does a credential
 /// belonging to a DIFFERENT ChatGPT account (refreshOAuthKey returns null).
 pub fn retryAfterAuthRefresh(self: *Agent, msg: []const u8, refreshed: *bool) bool {
-    if (refreshed.* or self.provider.source != .login or !isAuthError(msg)) return false;
+    if (refreshed.* or self.provider.source != .login or quota.isQuotaExceeded(msg) or !isAuthError(msg)) return false;
     refreshed.* = true;
     // ADR 0253: when the refresh cannot help, an interactive ChatGPT session signs in again.
     const fresh = oauth.refreshOAuthKey(self.io, self.gpa, self.scratchAlloc(), self.home, self.provider.id, true, self.provider.api_key, self.provider.account) orelse return @import("chatgpt_reauth.zig").renewed(self);
@@ -384,11 +384,13 @@ pub fn errorCode(root: std.json.ObjectMap) ?[]const u8 {
         if (ev == .object) {
             if (ev.object.get("code")) |cv| {
                 if (cv == .string) return cv.string;
+                if (quota.numericStatusCode(cv)) |c| return c;
             }
         }
     }
     if (root.get("code")) |cv| {
         if (cv == .string) return cv.string;
+        if (quota.numericStatusCode(cv)) |c| return c;
     }
     // The ChatGPT plan route's 401: {"detail":{"error_code":"invalid_token"}}.
     if (root.get("detail")) |dv| {

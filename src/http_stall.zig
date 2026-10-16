@@ -1,7 +1,7 @@
-//! Stall-budget arithmetic for the streaming watchdogs (#56). Pure: no Io, no
-//! globals, so both regimes are testable at their boundary without sleeping
-//! through a real 120s stall. Lives beside http.zig (which is at the 600-line
-//! cap) the way http_headers.zig does; http.zig owns the watchdog loops and
+//! Stall-budget arithmetic for the streaming watchdogs (#56). Policy choices
+//! are testable without Io or sleeping through real stalls; streamPolicy is
+//! the boundary that reads configured/env overrides. Lives beside http.zig
+//! like http_headers.zig; http.zig owns the watchdog loops and
 //! the configured budget, this owns the decision they make each tick.
 
 const std = @import("std");
@@ -77,10 +77,148 @@ pub fn interFrameBudgetMs(base_ms: u64, saw_protocol: bool, tokens_flowing: bool
     return budgetMsWidened(base_ms, false, widen);
 }
 
+/// Request-local policy: buffered Gemini-4 generations may be silent after
+/// HTTP headers, even before their first SSE frame. Keep connect/HTTP-head
+/// watchdogs unchanged, and keep the usual fast budget while prose is open.
+/// This cannot extend a gateway's own upstream/idle deadline or send SSE
+/// keepalives on the server's behalf.
+pub const StreamPolicy = struct {
+    silence_ms: u64,
+    initial_ms: u64,
+    prose_base_ms: u64,
+
+    pub fn init(model: []const u8, base_ms: u64, head_ms: u64, stream_override: bool, head_override: bool) StreamPolicy {
+        // Non-default configured values also win for embedded callers/tests
+        // that set budgets without going through the process environment.
+        const explicit_stream = stream_override or base_ms != 120 * 1000;
+        const buffered = bufferedToolModel(model) and !explicit_stream;
+        const silence = if (buffered) @max(base_ms, 20 * 60 * 1000) else base_ms;
+        const initial = if (buffered and !head_override and head_ms == 45 * 1000) silence else @min(silence, head_ms);
+        return .{ .silence_ms = silence, .initial_ms = initial, .prose_base_ms = base_ms };
+    }
+
+    pub fn interFrameBudgetMs(self: StreamPolicy, saw_protocol: bool, prose_open: bool, widen: u8) u64 {
+        if (prose_open) return budgetMsWidened(self.prose_base_ms, true, widen);
+        return if (saw_protocol) self.silence_ms else self.initial_ms;
+    }
+};
+
+/// Compute once per stream, never mutate shared watchdog budgets. Inspect the
+/// explicit knobs as well as their configured values: an override equal to
+/// the shipped default is still an override. Validation matches settings.
+pub fn streamPolicy(model: []const u8, base_ms: u64) StreamPolicy {
+    return StreamPolicy.init(model, base_ms, head_ceiling_ms, validSecondsEnv("GRAFF_STREAM_STALL_SECS"), validSecondsEnv("GRAFF_STREAM_HEAD_STALL_SECS"));
+}
+
+fn validSecondsEnv(name: [*:0]const u8) bool {
+    const raw = std.c.getenv(name) orelse return false;
+    return validSeconds(std.mem.span(raw));
+}
+
+fn validSeconds(raw: []const u8) bool {
+    const seconds = std.fmt.parseInt(u64, std.mem.trim(u8, raw, " \t"), 10) catch return false;
+    return seconds > 0;
+}
+
+fn bufferedToolModel(qualified_model: []const u8) bool {
+    const model = if (std.mem.lastIndexOfScalar(u8, qualified_model, '/')) |slash| qualified_model[slash + 1 ..] else qualified_model;
+    const prefix = "gemini-4";
+    if (model.len < prefix.len or !std.ascii.eqlIgnoreCase(model[0..prefix.len], prefix)) return false;
+    if (model.len == prefix.len) return true;
+    // Bound the family match: gemini-40 and gemini-4ish are not Gemini-4.
+    return switch (model[prefix.len]) {
+        '-', '.', ':' => true,
+        else => false,
+    };
+}
+
 /// True once a silent read has outlasted its budget — the watchdog loop's only
 /// decision, split out so it can be exercised at the boundary in a unit test.
 pub fn expired(waited_ms: u64, base_ms: u64, tokens_flowing: bool) bool {
     return waited_ms >= budgetMs(base_ms, tokens_flowing);
+}
+
+test "stream policy: Gemini-4 model ids allow buffered tool silence, not slow prose" {
+    const models = [_][]const u8{
+        "gemini-4",                         "gemini-4-argon",             "gemini-4.0-pro", "google/gemini-4-argon",
+        "openrouter/google/gemini-4-argon", "google/gemini-4-argon:free", "GEMINI-4-ARGON",
+    };
+    for (models) |model| {
+        const policy = StreamPolicy.init(model, 120_000, 45_000, false, false);
+        try std.testing.expectEqual(@as(u64, 1_200_000), policy.interFrameBudgetMs(false, false, 0));
+        try std.testing.expectEqual(@as(u64, 1_200_000), policy.interFrameBudgetMs(true, false, 0));
+        // A multi-minute buffered function call fits; a dead mid-answer
+        // socket still gets the usual 30s / 60s / 120s reconnect ladder.
+        try std.testing.expect(10 * 60 * 1000 < policy.interFrameBudgetMs(true, false, 0));
+        try std.testing.expectEqual(@as(u64, 30_000), policy.interFrameBudgetMs(true, true, 0));
+        try std.testing.expectEqual(@as(u64, 60_000), policy.interFrameBudgetMs(true, true, 1));
+        try std.testing.expectEqual(@as(u64, 120_000), policy.interFrameBudgetMs(true, true, 2));
+    }
+}
+
+test "stream policy: other models retain fast first-frame and prose defaults" {
+    const models = [_][]const u8{
+        "",                                  "gpt-6.1-sol", "claude-opus",        "gemini-3.7-flash", "google/gemini-3.7-pro",
+        "openrouter/google/gemini-40-argon", "gemini-4ish", "not-gemini-4-argon", "google/",
+    };
+    for (models) |model| {
+        const policy = StreamPolicy.init(model, 120_000, head_ceiling_ms, false, false);
+        for ([_]bool{ false, true }) |protocol| {
+            for ([_]bool{ false, true }) |prose| {
+                for ([_]u8{ 0, 1, 2, 7 }) |widen| {
+                    try std.testing.expectEqual(interFrameBudgetMs(120_000, protocol, prose, widen), policy.interFrameBudgetMs(protocol, prose, widen));
+                }
+            }
+        }
+    }
+}
+
+test "stream policy: explicit stream overrides win even at the shipped default" {
+    for ([_]u64{ 5_000, 120_000, 600_000, 1_800_000, 86_400_000 }) |base| {
+        const policy = StreamPolicy.init("openrouter/google/gemini-4-argon", base, base, true, false);
+        try std.testing.expectEqual(base, policy.interFrameBudgetMs(false, false, 0));
+        try std.testing.expectEqual(base, policy.interFrameBudgetMs(true, false, 0));
+        try std.testing.expectEqual(budgetMsWidened(base, true, 1), policy.interFrameBudgetMs(true, true, 1));
+    }
+    // Embedded callers and shortened stall fixtures remain bounded too.
+    const configured = StreamPolicy.init("gemini-4-argon", 1_200, 45_000, false, false);
+    try std.testing.expectEqual(@as(u64, 1_200), configured.interFrameBudgetMs(false, false, 0));
+}
+
+test "stream policy: explicit HEAD overrides only the first SSE frame, not HTTP connect" {
+    for ([_]u64{ 9_000, 45_000, 600_000, 1_800_000 }) |head| {
+        const policy = StreamPolicy.init("google/gemini-4-argon", 120_000, head, false, true);
+        try std.testing.expectEqual(@min(head, @as(u64, 1_200_000)), policy.interFrameBudgetMs(false, false, 0));
+        try std.testing.expectEqual(@as(u64, 1_200_000), policy.interFrameBudgetMs(true, false, 0));
+        try std.testing.expectEqual(@as(u64, 30_000), policy.interFrameBudgetMs(true, true, 0));
+    }
+    const both = StreamPolicy.init("gemini-4-argon", 120_000, 9_000, true, true);
+    try std.testing.expectEqual(@as(u64, 9_000), both.interFrameBudgetMs(false, false, 0));
+    try std.testing.expectEqual(@as(u64, 120_000), both.interFrameBudgetMs(true, false, 0));
+}
+
+test "stream policy: interleaved requests never leak the buffered allowance" {
+    const saved_head = head_ceiling_ms;
+    const saved_floor = idle_floor_ms;
+    const gemini = StreamPolicy.init("openrouter/google/gemini-4-argon", 120_000, 45_000, false, false);
+    const other = StreamPolicy.init("gpt-6.1-sol", 120_000, 45_000, false, false);
+    const gemini_override = StreamPolicy.init("gemini-4-argon", 120_000, 120_000, true, false);
+    try std.testing.expectEqual(@as(u64, 1_200_000), gemini.interFrameBudgetMs(true, false, 0));
+    try std.testing.expectEqual(@as(u64, 45_000), other.interFrameBudgetMs(false, false, 0));
+    try std.testing.expectEqual(@as(u64, 120_000), other.interFrameBudgetMs(true, false, 0));
+    try std.testing.expectEqual(@as(u64, 120_000), gemini_override.interFrameBudgetMs(true, false, 0));
+    try std.testing.expectEqual(@as(u64, 1_200_000), gemini.interFrameBudgetMs(false, false, 0));
+    try std.testing.expectEqual(saved_head, head_ceiling_ms);
+    try std.testing.expectEqual(saved_floor, idle_floor_ms);
+}
+
+test "stream policy: only valid positive seconds suppress model defaults" {
+    for ([_][]const u8{ "", "0", " 0 ", "-1", "oops", "1.5", "18446744073709551616" }) |raw| {
+        try std.testing.expect(!validSeconds(raw));
+        const policy = StreamPolicy.init("gemini-4-argon", 120_000, 45_000, validSeconds(raw), validSeconds(raw));
+        try std.testing.expectEqual(@as(u64, 1_200_000), policy.interFrameBudgetMs(false, false, 0));
+    }
+    for ([_][]const u8{ "1", "120", " \t120\t", "86401", "18446744073709551615" }) |raw| try std.testing.expect(validSeconds(raw));
 }
 
 test "stall budget (#56): between-lines silence trips sooner than a pre-first-token pause" {

@@ -28,7 +28,7 @@ const policy = @import("agent_request_policy.zig");
 
 const overflow = @import("agent_overflow.zig");
 const errorCode = policy.errorCode;
-const isQuotaExceeded = policy.isQuotaExceeded;
+const quota = @import("agent_request_quota.zig");
 const recoverContextOverflow = overflow.recoverContextOverflow;
 // #414: an HTTP 200 that overflowed silently — the provider accepted an
 // over-window input and answered with nothing (z.ai), or truncated our input
@@ -141,6 +141,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     if (self.run_budget) |b| if (budget_permit) |p| {
         if (b.max_model_calls != 0 and p.call_number == b.max_model_calls and tools != null) {
             tools = null;
+            b.model_landed.store(true, .release);
             try self.messages.append(try wire_messages.userNote(self.arena, self.provider.kind, landing_note));
             if (self.tracer) |tr| tr.note("budget", "final call: tools withheld so the run lands its answer (#390)");
         }
@@ -270,6 +271,10 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     if (err == error.Interrupted) return error.Interrupted;
                     if (err == error.Steered) if (@import("steer_now.zig").supersede(self)) continue :rebuild;
                     if (err == error.Canceled) return error.Canceled;
+                    if (quota.transportCode(err)) |code| {
+                        if (try quota.handle(self, "", code, "", &auth_refreshed)) continue;
+                        return err;
+                    }
                     // #56: a mid-stream idle stall or a connection drop (the
                     // provider closed/reset before its terminal event) — NOT a
                     // user Esc, which is handled above. Usually transient, so
@@ -336,24 +341,10 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     const throttled = err == error.RateLimited or err == error.ServerError;
                     const max_attempts = retry_limit orelse RetryPlan.maxAttempts(throttled);
                     retry_limit = max_attempts;
-                    // #opencode-parity: a 429 that's a billing/quota cap (not
-                    // transient throttling) won't clear by retrying — fail fast so
-                    // cross-provider /fallback can take over, instead of burning all
-                    // 5 attempts (~23s). Detected from the captured 429 body.
-                    if (err == error.RateLimited and main_mod.g_5xx_body_len > 0 and
-                        isQuotaExceeded(main_mod.g_5xx_body_buf[0..main_mod.g_5xx_body_len]))
-                    {
-                        // #471: a flat-rate plan that has run out is exactly
-                        // when the metered key it outranked earns its keep.
-                        // Hand over and retry rather than failing a session
-                        // with a working credential sitting unused. One-way
-                        // and announced — see credential_failover.
-                        if (policy.handOffExhaustedPlan(self)) continue;
-                        const plan_hint = if (std.mem.eql(u8, self.provider.id, "chatgpt-new")) " \xe2\x80\x94 " ++ @import("oauth_chatgpt.zig").usage_hint else "";
-                        self.last_api_error = std.fmt.allocPrint(self.arena, "rate limited (429): {s}{s}", .{ policy.quota_cap_marker, plan_hint }) catch "rate limited (429): quota exceeded";
-                        if (telemetry.g_telem) |t| t.errorEvent("quota", self.last_api_error orelse "quota exceeded");
-                        if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, 0, body.len, 0, 0, 0, true);
-                        return error.ApiError;
+                    // A proxy may wrap a billing/auth refusal in 429 OR 5xx.
+                    // Terminal account faults outrank the generic retry status.
+                    if (throttled and main_mod.g_5xx_body_len > 0) {
+                        if (try quota.handle(self, "", null, main_mod.g_5xx_body_buf[0..main_mod.g_5xx_body_len], &auth_refreshed)) continue;
                     }
                     if (err == error.TlsRequestConstructionFailed or err == error.TlsRequestConstructionCaWarmFailed) if (self.tracer) |tr| tr.note(
                         "tls_request_construction",
@@ -445,6 +436,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                         return error.ApiError;
                     }
                     if (ws_error_frame) if (self.tracer) |tr| tr.note("ws_api_error", diagnostic);
+                    if (try quota.handle(self, "", failure.code, msg, &auth_refreshed)) continue :rebuild;
                     if (codex_chain.shouldReanchorRequest(body, msg, failure.code)) {
                         self.closeCodexWs();
                         if (self.tracer) |tr| tr.note("ws", "server dropped previous_response_id — re-anchoring with full input");
@@ -498,7 +490,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     const eo = if (root.get("error")) |ev| (if (ev == .object) ev.object else null) else null;
                     const etype = if (eo) |e| (if (e.get("type")) |tv| (if (tv == .string) tv.string else "error") else "error") else "error";
                     const emsg = if (eo) |e| (if (e.get("message")) |mv| (if (mv == .string) mv.string else "") else "") else "";
-                    const ecode = if (eo) |e| (if (e.get("code")) |cv| (if (cv == .string) cv.string else null) else null) else null;
+                    const ecode = errorCode(root);
+                    if (try quota.handle(self, etype, ecode, emsg, &auth_refreshed)) continue;
                     if (recoverContextOverflow(self, emsg, ecode, &context_retried)) continue; // #193/#203: streamed error event overflow (by code or phrasing) → trim + retry
                     if (policy.retryWithout(self, emsg, &force, &stream_usage)) continue; // ADR 0219: Anthropic errors take the ladder too
                     if (try policy.afterServerErrorOrParseReject(self, etype, ecode, emsg, &server_retries, &gw_retry)) continue;
@@ -548,7 +541,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
             const eo = if (root.get("error")) |ev| (if (ev == .object) ev.object else null) else null;
             const etype = if (eo) |e| (if (e.get("type")) |tv| (if (tv == .string) tv.string else "error") else "error") else "error";
             const emsg = if (eo) |e| (if (e.get("message")) |mv| (if (mv == .string) mv.string else "") else "") else "";
-            const ecode = if (eo) |e| (if (e.get("code")) |cv| (if (cv == .string) cv.string else null) else null) else null;
+            const ecode = errorCode(root);
+            if (try quota.handle(self, etype, ecode, emsg, &auth_refreshed)) continue;
             if (recoverContextOverflow(self, emsg, ecode, &context_retried)) continue; // #193/#203: {"type":"error"} overflow (by code or phrasing) → trim + retry
             if (policy.retryWithout(self, emsg, &force, &stream_usage)) continue; // ADR 0219: Anthropic errors take the ladder too
             if (try policy.afterServerErrorOrParseReject(self, etype, ecode, emsg, &server_retries, &gw_retry)) continue;
@@ -557,6 +551,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
             return error.ApiError;
         };
         if (apiErrorMessage(root)) |msg| {
+            if (try quota.handle(self, "", errorCode(root), msg, &auth_refreshed)) continue;
             if (policy.retryWithout(self, msg, &force, &stream_usage)) continue;
             // #148: a stale login token 401s here with the provider's "API Key
             // invalid/expired"; adopt a newer on-disk token or force a refresh

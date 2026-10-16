@@ -10,6 +10,15 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.39
+
+### Unattended runs
+
+- Output limits continue with bounded recovery and incremental file writes; incomplete tool calls are never executed.
+- Empty replies retry with cancellable, jittered backoff. Account-limit and sign-in failures stop with distinct exit codes instead of wasting retries.
+- `-p --output-format stream-json` emits a session handle at startup and a final result with status, usage, cost completeness and checkpoint status. Forced budget landings report partial work, not completion.
+- Buffered generation gets request-local silence allowances, and raw MCP startup exceptions are debug-only. Recovery still uses session checkpoints, not exactly-once journal replay.
+
 ## v0.302.38
 
 ### Windows

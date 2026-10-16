@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.39
+    \\  • unattended runs recover from output limits and empty replies
+    \\  • one-shot stream-json reports a resume handle, outcome and usage
+    \\  • exhausted budgets and account limits stop with distinct exit codes
+    \\
     \\0.302.38
     \\  • Windows: faster start, and the companion is found on PATH
     \\
@@ -275,6 +280,7 @@ pub const usage_text =
     \\  --no-lean        opt a one-shot out of the implied --lean: full tool surface + eager MCP schemas, the pre-default -p behavior
     \\  --no-local-tools embedder mode: hard-disable the built-in bash/bash_output/bash_kill/read_file/edit_file/write_file/codedb tools for the whole process (subagents included), so graff can run outside the sandbox and get its coding tools from an MCP server instead; webfetch, orchestration and MCP tools still work (GRAFF_NO_LOCAL_TOOLS=1)
     \\  -p, --print      one-shot print mode (answer on stdout, progress on stderr)
+    \\  --output-format text|stream-json  one-shot output; stream-json emits run_started and result
     \\  --timing         show per-tool wall-clock on result lines
     \\  --cost           show running session spend in the prompt
     \\  --json           structured stdio protocol (JSON in, JSONL events out)

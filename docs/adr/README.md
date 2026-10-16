@@ -294,6 +294,7 @@ record only when you need the evidence or the edge cases.
 | [0281](0281-anthropic-console-sign-in-reads-the-sdk-profile.md) | Anthropic Console sign-in: graff reads the `user_oauth` profile Anthropic's CLI writes (`ant auth login`), in the SDK's precedence (API key wins), sends it as Bearer, and refreshes through `ant auth print-credentials`; `graff login anthropic` runs `ant auth login`. No claude.ai subscription login. |
 | [0282](0282-claude-system-breakpoint-closes-before-the-repo-context.md) | On Claude, the system prompt is two text blocks with the same bytes: the cache breakpoint closes the static instructions, before the project instructions and layout, so every repo shares the tools + instructions prefix. |
 | [0283](0283-agents-prepare-and-linked.md) | New task worktrees symlink the gitignored paths `.agents/linked` lists from the main checkout and run `.agents/prepare` when `.graff/workspace.toml` names no setup script. |
+| [0284](0284-output-limits-are-recovery-not-completion.md) | Output limits continue with bounded recovery; empty replies back off; one-shots expose a saved-session handle and classified result without claiming unknown costs or exactly-once replay. |
 
 ## When to write one
 

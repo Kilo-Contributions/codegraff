@@ -18,7 +18,6 @@ const http_zig = @import("http_zig");
 const WatchdogFired = http.WatchdogFired;
 const watchdogError = http.watchdogError;
 const deadlineStallTask = http.deadlineStallTask;
-const headStallTask = http.headStallTask;
 
 const ssePayload = Agent.ssePayload;
 const escPressed = Agent.escPressed;
@@ -89,10 +88,11 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
     // Dial, send and time-to-first-HEADERS race the head-stall watchdog, as
     // the HTTP/1.1 send + receiveHead do (issue #54): a half-open socket or a
     // server that accepts the stream and goes silent must not hang the turn.
-    switch (try raceHead(self.io, &head, poll_stdin)) {
+    switch (try raceHead(self.io, &head, poll_stdin, http.head_stall_ms)) {
         .ok => {},
         .fallback => return null,
     }
+    if (@import("agent_request_quota.zig").httpError(head.status)) |err| return err;
     if (head.status == 429) return error.RateLimited;
     if (head.status >= 500) return error.ServerError;
     if (head.status == 404 and head.openai) return error.OpenAiFlaky404;
@@ -110,9 +110,13 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
     var loop_guard: @import("agent_model_loop.zig").Stream = .{};
     var got_body = false;
     var saw_done = false;
+    var prose_open = false;
+    var phase: @import("agent_ws_signal.zig").Phase = .{}; // ADR 0241/0248, same as HTTP/1.1
+    const policy = http_stall.streamPolicy(provider.model, http.stream_stall_ms);
 
     while (true) {
-        const stall_budget = http_stall.interFrameBudgetMs(http.stream_stall_ms, got_body, self.partial_text.items.len != 0, self.stall.widen);
+        // Buffered generation is over once finish_reason arrives; usage trailers keep the normal deadline.
+        const stall_budget = if (saw_done) http_stall.interFrameBudgetMs(http.stream_stall_ms, got_body, prose_open, self.stall.widen) else policy.interFrameBudgetMs(got_body, prose_open, self.stall.widen);
         const got = raceLine(self.io, lines, &line, gpa, poll_stdin, stall_budget) orelse {
             // #56 Fix-B: no spare concurrency for the read. Fail safe.
             if (saw_done) break;
@@ -148,7 +152,10 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
         try full.writer.writeAll(line.items);
         try full.writer.writeByte('\n');
         got_body = true;
+        const prose_len = self.partial_text.items.len;
         self.printDelta(line.items);
+        phase.feed(gpa, line.items);
+        if (self.partial_text.items.len > prose_len) prose_open = !phase.commentary else if (@import("agent_ws_signal.zig").closesItem(gpa, line.items)) prose_open = false;
         if (main_mod.g_thinking_fold_request) {
             main_mod.g_thinking_fold_request = false;
             sink.emit(self.io, .thinking_fold_toggle);
@@ -200,14 +207,14 @@ const Head = struct {
 
 const HeadResult = enum { ok, fallback };
 
-fn raceHead(io: Io, head: *Head, poll_stdin: bool) !HeadResult {
+fn raceHead(io: Io, head: *Head, poll_stdin: bool, budget_ms: u64) !HeadResult {
     const HeadDone = union(enum) { done: anyerror!void, stall: WatchdogFired };
     var hd_buf: [2]HeadDone = undefined;
     var hsel: Io.Select(HeadDone) = .init(io, &hd_buf);
     // #56 Fix-B: no slot for the task means no watchdog either. Nothing has
     // been sent, so fail retryable instead of blocking the turn.
     hsel.concurrent(.done, headTask, .{head}) catch return error.HungRequest;
-    hsel.concurrent(.stall, headStallTask, .{ io, poll_stdin }) catch {};
+    hsel.concurrent(.stall, deadlineStallTask, .{ io, poll_stdin, budget_ms }) catch {};
     const first = hsel.await() catch |e| {
         hsel.cancelDiscard();
         return e;

@@ -16,6 +16,8 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
     defer if (!self.sub) @import("peer_idle.zig").noteTurnEnd();
     var pending_work = empty_completion.PendingWork.begin(self);
     var bounced_answer: empty_completion.BounceAnswer = .{};
+    var length: @import("agent_length.zig").State = .{};
+    self.empty_completion_retries = 0;
     self.completed = null;
     self.yielded = null;
     self.read_miss.reset();
@@ -75,7 +77,7 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
         }
         const hist_len = self.messages.items.len;
         const root = self.request(if (self.text_only) null else self.toolsJson()) catch |err| return review_deadline.finish(try @import("agent_model_loop.zig").finishError(self, err));
-        const done = try @import("agent_steps.zig").stepForWire(self, root);
+        const done = try length.step(self, root);
         if (done) |final_text| {
             if (self.yielded != null) return review_deadline.finish(final_text);
             if (@import("tool_call_repair.zig").endsTurn(self, final_text)) return review_deadline.finish(final_text); // final: no retry/nudge
