@@ -12,13 +12,17 @@ pub const marker = "stopped: model loop";
 
 pub const Stream = struct {
     detector: Detector = .{},
+    /// This reply's size before any tool call (agent_length_cutoff.zig).
+    size: @import("agent_length_cutoff.zig").ReplySize = .{},
 
-    /// Parse only actual assistant text. Never inspect reasoning or tool args.
+    /// The loop detector reads only assistant text; the runaway size check also
+    /// counts reasoning and stops counting once a tool call starts.
     /// Capture works even when the frontend doesn't paint streaming deltas.
     pub fn event(self: *Stream, agent: *Agent, payload: []const u8, paint: bool) !void {
         const parsed = std.json.parseFromSlice(Value, agent.gpa, payload, .{}) catch return;
         defer parsed.deinit();
         const text = delta(agent.provider.kind, parsed.value);
+        if (self.size.feed(agent, parsed.value, text.len)) return error.ReplyRunaway;
         if (text.len == 0) return;
         const enabled = !agent.compaction_request and agent.output_schema == null;
         const n = if (enabled) self.detector.feed(text) else text.len;

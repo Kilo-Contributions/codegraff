@@ -16,6 +16,7 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
     defer if (!self.sub) @import("peer_idle.zig").noteTurnEnd();
     var pending_work = empty_completion.PendingWork.begin(self);
     var bounced_answer: empty_completion.BounceAnswer = .{};
+    self.length_cutoff_used = false; // agent_length_cutoff.zig: once per turn
     self.completed = null;
     self.yielded = null;
     self.read_miss.reset();
@@ -74,11 +75,15 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
             }
         }
         const hist_len = self.messages.items.len;
-        const root = self.request(if (self.text_only) null else self.toolsJson()) catch |err| return review_deadline.finish(try @import("agent_model_loop.zig").finishError(self, err));
+        const root = self.request(if (self.text_only) null else self.toolsJson()) catch |err| {
+            if (try @import("agent_length_cutoff.zig").recoverRunaway(self, err, hist_len)) continue;
+            return review_deadline.finish(try @import("agent_model_loop.zig").finishError(self, err));
+        };
         const done = try @import("agent_steps.zig").stepForWire(self, root);
         if (done) |final_text| {
             if (self.yielded != null) return review_deadline.finish(final_text);
             if (@import("tool_call_repair.zig").endsTurn(self, final_text)) return review_deadline.finish(final_text); // final: no retry/nudge
+            if (try @import("agent_length_cutoff.zig").handle(self, root, hist_len)) continue;
             // Retry empty replies; reconcile plain finals with live work (#745).
             if (try bounced_answer.retry(self, final_text, hist_len)) continue;
             if (try @import("named_work.zig").handle(self, final_text)) continue;
