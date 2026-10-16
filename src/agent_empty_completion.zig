@@ -204,7 +204,7 @@ pub const PendingWork = struct {
         return goals.openCount(self.todos.items, goals.currentEpoch(self.goal));
     }
 
-    fn canRequest(self: *const Agent) bool {
+    pub fn canRequest(self: *const Agent) bool {
         if (self.run_budget) |b| if (!b.canAfford(1)) return false;
         if (main_mod.max_tool_calls) |max| if (self.tool_calls_this_turn >= max) return false;
         const cap = @import("turn_chrome.zig").max_turn_model_calls;
