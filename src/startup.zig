@@ -168,6 +168,18 @@ pub fn buildSystemPrompt(
         if (skill_catalog.len > 0) {
             sys_normal = try std.fmt.allocPrint(arena, "{s}\n\n{s}", .{ sys_normal, skill_catalog });
         }
+        for (skill_docs.g_skills) |sk| if (sk.source == .project) {
+            skill_docs.g_workspace_skills = true;
+        };
+    } else {
+        // Lean leaves out the personal catalog, but not the skills this
+        // workspace ships: a task that says "use the X skill" must see it.
+        const local = skill_docs.loadProject(io, arena, fleet.g_home);
+        if (local.len > 0) {
+            skill_docs.g_skills = local;
+            skill_docs.g_workspace_skills = true;
+            sys_normal = try std.fmt.allocPrint(arena, "{s}\n\n{s}", .{ sys_normal, skill_docs.promptCatalog(arena, local) });
+        }
     }
     // #326: this returns the composed BASE only. prompts.setSystemPrompts()
     // (called once by buildRootAgent, the sole consumer) derives

@@ -58,3 +58,42 @@ test "#730: a SKILL.md over 8 KB stays in the catalog and loads whole" {
     try std.testing.expect(!out.is_error);
     try std.testing.expect(std.mem.indexOf(u8, out.text, "TAIL_MARKER_PAST_THE_HEAD_CAP") != null);
 }
+
+// A workspace's .agents/skills (the cross-tool location Antigravity, Codex and
+// Harbor tasks use) is project tier, and --lean still advertises it.
+test "project .agents/skills loads, reaches the catalog, and keeps `skill` unfolded" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = std.testing.io;
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const n = try tmp.dir.realPath(io, &buf);
+    const root = try arena.dupe(u8, buf[0..n]);
+    const dir = try std.fmt.allocPrint(arena, "{s}/.agents/skills/generate-greeting", .{root});
+    try Io.Dir.cwd().createDirPath(io, dir);
+    try Io.Dir.cwd().writeFile(io, .{
+        .sub_path = try std.fmt.allocPrint(arena, "{s}/SKILL.md", .{dir}),
+        .data = "---\nname: generate-greeting\ndescription: Write the greeting file.\n---\n\nWrite the greeting.\n",
+    });
+
+    const list = skill_docs.projectSkills(io, arena, root);
+    try std.testing.expectEqual(@as(usize, 1), list.len);
+    try std.testing.expectEqualStrings("generate-greeting", list[0].name);
+    try std.testing.expect(list[0].source == .project);
+    const catalog = skill_docs.promptCatalog(arena, list);
+    try std.testing.expect(std.mem.indexOf(u8, catalog, "- generate-greeting (project): Write the greeting file.") != null);
+
+    const nlt = @import("no_local_tools.zig");
+    const fold = @import("native_fold.zig");
+    const saved = skill_docs.g_workspace_skills;
+    defer skill_docs.g_workspace_skills = saved;
+    skill_docs.g_workspace_skills = false;
+    try std.testing.expect(!nlt.leanKeeps("skill"));
+    try std.testing.expect(fold.isFolded("skill"));
+    skill_docs.g_workspace_skills = true;
+    try std.testing.expect(nlt.leanKeeps("skill"));
+    try std.testing.expect(!fold.isFolded("skill"));
+    try std.testing.expect(!nlt.leanKeeps("workflow") and fold.isFolded("workflow"));
+}
