@@ -15,6 +15,7 @@ const writeAnthropicMessages = serde.writeAnthropicMessages;
 const writeAnthropicTools = serde.writeAnthropicTools;
 const writeKimiTools = serde.writeKimiTools;
 const writeOpenAIMessageNormalized = serde.writeOpenAIMessageNormalized;
+const anthropic_oauth = @import("anthropic_oauth_wire.zig");
 
 pub fn responsesOutputLimit(self: *const Agent) u32 {
     if (self.compaction_request) return 4096;
@@ -34,6 +35,8 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
     switch (self.provider.kind) {
         .anthropic => {
             const is_kimi = std.mem.eql(u8, self.provider.id, "kimi");
+            const is_oauth = anthropic_oauth.active(self.provider);
+            const oauth_names = if (is_oauth) try anthropic_oauth.ToolNames.init(self.scratchAlloc(), tools orelse "[]") else anthropic_oauth.ToolNames{};
             const claude = @import("claude_wire.zig"); // ADR 0219
             const is_claude = claude.isClaudeApi(self.provider.id, self.provider.model);
             try s.objectField("max_tokens");
@@ -92,6 +95,7 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
                 const at = if (is_claude) @import("repo_context.zig").staticEnd(self, sys) else sys.len;
                 const head = if (at == 0) sys else sys[0..at];
                 try s.beginArray();
+                if (is_oauth) try anthropic_oauth.writeSystemPrefix(&s);
                 try writeSystemBlock(&s, head, cc);
                 if (head.len < sys.len) try writeSystemBlock(&s, sys[head.len..], null);
                 try s.endArray();
@@ -104,7 +108,10 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             var effort_written = false;
             if (tools) |t| {
                 try s.objectField("tools");
-                try writeAnthropicTools(&s, self.scratchAlloc(), t, is_kimi);
+                if (is_oauth)
+                    try oauth_names.writeTools(&s, self.scratchAlloc())
+                else
+                    try writeAnthropicTools(&s, self.scratchAlloc(), t, is_kimi);
                 if (force) {
                     try s.objectField("tool_choice");
                     try s.print("{s}", .{"{\"type\":\"any\"}"});
@@ -121,7 +128,10 @@ pub fn buildBody(self: *Agent, tools_in: ?[]const u8, force_tool: bool, stream: 
             // Anthropic API and Kimi's declared Anthropic transport. Kimi also
             // normalizes all string content into Anthropic text blocks.
             const cache_msgs = is_claude or is_kimi;
-            try writeAnthropicMessages(&s, self.messages, if (cache_msgs) cc else null, is_kimi);
+            if (is_oauth)
+                try oauth_names.writeMessages(&s, self.scratchAlloc(), self.messages, cc)
+            else
+                try writeAnthropicMessages(&s, self.messages, if (cache_msgs) cc else null, is_kimi);
         },
         .openai => {
             // graff's MakeOpenAiCompat: OpenAI deprecated max_tokens in

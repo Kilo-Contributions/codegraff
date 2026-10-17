@@ -190,6 +190,7 @@ pub const Agent = struct {
     tools_interactions: []const u8 = @import("schema_interactions.zig").tools_interactions_sub,
     worker_tools: []const u8 = "", // ADR 0227: a spawned child's catalog plus the MCP tools its root loaded (worker_mcp.inherit); empty = the static child catalog
     todos: std.ArrayList(TodoItem) = .empty,
+    pending_nudged_fp: ?u64 = null, // #1545: fingerprint of the open set the reconciliation guard last nudged; a repeat plain final on an unchanged checklist stops instead of re-reminding
     eval_cmd: ?[]const u8 = null, // --eval: shell command that scores the current output (eval-driven loop)
     eval_target: u8 = 90, // --until: stop when the score reaches this (0-100)
     eval_niche: []const u8 = "", // --niche: fleet niche this eval session optimizes; tags submitted scores into a promotable (niche × tier × suite) cell
@@ -524,4 +525,72 @@ test {
     _ = @import("agent_prompt.zig");
     _ = @import("effort_route.zig");
     try agent_tests.lazyRootTools(Agent);
+}
+
+fn pendingStateFixture(arena: Allocator) Agent {
+    return .{
+        .gpa = arena,
+        .arena = arena,
+        .io = std.testing.io,
+        .client = undefined,
+        .provider = .{ .id = "test", .kind = .openai, .auth = .bearer, .url = "", .api_key = "", .model = "test", .context = 100_000 },
+        .messages = .init(arena),
+        .sub = false,
+        .label = "pending",
+        .out = null,
+        .tool_calls_this_turn = 3,
+        .model_calls_this_turn = 4,
+    };
+}
+
+test "#1545 a repeat plain final on an unchanged checklist stops without re-reminding" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const PendingWork = @import("agent_empty_completion.zig").PendingWork;
+    var self = pendingStateFixture(arena.allocator());
+    try self.todos.append(self.arena, .{ .content = "credit grant", .status = "pending" });
+    try self.todos.append(self.arena, .{ .content = "roll out", .status = "in_progress" });
+    // Turn 1: the one retry.
+    var first: PendingWork = .{};
+    try std.testing.expect((try first.finish(&self, "stopping")) == null);
+    try std.testing.expectEqual(@as(usize, 1), self.messages.items.len);
+    // Turn 2 (fresh per-turn state, same checklist): footer, no new message.
+    var second: PendingWork = .{};
+    const final = (try second.finish(&self, "stopping")).?;
+    try std.testing.expect(std.mem.indexOf(u8, final, "Root execution has stopped with 2 open checklist items") != null);
+    try std.testing.expectEqual(@as(usize, 1), self.messages.items.len);
+    // Re-planned work re-arms: cancelling one item changes the open set.
+    self.todos.items[0].status = "cancelled";
+    var third: PendingWork = .{};
+    try std.testing.expect((try third.finish(&self, "stopping again")) == null);
+    try std.testing.expectEqual(@as(usize, 2), self.messages.items.len);
+}
+
+test "#1545 cancelled items are records: skipped by open/allDone, kept by replace, rendered [-]" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const PendingWork = @import("agent_empty_completion.zig").PendingWork;
+    var self = pendingStateFixture(arena.allocator());
+    try self.todos.append(self.arena, .{ .content = "live", .status = "pending" });
+    try self.todos.append(self.arena, .{ .content = "abandoned", .status = "cancelled" });
+    const goals = @import("goal_state.zig");
+    try std.testing.expectEqual(@as(usize, 1), goals.openCount(self.todos.items, 0));
+    try std.testing.expect(!goals.allDone(self.todos.items, 0));
+    self.todos.items[0].status = "completed";
+    try std.testing.expect(goals.allDone(self.todos.items, 0));
+    // A replace that omits the cancelled item keeps it (retention, like completed).
+    // "live" is mentioned so it clears here (applyTodoWrite re-appends it);
+    // the cancelled item survives and nothing counts as cancelled-open.
+    const incoming = [_][]const u8{"live"};
+    const cleared = @import("goal_todo.zig").clearEpochForReplaceEx(&self.todos, 0, &incoming);
+    try std.testing.expectEqual(@as(usize, 0), cleared.dropped_open);
+    try std.testing.expectEqual(@as(usize, 1), self.todos.items.len);
+    try std.testing.expectEqualStrings("abandoned", self.todos.items[0].content);
+    const rendered = goals.renderTodos(&self, 0);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "[-] abandoned") != null);
+    // And the guard goes quiet: no open work left once live completes; live
+    // is completed here, cancelled never counted, so the final passes through.
+    var state: PendingWork = .{};
+    try std.testing.expectEqualStrings("done", (try state.finish(&self, "done")).?);
+    try std.testing.expectEqual(@as(usize, 0), self.messages.items.len);
 }

@@ -402,6 +402,8 @@ fn providerLoginKind(id: []const u8) []const u8 {
 /// drop-and-retry in request() still covers any other model that
 /// turns out to reject it.
 pub fn providerTakesEffort(kind: Provider.Kind, id: []const u8, model: []const u8) bool {
+    // Native Claude discovery must match output_config.effort serialization (ADR 0219).
+    if (kind == .anthropic and std.mem.eql(u8, id, "anthropic")) return @import("claude_wire.zig").takesEffort(model);
     if (std.mem.startsWith(u8, model, "grok")) return std.mem.eql(u8, id, "xai");
     if (@import("effort_route.zig").mimoRoute(id, model)) return true;
     return kind == .responses or

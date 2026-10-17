@@ -420,6 +420,7 @@ pub fn sayToolResult(self: *Agent, call: ToolCall, r: ExecResult) void {
         .ms = r.ms,
         .meta = isMetaName(name),
         .ask_user = std.mem.eql(u8, name, "ask_user"),
+        .run_task = r.run_task,
     };
     const sink = engine_sink.forAgent(self);
     sink.emit(self.io, .{ .tool_result = ev });

@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.41
+    \\  • native subscription sign-in across terminal and ACP clients
+    \\  • MCP structured results, resource content and inbound ping handling
+    \\  • request-local loopback deadlines and repeatable fixture comparisons
+    \\
     \\0.302.40
     \\  • stream recovery preserves partial replies across ACP and resume
     \\  • workspace skills in headless runs; actionable claim inventory
@@ -213,7 +218,8 @@ pub const usage_text =
     \\  graff [-p] "prompt"              one-shot: run the prompt, print the answer, exit
     \\  graff login                      get a codegraff key (device-code OAuth)
     \\  graff login chatgpt              ChatGPT sign-in (also: codex, openai)
-    \\  graff login anthropic            Anthropic Console sign-in (runs `ant auth login`)
+    \\  graff login anthropic            Claude subscription browser sign-in (also: ant)
+    \\  graff login console              metered Console sign-in through the `ant` CLI
     \\  graff login kimi                 Kimi Code OAuth login (device-code)
     \\  graff login xai                  Grok/SuperGrok OAuth login (device-code)
     \\  graff login zai                  Z.AI Coding Plan OAuth login

@@ -88,7 +88,7 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
     // Dial, send and time-to-first-HEADERS race the head-stall watchdog, as
     // the HTTP/1.1 send + receiveHead do (issue #54): a half-open socket or a
     // server that accepts the stream and goes silent must not hang the turn.
-    switch (try raceHead(self.io, &head, poll_stdin, http.head_stall_ms)) {
+    switch (try raceHead(self.io, &head, poll_stdin, http_stall.headBudgetMs(provider.url, http.head_stall_ms, http_stall.streamPolicy(provider.model, provider.url, http.stream_stall_ms)))) {
         .ok => {},
         .fallback => return null,
     }
@@ -112,7 +112,7 @@ pub fn postStream(self: *Agent, body: []const u8, poll_stdin: bool) !?[]u8 {
     var saw_done = false;
     var prose_open = false;
     var phase: @import("agent_ws_signal.zig").Phase = .{}; // ADR 0241/0248, same as HTTP/1.1
-    const policy = http_stall.streamPolicy(provider.model, http.stream_stall_ms);
+    const policy = http_stall.streamPolicy(provider.model, provider.url, http.stream_stall_ms);
 
     while (true) {
         // Buffered generation is over once finish_reason arrives; usage trailers keep the normal deadline.

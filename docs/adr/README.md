@@ -300,6 +300,11 @@ record only when you need the evidence or the edge cases.
 | [0285](0285-acp-reauth-is-route-specific.md) | Terminal ChatGPT auth rejection carries fixed route-specific recovery metadata: ACP v1 `-32000` + `error.data`, v2 failed idle `_meta["graff/reauth"]`; `graff login chatgpt-new` repairs the new store, `codex login` the legacy one. Retry and non-auth error behavior stay unchanged. |
 | [0252](0252-hosted-compaction-with-a-codegraff-login.md) | With a Codegraff login and `GRAFF_CLEF_COMPACT=1` (default-off per 0261), `compact()` asks the gateway first: per-call keep/trim/drop decisions applied to graff's own history by call id, plus a spliced summary when pruning frees too little. Live-turn calls stay; a reply must check out and free a tenth of the context. Refused key or exhausted credits: local for the session; other failures: local for that compaction. |
 
+| [0286](0286-mcp-run-task-takes-caller-context.md) | `run_task` accepts bounded text context and preserves task metadata across the shared engine and ACP. |
+| [0287](0287-loopback-inference-has-request-local-deadlines.md) | Loopback inference receives request-local default deadlines; explicit limits and remote recovery budgets remain unchanged. |
+| [0288](0288-anthropic-native-login-is-source-aware.md) | Native subscription PKCE login is shared across CLI, REPL and ACP; subscription wire compatibility stays credential-source-aware. |
+| [0289](0289-mcp-results-preserve-typed-and-display-content.md) | Preserve typed MCP results independently of display content, show resource references without fetching them and answer pings during shared waits. |
+
 ## When to write one
 
 Write an ADR when a decision is load-bearing and non-obvious: it was reached

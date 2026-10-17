@@ -182,6 +182,7 @@ fn handleWithWait(self: *Agent, final_text: []const u8, hist_len: usize, comptim
 /// on the runTurn stack: tool progress and compaction must not reset it.
 /// Background work still running is live work too: after the reminder, a
 /// headless run waits for it to report (run_idle.zig).
+/// The Agent dedupes reminders across turns for the same ask and open set.
 pub const PendingWork = struct {
     nudged: bool = false,
     idle: @import("run_idle.zig").Hold = .{},
@@ -216,6 +217,18 @@ pub const PendingWork = struct {
         "If stopping is appropriate, explain the actual blocker or status and say root execution is stopping. Never imply the root keeps working after a final reply. " ++
         "Update the checklist only to reflect real progress; do not mark unfinished work completed to bypass this check.";
 
+    /// New user requests or re-planned open work re-arm the reminder.
+    fn openFingerprint(self: *const Agent, epoch: u64) u64 {
+        var h = std.hash.Wyhash.init(epoch);
+        h.update(messages.latestUserText(self.messages.items));
+        for (self.todos.items) |t| {
+            if (t.epoch != epoch or t.retired or t.closed()) continue;
+            h.update(t.content);
+            h.update(t.status);
+        }
+        return h.final();
+    }
+
     fn open(self: *const Agent) usize {
         if (self.sub or self.review_mode or self.text_only or self.completed != null or main_mod.plan_mode) return 0;
         if (self.goal) |g| if (g.status == .paused or g.status == .blocked) return 0;
@@ -238,12 +251,18 @@ pub const PendingWork = struct {
         // The reminder first, so independent work runs beside the background
         // work; the wait applies once the model stops again.
         if (count > 0 and !state.nudged and canRequest(self)) {
-            state.nudged = true;
             const goals = @import("goal_state.zig");
-            const body = try std.fmt.allocPrint(self.arena, "{s}\n\n{s}", .{ note, goals.renderTodos(self, goals.currentEpoch(self.goal)) });
-            try self.messages.append(try @import("session_wake.zig").mark(self.arena, try @import("named_work.zig").userNudge(self.arena, self.provider.kind, body)));
-            if (self.tracer) |tr| tr.note("pending_work", "plain final reconciled; one retry granted");
-            return null;
+            const epoch = goals.currentEpoch(self.goal);
+            const fp = openFingerprint(self, epoch);
+            state.nudged = true;
+            if (self.pending_nudged_fp != fp) {
+                self.pending_nudged_fp = fp;
+                const body = try std.fmt.allocPrint(self.arena, "{s}\n\n{s}", .{ note, goals.renderTodos(self, epoch) });
+                try self.messages.append(try @import("session_wake.zig").mark(self.arena, try @import("named_work.zig").userNudge(self.arena, self.provider.kind, body)));
+                if (self.tracer) |tr| tr.note("pending_work", "plain final reconciled; one retry granted");
+                return null;
+            }
+            if (self.tracer) |tr| tr.note("pending_work", "checklist unchanged since last nudge; stopping without re-reminding");
         }
         if (canRequest(self) and try state.idle.wait(self)) return null;
         if (count == 0) return text;
@@ -277,6 +296,7 @@ fn pendingFixture(arena: std.mem.Allocator) Agent {
     self.run_budget = null;
     self.tool_calls_this_turn = 3; // unlike the zero-tool guards, tools ran
     self.model_calls_this_turn = 4;
+    self.pending_nudged_fp = null;
     self.tracer = null;
     self.streamed_text = false;
     return self;

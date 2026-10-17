@@ -1,11 +1,5 @@
-//! Login / credential flows for the three OAuth-style providers — Codex
-//! (ChatGPT PKCE), Kimi (device-code), and Codegraff (device-code) — plus the
-//! on-disk credential loaders each writes/reads. Split out of main.zig (#123).
-//!
-//! Every entry point takes (io, gpa, arena, home) and reaches no Agent/global
-//! state, so the coupling back to main is tiny: ansi for the palette, util for
-//! the JSON getters, and a few shared consts (unixMs, the
-//! codegraff gateway base) back-imported from main.
+//! OAuth login and credential loaders shared by the engine and its clients.
+//! Native subscription credentials and Console SDK profiles refresh separately.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -341,17 +335,25 @@ pub fn loadKimiOAuth(io: Io, gpa: Allocator, arena: Allocator, home: []const u8,
 /// `account` is this session's ChatGPT account id (empty when unknown or not
 /// codex) — see loadCodexOAuth's expect_account.
 pub fn refreshOAuthKey(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, provider_id: []const u8, force: bool, stale: ?[]const u8, account: []const u8) ?helpers.FreshKey {
+    return refreshOAuthKeyForSource(io, gpa, arena, home, provider_id, force, stale, account, .login);
+}
+
+/// Refresh only the selected credential class; never cross Console/native stores.
+pub fn refreshOAuthKeyForSource(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, provider_id: []const u8, force: bool, stale: ?[]const u8, account: []const u8, source: @import("provider.zig").Keys.CredentialSource) ?helpers.FreshKey {
+    if (!source.canRefresh()) return null;
     const is_kimi = std.mem.eql(u8, provider_id, "kimi");
     const is_xai = std.mem.eql(u8, provider_id, "xai");
     const is_codex = std.mem.eql(u8, provider_id, "codex");
     const is_chatgpt = std.mem.eql(u8, provider_id, "chatgpt-new");
-    if (std.mem.eql(u8, provider_id, "anthropic")) return .{ .key = @import("anthropic_profile.zig").fresh(io, gpa, arena, force) orelse return null };
-    if (!is_kimi and !is_xai and !is_codex and !is_chatgpt) return null;
+    const is_anthropic = std.mem.eql(u8, provider_id, "anthropic");
+    if (!is_kimi and !is_xai and !is_codex and !is_chatgpt and !is_anthropic) return null;
     oauth_refresh_mutex.lockUncancelable(io);
     defer oauth_refresh_mutex.unlock(io);
+    if (is_anthropic and source == .profile) return .{ .key = @import("anthropic_profile.zig").fresh(io, gpa, arena, force) orelse return null };
     // The ChatGPT plan's new sign-in keeps one record per machine (ADR 0221),
     // so the login vault never syncs it.
     if (is_chatgpt) return .{ .key = @import("oauth_chatgpt.zig").loadChatgptOAuth(io, gpa, arena, home, force, stale) orelse return null };
+    if (is_anthropic) return .{ .key = @import("oauth_anthropic.zig").loadAnthropicOAuth(io, gpa, arena, home, force, stale) orelse return null };
     // Vault sync (harness ADR 0005): adopt a newer login, wait while another
     // device refreshes, or refresh under the lease and publish the result.
     const live = @import("vault_live.zig").before(io, gpa, arena, home, provider_id, force, oauth_refresh_margin_s);

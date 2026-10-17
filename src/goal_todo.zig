@@ -45,15 +45,16 @@ pub fn clearEpochForReplaceEx(todos: *std.ArrayList(TodoItem), epoch: u64, incom
     var i: usize = 0;
     while (i < todos.items.len) {
         const t = todos.items[i];
-        const done = t.closed(); // completed or cancelled (#1545): omitted, it stays as history
+        // Closed and dropped items are history, not plans (#1545, #318).
+        const record = t.closed() or goal_state.isDropped(t.status);
         const mentioned = mentions(incoming, t.content);
-        const verify = !done and goal_verify_kind.isVerification(t.content);
-        if (t.epoch != epoch or (done and !mentioned) or (verify and !mentioned)) {
+        const verify = !record and goal_verify_kind.isVerification(t.content);
+        if (t.epoch != epoch or (record and !mentioned) or (verify and !mentioned)) {
             if (t.epoch == epoch and verify and !mentioned) out.kept_verify += 1;
             i += 1;
             continue;
         }
-        if (!done and !mentioned) out.dropped_open += 1;
+        if (!record and !mentioned) out.dropped_open += 1;
         _ = todos.orderedRemove(i);
     }
     return out;
@@ -495,4 +496,31 @@ test "retirement is epoch-scoped, root-only, and leaves no checklist to complete
     // the previous ask's [x] lines (#318's born-done trap, one boundary over).
     const refusal = try goal_state.completionGate(ar, &root);
     try std.testing.expect(refusal != null and std.mem.indexOf(u8, refusal.?, "no checklist") != null);
+}
+
+test "#1545 cancelled and dropped records coexist without reopening or adopting abandoned work" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const ar = arena_state.allocator();
+    var root = todoRoot(ar);
+    _ = try applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"finished work","status":"completed"},
+        \\          {"content":"cancelled work","status":"cancelled"},
+        \\          {"content":"abandoned work","status":"dropped"}]}
+    ));
+    try std.testing.expectEqual(@as(usize, 0), goal_state.openCount(root.todos.items, 0));
+    try std.testing.expect(goal_state.allDone(root.todos.items, 0));
+    try std.testing.expect(!goal_state.allDone(root.todos.items[2..3], 0)); // dropped is not completion evidence
+    const res = try applyTodoWrite(&root, try todosArg(ar,
+        \\{"todos":[{"content":"next work","status":"pending"}]}
+    ));
+    try std.testing.expectEqual(@as(usize, 4), root.todos.items.len);
+    try std.testing.expectEqual(@as(usize, 0), res.dropped_open);
+    try std.testing.expect(std.mem.indexOf(u8, res.text, "[-] cancelled work") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.text, "[-] abandoned work") != null);
+    goal_state.adoptTodos(root.todos.items, 0, 1);
+    for (root.todos.items[0..3]) |t| try std.testing.expectEqual(@as(u64, 0), t.epoch);
+    try std.testing.expectEqual(@as(u64, 1), root.todos.items[3].epoch);
+    try std.testing.expectEqual(@as(usize, 0), goal_state.parkedOpenCount(root.todos.items, 1));
+    try std.testing.expectEqual(@as(usize, 1), goal_state.openCount(root.todos.items, 1));
 }

@@ -22,6 +22,11 @@ test {
     _ = @import("vault_refresh.zig");
     _ = @import("vault_live.zig");
     _ = @import("peer_cli.zig");
+    // engine_events.zig's tests (that file hit the 600-line cap), and the
+    // codegraff/runTask facts that cross MCP result -> tool_result -> ACP _meta.
+    _ = @import("engine_events_tests.zig");
+    _ = @import("run_task_meta.zig");
+    _ = @import("acp_run_task_tests.zig");
 }
 
 test "oneshot -p still uses the live stall-watched transport" {

@@ -97,6 +97,16 @@ pub const StreamPolicy = struct {
         return .{ .silence_ms = silence, .initial_ms = initial, .prose_base_ms = base_ms };
     }
 
+    pub fn initForEndpoint(model: []const u8, url: []const u8, base_ms: u64, head_ms: u64, stream_override: bool, head_override: bool) StreamPolicy {
+        var policy = init(model, base_ms, head_ms, stream_override, head_override);
+        if (localEndpoint(url) and !stream_override and base_ms == 120_000) {
+            policy.silence_ms = @max(policy.silence_ms, local_silence_ms);
+            policy.prose_base_ms = local_silence_ms;
+            if (!head_override and head_ms == 45_000) policy.initial_ms = policy.silence_ms;
+        }
+        return policy;
+    }
+
     pub fn interFrameBudgetMs(self: StreamPolicy, saw_protocol: bool, prose_open: bool, widen: u8) u64 {
         if (prose_open) return budgetMsWidened(self.prose_base_ms, true, widen);
         return if (saw_protocol) self.silence_ms else self.initial_ms;
@@ -106,8 +116,35 @@ pub const StreamPolicy = struct {
 /// Compute once per stream, never mutate shared watchdog budgets. Inspect the
 /// explicit knobs as well as their configured values: an override equal to
 /// the shipped default is still an override. Validation matches settings.
-pub fn streamPolicy(model: []const u8, base_ms: u64) StreamPolicy {
-    return StreamPolicy.init(model, base_ms, head_ceiling_ms, validSecondsEnv("GRAFF_STREAM_STALL_SECS"), validSecondsEnv("GRAFF_STREAM_HEAD_STALL_SECS"));
+pub fn streamPolicy(model: []const u8, url: []const u8, base_ms: u64) StreamPolicy {
+    return StreamPolicy.initForEndpoint(model, url, base_ms, head_ceiling_ms, validSecondsEnv("GRAFF_STREAM_STALL_SECS"), validSecondsEnv("GRAFF_STREAM_HEAD_STALL_SECS"));
+}
+
+const local_silence_ms: u64 = 10 * 60 * 1000;
+
+/// Match the actual URL host, never a model name, path or hostname substring.
+fn localEndpoint(url: []const u8) bool {
+    const uri = std.Uri.parse(url) catch return false;
+    if (!std.ascii.eqlIgnoreCase(uri.scheme, "http") and !std.ascii.eqlIgnoreCase(uri.scheme, "https")) return false;
+    const host = switch (uri.host orelse return false) {
+        .raw, .percent_encoded => |value| value,
+    };
+    return std.ascii.eqlIgnoreCase(host, "localhost") or std.mem.eql(u8, host, "127.0.0.1") or
+        std.mem.eql(u8, host, "[::1]") or std.mem.eql(u8, host, "::1");
+}
+
+/// Local inference may buffer HTTP headers until prefill/generation completes.
+/// Preserve shortened fixture deadlines and explicit streaming overrides.
+pub fn headBudgetMs(url: []const u8, configured_ms: u64, policy: StreamPolicy) u64 {
+    return if (localEndpoint(url) and configured_ms == 30_000) policy.initial_ms else configured_ms;
+}
+
+pub fn postBudgetMs(url: []const u8, configured_ms: u64) u64 {
+    return localBudgetMs(url, configured_ms, 300_000, validSecondsEnv("GRAFF_POST_DEADLINE_SECS"));
+}
+
+fn localBudgetMs(url: []const u8, configured_ms: u64, default_ms: u64, explicit: bool) u64 {
+    return if (!explicit and configured_ms == default_ms and localEndpoint(url)) @max(configured_ms, local_silence_ms) else configured_ms;
 }
 
 fn validSecondsEnv(name: [*:0]const u8) bool {
@@ -136,6 +173,41 @@ fn bufferedToolModel(qualified_model: []const u8) bool {
 /// decision, split out so it can be exercised at the boundary in a unit test.
 pub fn expired(waited_ms: u64, base_ms: u64, tokens_flowing: bool) bool {
     return waited_ms >= budgetMs(base_ms, tokens_flowing);
+}
+
+test "local inference deadlines follow loopback endpoints and preserve explicit budgets" {
+    for ([_][]const u8{ "http://127.0.0.1:8080/v1/chat/completions", "http://localhost:1234/v1/chat/completions", "https://LOCALHOST/v1", "http://[::1]:8080/v1" }) |url| {
+        const policy = StreamPolicy.initForEndpoint("custom-local-model", url, 120_000, 45_000, false, false);
+        try std.testing.expectEqual(@as(u64, 600_000), policy.interFrameBudgetMs(false, false, 0));
+        try std.testing.expectEqual(@as(u64, 600_000), policy.interFrameBudgetMs(true, false, 0));
+        try std.testing.expectEqual(@as(u64, 150_000), policy.interFrameBudgetMs(true, true, 0));
+        try std.testing.expectEqual(@as(u64, 600_000), headBudgetMs(url, 30_000, policy));
+        try std.testing.expectEqual(@as(u64, 123), headBudgetMs(url, 123, policy));
+        try std.testing.expectEqual(@as(u64, 600_000), localBudgetMs(url, 300_000, 300_000, false));
+        try std.testing.expectEqual(@as(u64, 300_000), localBudgetMs(url, 300_000, 300_000, true));
+        try std.testing.expectEqual(@as(u64, 100), localBudgetMs(url, 100, 300_000, false));
+        const stream = StreamPolicy.initForEndpoint("custom", url, 120_000, 120_000, true, false);
+        try std.testing.expectEqual(@as(u64, 120_000), stream.initial_ms);
+        try std.testing.expectEqual(@as(u64, 30_000), stream.interFrameBudgetMs(true, true, 0));
+        const head = StreamPolicy.initForEndpoint("custom", url, 120_000, 45_000, false, true);
+        try std.testing.expectEqual(@as(u64, 45_000), headBudgetMs(url, 30_000, head));
+        try std.testing.expectEqual(@as(u64, 600_000), head.silence_ms);
+    }
+}
+
+test "local inference deadlines never extend remote hosts or leak between requests" {
+    for ([_][]const u8{ "https://api.example.com/v1", "https://localhost.example.com/v1", "https://127.0.0.1.example.com/v1", "https://example.com/localhost", "https://localhost@example.com/v1", "not a url" }) |url| {
+        const policy = StreamPolicy.initForEndpoint("mlx-localhost", url, 120_000, 45_000, false, false);
+        try std.testing.expectEqual(@as(u64, 45_000), policy.initial_ms);
+        try std.testing.expectEqual(@as(u64, 120_000), policy.silence_ms);
+        try std.testing.expectEqual(@as(u64, 30_000), policy.interFrameBudgetMs(true, true, 0));
+        try std.testing.expectEqual(@as(u64, 30_000), headBudgetMs(url, 30_000, policy));
+        try std.testing.expectEqual(@as(u64, 300_000), localBudgetMs(url, 300_000, 300_000, false));
+    }
+    const local = StreamPolicy.initForEndpoint("custom", "http://localhost:8080/v1", 120_000, 45_000, false, false);
+    const remote = StreamPolicy.init("custom", 120_000, 45_000, false, false);
+    try std.testing.expectEqual(@as(u64, 600_000), local.silence_ms);
+    try std.testing.expectEqual(@as(u64, 120_000), remote.silence_ms);
 }
 
 test "stream policy: Gemini-4 model ids allow buffered tool silence, not slow prose" {

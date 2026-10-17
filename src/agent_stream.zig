@@ -162,7 +162,7 @@ pub fn postStreamWithClient(self: *Agent, client: *std.http.Client, body: []cons
             if (req.connection) |conn| conn.closing = true;
             return error.HungRequest;
         };
-        hsel.concurrent(.stall, deadlineStallTask, .{ self.io, orig_tio != null, http.head_stall_ms }) catch {
+        hsel.concurrent(.stall, deadlineStallTask, .{ self.io, orig_tio != null, http_stall.headBudgetMs(provider.url, http.head_stall_ms, http_stall.streamPolicy(provider.model, provider.url, http.stream_stall_ms)) }) catch {
             const r = hsel.await() catch |e| {
                 hsel.cancelDiscard();
                 return e;
@@ -239,7 +239,7 @@ pub fn postStreamWithClient(self: *Agent, client: *std.http.Client, body: []cons
     var phase: @import("agent_ws_signal.zig").Phase = .{}; // ADR 0248: commentary does not tighten
     defer line.deinit();
 
-    const policy = http_stall.streamPolicy(self.provider.model, http.stream_stall_ms);
+    const policy = http_stall.streamPolicy(self.provider.model, self.provider.url, http.stream_stall_ms);
     stream: while (true) {
         // Race the line read against an idle-stall watchdog so a dead stream can't
         // hang the turn (the Esc escape below is TTY-only, so --json/GUI sessions

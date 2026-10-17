@@ -182,6 +182,11 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
         return line;
     }
 
+    const oauth = @import("anthropic_oauth_wire.zig");
+    if (oauth.active(self.provider)) {
+        const names = try oauth.ToolNames.init(self.scratchAlloc(), self.toolsJson());
+        try names.decodeContent(self.arena, content);
+    }
     var assistant: std.json.ObjectMap = .empty;
     try assistant.put(self.arena, "role", .{ .string = "assistant" });
     try assistant.put(self.arena, "content", content);

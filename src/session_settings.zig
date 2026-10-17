@@ -243,7 +243,7 @@ pub fn applyEnvKnobs(arena: Allocator, environ_map: anytype) !void {
         @import("agent_clef_archive.zig").g_enabled = !off;
     }
     // #502: xAI defaults to the Responses wire (api.x.ai/v1/responses) —
-    // first-party server compaction + WS turns. GRAFF_XAI_WIRE=chat (anything
+    // WS turns + client-summary compaction. GRAFF_XAI_WIRE=chat (anything
     // but "responses") moves it back to chat completions; unset keeps the default.
     if (environ_map.get("GRAFF_XAI_WIRE")) |v| {
         provider_mod.g_xai_responses = std.ascii.eqlIgnoreCase(std.mem.trim(u8, v, " \t"), "responses");

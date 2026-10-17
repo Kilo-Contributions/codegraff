@@ -41,7 +41,9 @@ pub const PickerFn = *const fn (
 /// (and the Codex account id) into the live Keys AND into the running agent, so
 /// the current conversation uses it without a restart — the in-session twin of
 /// the startup loaders.
-pub fn reloadLoginKey(root: *Agent, keys: *Keys, arena: Allocator, provider_id: []const u8) void {
+pub fn reloadLoginKey(root: *Agent, keys: *Keys, arena: Allocator, login_id: []const u8) void {
+    const console_login = std.ascii.eqlIgnoreCase(login_id, "console");
+    const provider_id = if (console_login) "anthropic" else login_id;
     const home = root.home;
     var codegraff_key: ?[]const u8 = null;
     for (provider_specs, &keys.values, &keys.sources) |spec, *value, *source| {
@@ -81,6 +83,21 @@ pub fn reloadLoginKey(root: *Agent, keys: *Keys, arena: Allocator, provider_id: 
                 source.* = .login;
                 reloaded = true;
             }
+        } else if (console_login) {
+            const profile = @import("anthropic_profile.zig");
+            if (profile.load(root.io, arena, profile.ProcessEnv{}, home, false)) |k| {
+                value.* = k;
+                source.* = .profile;
+                reloaded = true;
+            }
+        } else if (std.mem.eql(u8, provider_id, "anthropic")) {
+            if (@import("oauth_anthropic.zig").loadAnthropicOAuth(root.io, root.gpa, arena, home, false, null)) |k| {
+                if (source.* != .login) if (value.*) |metered|
+                    @import("credential_failover.zig").park(provider_id, metered, source.*);
+                value.* = k;
+                source.* = .login;
+                reloaded = true;
+            }
         } else if (std.mem.eql(u8, provider_id, "chatgpt-new")) {
             if (@import("oauth_chatgpt.zig").loadChatgptOAuth(root.io, root.gpa, arena, home, false, null)) |k| {
                 value.* = k;
@@ -102,7 +119,8 @@ pub fn reloadLoginKey(root: *Agent, keys: *Keys, arena: Allocator, provider_id: 
         if (reloaded) if (value.*) |key| if (std.mem.eql(u8, root.provider.id, provider_id)) {
             const is_codex = std.mem.eql(u8, provider_id, "codex");
             policy.adoptFreshAuth(root, .{ .key = key, .account = if (is_codex) keys.codex_account else "" });
-            root.provider.source = .login;
+            root.provider.source = source.*;
+            root.provider = provider_mod.Provider.withModel(root.provider, root.provider.model);
             if (std.mem.eql(u8, provider_id, "zai")) root.provider.url = provider_mod.g_zai_url_override orelse spec.url;
             root.closeCodexWs(); // the held socket was dialed with the stale bearer
         };
@@ -321,6 +339,12 @@ pub fn offerProviderAuth(
         } else if (std.mem.eql(u8, pid, "zai")) {
             oauth.zaiLogin(root.io, root.gpa, arena, home) catch |err| {
                 try out.print("\xe2\x9c\x97 zai login failed: {t}\n", .{err});
+                try out.flush();
+                return;
+            };
+        } else if (std.mem.eql(u8, seat_pid, "anthropic")) {
+            @import("oauth_anthropic.zig").login(root.io, root.gpa, arena, home, false) catch |err| {
+                try out.print("\xe2\x9c\x97 anthropic login failed: {t}\n", .{err});
                 try out.flush();
                 return;
             };

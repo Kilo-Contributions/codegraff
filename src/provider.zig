@@ -1,13 +1,5 @@
-//! The provider/keys core: wire format + auth style + endpoint per provider
-//! (ProviderSpec/provider_specs), the resolved Provider a request is sent
-//! with (model, context window, api key), and Keys — one optional API key
-//! per provider_specs entry, read from the environment, with the routing
-//! logic (providerFor/providerById/defaultProvider) that picks a Provider
-//! for a model name. Split out of main.zig (600-line goal). Re-exported
-//! (`pub const Provider = provider.Provider;` etc.) so the ~everywhere
-//! `main_mod.Provider`/`main_mod.Keys`/`main_mod.provider_specs`
-//! back-imports across the other split files keep resolving unchanged.
-//! Only needs pricing.zig (contextFor/models) for Keys.build/providerFor.
+//! Provider specs, resolved request routes, and source-aware credential keys.
+//! Re-exported by main.zig for the engine and its clients.
 
 const std = @import("std");
 
@@ -45,7 +37,7 @@ fn contextWindowFor(provider_id: []const u8, model: []const u8) u64 {
 /// provider_specs; one additional OpenAI-compatible router may be loaded from
 /// `.graff/.config.router` at startup.
 pub const ProviderSpec = struct {
-    pub const LoginKind = enum { api_key, codegraff_device, codex_device, kimi_device, xai_device, zai_cli, chatgpt_browser };
+    pub const LoginKind = enum { api_key, codegraff_device, codex_device, kimi_device, xai_device, zai_cli, chatgpt_browser, anthropic_browser };
     pub const CatalogKind = enum { baked, codex, kimi, openai, anthropic };
 
     id: []const u8,
@@ -76,7 +68,7 @@ pub const provider_specs = [_]ProviderSpec{
     // Anthropic publishes its live model list at /v1/models (same x-api-key +
     // anthropic-version auth as Messages), so new Claude releases appear
     // without a rebuild; the baked pricing.zig rows stay the offline fallback.
-    .{ .id = "anthropic", .display_name = "Anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "https://api.anthropic.com/v1/messages", .env_key = "ANTHROPIC_API_KEY", .default_model = "claude-opus-5-5", .catalog = .anthropic, .models_url = "https://api.anthropic.com/v1/models?limit=1000" },
+    .{ .id = "anthropic", .display_name = "Anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "https://api.anthropic.com/v1/messages", .env_key = "ANTHROPIC_API_KEY", .default_model = "claude-opus-5-5", .login = .anthropic_browser, .sub_login = true, .catalog = .anthropic, .models_url = "https://api.anthropic.com/v1/models?limit=1000" },
     .{ .id = "codegraff", .display_name = "Codegraff", .kind = .openai, .auth = .bearer, .url = "https://gateway.codegraff.com/v1/chat/completions", .env_key = "CODEGRAFF_API_KEY", .default_model = "mimo-v2.6-pro", .login = .codegraff_device, .catalog = .openai, .models_url = "https://gateway.codegraff.com/v1/models", .takes_effort = true },
     .{ .id = "deepseek", .display_name = "DeepSeek", .kind = .openai, .auth = .bearer, .url = "https://api.deepseek.com/chat/completions", .env_key = "DEEPSEEK_API_KEY", .default_model = "deepseek-v4-pro", .takes_effort = true },
     .{ .id = "openai", .display_name = "OpenAI", .kind = .responses, .auth = .bearer, .url = "https://api.openai.com/v1/responses", .env_key = "OPENAI_API_KEY", .default_model = "gpt-6-sol" },
@@ -285,7 +277,7 @@ pub const Provider = struct {
         return .{
             .id = spec.id,
             .kind = if (is_kimi_anthropic or @import("provider_codegraff.zig").usesMessages(spec.id, model)) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
-            .auth = if (is_kimi_anthropic) .x_api_key else if (@import("anthropic_profile.zig").bearerToken(spec.id, base.api_key)) .bearer else spec.auth,
+            .auth = if (std.mem.eql(u8, spec.id, "anthropic") and base.source.canRefresh()) .bearer else if (is_kimi_anthropic) .x_api_key else spec.auth,
             .url = resolvedUrl(spec, model),
             .api_key = base.api_key,
             .model = model,
@@ -319,14 +311,20 @@ pub const Keys = struct {
         none,
         environment,
         login,
+        profile, // Anthropic Console SDK profile: metered, not a subscription.
         stored,
         session,
+
+        pub fn canRefresh(self: CredentialSource) bool {
+            return self == .login or self == .profile;
+        }
 
         pub fn label(self: CredentialSource) []const u8 {
             return switch (self) {
                 .none => "missing",
                 .environment => "environment",
                 .login => "OAuth/login",
+                .profile => "Console profile",
                 .stored => "secure store",
                 .session => "this session",
             };
@@ -381,7 +379,7 @@ pub const Keys = struct {
         return .{
             .id = spec.id,
             .kind = if (is_kimi_anthropic or @import("provider_codegraff.zig").usesMessages(spec.id, model)) .anthropic else if (is_xai_responses or @import("provider_codegraff.zig").usesResponses(spec.id, model)) .responses else spec.kind,
-            .auth = if (is_kimi_anthropic) .x_api_key else if (@import("anthropic_profile.zig").bearerToken(spec.id, key)) .bearer else spec.auth,
+            .auth = if (std.mem.eql(u8, spec.id, "anthropic") and keys.source(spec.id).canRefresh()) .bearer else if (is_kimi_anthropic) .x_api_key else spec.auth,
             .url = resolvedUrl(spec, model),
             .api_key = key,
             .model = model,

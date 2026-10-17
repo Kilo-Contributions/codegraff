@@ -10,6 +10,14 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.41
+
+- Adds native subscription browser sign-in with shared CLI, REPL and ACP credential recovery; metered-key access remains separate.
+- Preserves independent MCP structured results, displays resource links and embedded text, and answers inbound pings during initialization and tool waits.
+- Gives loopback inference request-local deadline allowances without extending unrelated remote requests.
+- Adds repeatable isolated native-CLI fixture comparisons with explicit routing checks and separately labeled task subsets.
+- Retains all changes from v0.302.40 and current main.
+
 ## v0.302.40
 
 - Integrates the pending stream recovery, claim inventory, workspace skills, stored conversation, MCP configuration, companion update and typed ACP sign-in recovery changes.

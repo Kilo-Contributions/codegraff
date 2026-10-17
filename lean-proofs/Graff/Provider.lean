@@ -25,6 +25,7 @@ inductive Login where
   | xaiDevice
   | zaiCli
   | chatgptBrowser
+  | anthropicBrowser
 deriving DecidableEq, Repr, BEq
 
 inductive Catalog where
@@ -46,7 +47,7 @@ structure Row where
 deriving Repr, BEq
 
 def specs : List Row :=
-  [ { id := "anthropic",  kind := .anthropic, auth := .xApiKey, catalog := .anthropic }
+  [ { id := "anthropic",  kind := .anthropic, auth := .xApiKey, login := .anthropicBrowser, catalog := .anthropic, subLogin := true }
   , { id := "codegraff",  kind := .openai,    auth := .bearer,  login := .codegraffDevice, catalog := .openai, takesEffort := true }
   , { id := "deepseek",   kind := .openai,    auth := .bearer,  takesEffort := true }
   , { id := "openai",     kind := .responses, auth := .bearer }
