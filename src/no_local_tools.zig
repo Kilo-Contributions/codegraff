@@ -110,7 +110,8 @@ pub fn leanKeeps(name: []const u8) bool {
     for (lean_tools) |tool| {
         if (std.mem.eql(u8, name, tool)) return true;
     }
-    return false;
+    // A workspace that ships skills keeps `skill` beside its catalog.
+    return @import("skill_docs.zig").g_workspace_skills and std.mem.eql(u8, name, "skill");
 }
 
 /// schema.zig chains this after filterRootSpecs (a tool may survive one and

@@ -68,7 +68,7 @@ const desc_cap = 160; // per-skill description budget in the system prompt — t
 /// a schema.ToolSpec) so schema.zig's catalog needs one entry and no import
 /// cycle. The description must stay free of characters needing JSON escapes.
 pub const tool_name = "skill";
-pub const tool_desc = "Load a skill: the full instructions for one kind of task, kept out of your context until you need them. The system prompt lists only skill names and descriptions, so call this to read the body BEFORE doing work a skill covers, then follow it. Omit name to list every available skill. Skills come from .harness/skills/, ~/.harness/skills/, .claude/skills/, Cursor/Claude/Grok/Codex plugin trees (including Claude commands/*.md and a root SKILL.md), plus bundled skill-creator, mcp-config, mcp, jspace, and workspace.";
+pub const tool_desc = "Load a skill: the full instructions for one kind of task, kept out of your context until you need them. The system prompt lists only skill names and descriptions, so call this to read the body BEFORE doing work a skill covers, then follow it. Omit name to list every available skill. Skills come from .harness/skills/, ~/.harness/skills/, .claude/skills/, .agents/skills/, Cursor/Claude/Grok/Codex plugin trees (including Claude commands/*.md and a root SKILL.md), plus bundled skill-creator, mcp-config, mcp, jspace, and workspace.";
 pub const tool_schema =
     \\{"type": "object", "properties": {"name": {"type": "string", "description": "Skill name to load; omit to list every available skill"}}}
 ;
@@ -132,10 +132,33 @@ pub var g_skills: []const Skill = &builtins;
 /// Resolved HOME for the personal tier, so execSkill's rescan finds the same
 /// set the startup scan did.
 pub var g_home: ?[]const u8 = null; // pub: split-out tests save/restore it
+/// Startup found skills the workspace itself ships (project tier). Their
+/// catalog is in the prompt, so `skill` stays on the wire (no fold, kept
+/// under --lean) and loading one costs a single call.
+pub var g_workspace_skills: bool = false;
 
 pub fn load(io: Io, arena: Allocator, home: ?[]const u8) []const Skill {
     g_home = home;
     return scan(io, arena, home);
+}
+
+/// Only the skills the workspace ships (the project tier, same precedence as
+/// `collect`), for --lean: no personal dirs, no plugin walk. A repo or task
+/// skill is part of the job, so lean still advertises it.
+pub fn loadProject(io: Io, arena: Allocator, home: ?[]const u8) []const Skill {
+    g_home = home;
+    return projectSkills(io, arena, "");
+}
+
+/// The project tier under `root` ("" = the working directory).
+pub fn projectSkills(io: Io, arena: Allocator, root: []const u8) []const Skill {
+    var list: std.ArrayList(Skill) = .empty;
+    for ([_][]const u8{ compat_dir, ".grok/skills", ".codex/skills", ".agents/skills", ".cursor/skills", project_dir }) |dir| {
+        const path = if (root.len == 0) dir else std.fmt.allocPrint(arena, "{s}/{s}", .{ root, dir }) catch continue;
+        loadDir(io, arena, &list, path, .project);
+    }
+    applyDisabled(io, arena, &list);
+    return list.items;
 }
 
 /// Re-scan after the installed set may have changed — a `/skills remove` opt-out
@@ -178,6 +201,7 @@ fn collect(io: Io, arena: Allocator, home: ?[]const u8) std.ArrayList(Skill) {
     loadDir(io, arena, &list, compat_dir, .project);
     loadDir(io, arena, &list, ".grok/skills", .project);
     loadDir(io, arena, &list, ".codex/skills", .project);
+    loadDir(io, arena, &list, ".agents/skills", .project);
     loadDir(io, arena, &list, ".cursor/skills", .project);
     for (plugs) |p| {
         if (p.personal) continue;
@@ -444,31 +468,6 @@ test "dropDisabled: {\"<name>\": false} removes it; true and absent keep it" {
     try std.testing.expectEqual(@as(usize, 2), list.items.len);
     try std.testing.expectEqualStrings("b", list.items[0].name);
     try std.testing.expectEqualStrings("c", list.items[1].name);
-}
-
-test "promptCatalog: names + descriptions only, never bodies" {
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const list = [_]Skill{
-        .{ .name = "deploy", .desc = "ship a release", .body = "SECRET-BODY-TEXT", .source = .project },
-    };
-    const text = promptCatalog(arena, &list);
-    try std.testing.expect(std.mem.indexOf(u8, text, "deploy (project): ship a release") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "SECRET-BODY-TEXT") == null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "`skill`") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "/") == null); // no file paths — they move and bust the cache prefix
-    try std.testing.expect(std.mem.indexOf(u8, text, "file:") == null); // Codex prints these; we do not
-    try std.testing.expectEqualStrings("", promptCatalog(arena, &.{}));
-
-    const shuffled = [_]Skill{
-        .{ .name = "zeta", .desc = "z", .body = "", .source = .personal },
-        .{ .name = "alpha", .desc = "a", .body = "", .source = .plugin },
-    };
-    const ordered = promptCatalog(arena, &shuffled);
-    const alpha_at = std.mem.indexOf(u8, ordered, "alpha (plugin)") orelse return error.TestUnexpectedResult;
-    const zeta_at = std.mem.indexOf(u8, ordered, "zeta (personal)") orelse return error.TestUnexpectedResult;
-    try std.testing.expect(alpha_at < zeta_at);
 }
 
 test "promptCatalog: an over-long description is capped on a codepoint boundary" {

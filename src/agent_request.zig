@@ -258,7 +258,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     postWatched(self.gpa, self.io, self.client, self.provider, body, conv);
                 if (attempt_body) |ok| break :blk ok else |err| {
                     if (@import("agent_async_tools.zig").started(self)) return err;
-                    if (err == error.ModelLoop) return err; // #743: repeated prose ends the turn WITHOUT retry (tier2 model-loop-bounded-prose)
+                    if (err == error.ModelLoop or err == error.ReplyRunaway) return err; // #743: repeated prose ends the turn WITHOUT retry (tier2 model-loop-bounded-prose)
                     if (self.streamed_text) if (self.out) |w| {
                         w.writeAll("\n") catch {};
                         w.flush() catch {};
