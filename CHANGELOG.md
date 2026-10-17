@@ -10,6 +10,15 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.40
+
+- Integrates the pending stream recovery, claim inventory, workspace skills, stored conversation, MCP configuration, companion update and typed ACP sign-in recovery changes.
+- Preserves partial replies and unread tool results, secret-free configuration listings, and atomic installer replacement.
+- Hosted compaction remains explicitly opt-in; existing local-summary and provider-owned compaction defaults are unchanged.
+- Includes the unattended-run recovery and one-shot result contracts from the unpublished v0.302.39 draft.
+
+See `docs/releases/v0.302.40.md` for the release summary.
+
 ## v0.302.39
 
 ### Unattended runs

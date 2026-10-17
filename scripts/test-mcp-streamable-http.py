@@ -148,6 +148,9 @@ def run(graff: Path) -> None:
                     "GRAFF_FLEET": "off",
                     "GRAFF_NO_SMOLIFY": "1",
                     "GRAFF_NO_TELEMETRY": "1",
+                    "GRAFF_REPL_DEBUG": "1",
+                    "HOME": str(workspace),
+                    "USERPROFILE": str(workspace),
                 }
             )
             completed = subprocess.run(

@@ -169,7 +169,7 @@ fetch_release() {
 # and runs `--version` is installed. Prints current, installed or failed.
 CODEDB_REPO="${CODEDB_REPO:-https://github.com/justrach/codedb}"
 update_codedb() {
-  local platform="$1" asset="codedb-$1" tag latest current dest tmpd
+  local platform="$1" asset="codedb-$1" tag latest current dest tmpd staged
   tag="$(curl -fsSLI --max-time 30 -o /dev/null -w '%{url_effective}' "$CODEDB_REPO/releases/latest" 2>/dev/null)" || { echo failed; return 0; }
   latest="${tag##*/v}"
   case "$latest" in ''|*/*) echo failed; return 0 ;; esac
@@ -192,10 +192,16 @@ update_codedb() {
   "$tmpd/$asset" --version >/dev/null 2>&1 || { rm -rf "$tmpd"; echo failed; return 0; }
   # Replace the codedb on PATH when we may write it; otherwise install next to graff.
   if [ -z "$dest" ] || [ ! -w "$dest" ]; then dest="$INSTALL_DIR/codedb"; fi
-  mkdir -p "$(dirname "$dest")"
-  rm -f "$dest"
-  install -m 0755 "$tmpd/$asset" "$dest" || { rm -rf "$tmpd"; echo failed; return 0; }
-  darwin_sign "$dest" codedb
+  mkdir -p "$(dirname "$dest")" || { rm -rf "$tmpd"; echo failed; return 0; }
+  # Stage a fresh inode beside the destination, then replace it atomically.
+  # A failed install or signature must leave the existing binary untouched.
+  staged="$(mktemp "${dest}.XXXXXX")" || { rm -rf "$tmpd"; echo failed; return 0; }
+  if ! install -m 0755 "$tmpd/$asset" "$staged" \
+    || ! darwin_sign "$staged" codedb \
+    || ! { [ "$(uname -s)" != Darwin ] || codesign --verify --strict "$staged" >/dev/null 2>&1; } \
+    || ! mv -f "$staged" "$dest"; then
+    rm -f "$staged"; rm -rf "$tmpd"; echo failed; return 0
+  fi
   rm -rf "$tmpd"
   echo "installed $latest"
 }

@@ -81,11 +81,7 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
             if (try @import("agent_length_cutoff.zig").recoverRunaway(self, err, hist_len)) continue;
             return review_deadline.finish(try @import("agent_model_loop.zig").finishError(self, err));
         };
-        const stepped = try @import("agent_steps.zig").stepForWire(self, root);
-        if (stepped != null and self.completed == null and self.yielded == null) {
-            if (try @import("agent_length_cutoff.zig").handle(self, root, hist_len)) continue;
-        }
-        const done = try length.afterStep(self, root, stepped);
+        const done = try length.step(self, root);
         if (done) |final_text| {
             if (self.yielded != null) return review_deadline.finish(final_text);
             if (@import("tool_call_repair.zig").endsTurn(self, final_text)) return review_deadline.finish(final_text); // final: no retry/nudge

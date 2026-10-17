@@ -152,71 +152,6 @@ pub fn modelOutput(arena: Allocator, text: []const u8) !Value {
     return .{ .object = obj };
 }
 
-/// Rewrite chat-shaped text turns (`{"role":"user"|"assistant","content":…}`)
-/// as steps. Several shared paths append those (the REPL/--json/ACP user turn,
-/// interrupt markers, the compaction request), and the endpoint rejects the
-/// whole request on one ("use step_list input format instead of turn_list").
-/// Runs before every send (history_wire.prepare); a converted turn stays
-/// converted, so the history a stored Interaction was built from is stable.
-/// Empty turns are dropped: an empty text part is rejected too.
-pub fn normalizeHistory(arena: Allocator, history: *std.json.Array) void {
-    var changed = false;
-    for (history.items) |item| if (chatTurn(item) != null) {
-        changed = true;
-        break;
-    };
-    if (!changed) return;
-    var out = std.json.Array.init(arena);
-    out.ensureTotalCapacity(history.items.len) catch return;
-    for (history.items) |item| {
-        const role = chatTurn(item) orelse {
-            out.appendAssumeCapacity(item);
-            continue;
-        };
-        const text = turnText(arena, item.object.get("content")) catch return;
-        if (std.mem.trim(u8, text, " \t\r\n").len == 0) continue;
-        var step_v = (if (std.mem.eql(u8, role, "assistant")) modelOutput(arena, text) else userInput(arena, text)) catch return;
-        const origin = @import("session_wake.zig").origin_key;
-        if (item.object.get(origin)) |o| step_v.object.put(arena, origin, o) catch return;
-        out.appendAssumeCapacity(step_v);
-    }
-    history.* = out;
-}
-
-/// The role of a chat-shaped user/assistant text turn, or null for anything
-/// else (steps, tool messages, assistant turns carrying tool calls).
-fn chatTurn(item: Value) ?[]const u8 {
-    if (item != .object) return null;
-    if (item.object.get("type") != null) return null;
-    if (item.object.get("tool_calls") != null) return null;
-    const role = item.object.get("role") orelse return null;
-    if (role != .string) return null;
-    if (!std.mem.eql(u8, role.string, "user") and !std.mem.eql(u8, role.string, "assistant")) return null;
-    const content = item.object.get("content") orelse return null;
-    if (content == .string) return role.string;
-    if (content != .array) return null;
-    for (content.array.items) |part| {
-        if (part != .object) return null;
-        const t = part.object.get("type") orelse return null;
-        if (t != .string) return null;
-        if (!std.mem.eql(u8, t.string, "text") and !std.mem.eql(u8, t.string, "input_text") and !std.mem.eql(u8, t.string, "output_text")) return null;
-    }
-    return role.string;
-}
-
-fn turnText(arena: Allocator, content: ?Value) ![]const u8 {
-    const c = content orelse return "";
-    if (c == .string) return c.string;
-    var out: std.ArrayList(u8) = .empty;
-    for (c.array.items) |part| {
-        const t = part.object.get("text") orelse continue;
-        if (t != .string) continue;
-        if (out.items.len > 0) try out.append(arena, '\n');
-        try out.appendSlice(arena, t.string);
-    }
-    return out.items;
-}
-
 /// One turn on the Interactions wire: echo the model's steps into history,
 /// dispatch any function_call steps, and answer with the visible text once the
 /// model stops calling tools. Mirrors stepOpenAI / stepResponses.
@@ -280,15 +215,22 @@ pub fn step(self: *@import("agent.zig").Agent, root: std.json.ObjectMap) !?[]con
 /// A user message becomes a user_input step and assistant text a model_output
 /// step; content parts keep only the text and image shapes this wire takes.
 pub fn normalizeHistory(a: Allocator, history: *std.json.Array) void {
-    for (history.items) |*item| {
-        if (item.* != .object or item.object.get("type") != null) continue;
-        const role = item.object.get("role") orelse continue;
-        const content = item.object.get("content") orelse continue;
-        if (role != .string) continue;
-        const user = std.mem.eql(u8, role.string, "user");
-        if (!user and !std.mem.eql(u8, role.string, "assistant")) continue;
-        item.* = roleStep(a, user, content, item.object.get(@import("session_wake.zig").origin_key)) catch continue;
+    var kept: usize = 0;
+    for (history.items) |item| {
+        const normalized = normalize: {
+            if (item != .object or item.object.get("type") != null) break :normalize item;
+            const role = item.object.get("role") orelse break :normalize item;
+            const content = item.object.get("content") orelse break :normalize item;
+            if (role != .string) break :normalize item;
+            const user = std.mem.eql(u8, role.string, "user");
+            if (!user and !std.mem.eql(u8, role.string, "assistant")) break :normalize item;
+            if (content == .string and std.mem.trim(u8, content.string, " \t\r\n").len == 0) continue;
+            break :normalize roleStep(a, user, content, item.object.get(@import("session_wake.zig").origin_key)) catch item;
+        };
+        history.items[kept] = normalized;
+        kept += 1;
     }
+    history.shrinkRetainingCapacity(kept);
 }
 
 fn roleStep(a: Allocator, user: bool, content: Value, origin: ?Value) !Value {

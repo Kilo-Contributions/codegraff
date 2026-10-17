@@ -1,4 +1,4 @@
-# 0246. ACP reauthentication recovery identifies the exact credential route
+# 0285. ACP reauthentication recovery identifies the exact credential route
 
 Status: accepted 2026-10-03
 

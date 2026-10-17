@@ -24,6 +24,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.40
+    \\  • stream recovery preserves partial replies across ACP and resume
+    \\  • workspace skills in headless runs; actionable claim inventory
+    \\  • MCP off-lists and JSON configuration listing; atomic companion updates
+    \\  • stored conversation continuation and typed sign-in recovery
+    \\
     \\0.302.39
     \\  • unattended runs recover from output limits and empty replies
     \\  • one-shot stream-json reports a resume handle, outcome and usage

@@ -51,12 +51,18 @@ pub const LiveTurn = struct {
 
     pub fn errorRecovery(ctx: *anyopaque, err: anyerror) ?@import("auth_recovery.zig").Recovery {
         const self: *LiveTurn = @ptrCast(@alignCast(ctx));
-        return if (err == error.ApiError) self.root.last_api_reauth else null;
+        return switch (err) {
+            error.ApiError, error.ProviderAuthenticationFailed => self.root.last_api_reauth,
+            else => null,
+        };
     }
 
     pub fn errorMessage(ctx: *anyopaque, err: anyerror) []const u8 {
         const self: *LiveTurn = @ptrCast(@alignCast(ctx));
-        return if (err == error.ApiError) self.root.last_api_error orelse "Provider request failed" else @errorName(err);
+        return switch (err) {
+            error.ApiError, error.ProviderAuthenticationFailed => self.root.last_api_error orelse "Provider request failed",
+            else => @errorName(err),
+        };
     }
 
     pub fn signalCancel() void {

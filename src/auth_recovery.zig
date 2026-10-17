@@ -14,9 +14,10 @@ pub fn forFailure(p: provider.Provider, code: ?[]const u8, message: []const u8) 
     if (p.source != .login) return null;
     // A structured non-auth code wins over incidental auth words in a message.
     // Do not turn quota, server errors or expired request ids into login actions.
+    // 401 is preserved by the HTTP adapter/envelope parser, not guessed from text.
     if (code) |c| {
         var auth = false;
-        for ([_][]const u8{ "invalid_token", "invalid_api_key", "authentication_error", "token_expired", "subscription_sharing_invalid_user", "subscription_sharing_v2_invalid_user" }) |known| {
+        for ([_][]const u8{ "401", "invalid_token", "invalid_api_key", "authentication_error", "token_expired", "subscription_sharing_invalid_user", "subscription_sharing_v2_invalid_user" }) |known| {
             if (std.mem.eql(u8, c, known)) auth = true;
         }
         if (!auth) return null;

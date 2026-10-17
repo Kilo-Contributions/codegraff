@@ -59,8 +59,6 @@ pub const Merged = struct {
     /// still loads: one bad file must not disable MCP everywhere.
     invalid_project: bool = false,
     invalid_global: bool = false,
-    /// The global file's own `mcpServers`, to tell its entries from imported ones.
-    global: std.json.ObjectMap = .empty,
     /// Each file's `disabledMcpServers`: names graff leaves out, even when
     /// another tool's config supplies them. An entry may keep its full config
     /// (a client switched a server off) or be `{}` (an imported name).
@@ -164,8 +162,8 @@ pub const off_key = "disabledMcpServers";
 /// config handling.
 ///
 /// `global_is_override` is true only when `GRAFF_MCP_CONFIG` selected the
-/// path. A file that exists, parses, and lists no servers is then a wholesale
-/// off-switch (pty/harness): the project `.mcp.json` and plugin trees do not
+/// path. A file that exists, parses, and has empty server and off-list tables
+/// is then a wholesale off-switch: the project `.mcp.json` and plugin trees do not
 /// merge in. A *populated* override still merges, so relocating the global
 /// file is unchanged. A missing or invalid override is not an off-switch.
 pub fn load(io: Io, arena: Allocator, dir: Io.Dir, project_path: []const u8, global_path: ?[]const u8, home: []const u8, global_is_override: bool) Merged {
@@ -180,9 +178,8 @@ pub fn load(io: Io, arena: Allocator, dir: Io.Dir, project_path: []const u8, glo
     // #549: existing + valid + empty override → MCP stays off. `found` is
     // already true (the file existed), so Registry.init does not treat this
     // as "no config" and then pick up a project file on a later read.
-    if (global_is_override and merged.found and !merged.invalid_global and global.count() == 0)
+    if (global_is_override and merged.found and !merged.invalid_global and global.count() == 0 and merged.global_off.count() == 0)
         return merged;
-    merged.global = global;
 
     const project_tables = readServers(io, arena, dir, project_path, &merged.found, &merged.invalid_project);
     merged.project = project_tables.servers;
@@ -208,11 +205,12 @@ pub fn load(io: Io, arena: Allocator, dir: Io.Dir, project_path: []const u8, glo
     return merged;
 }
 
-/// Take `name` out of the merged set, keeping the config it had (or the
-/// off-list's own entry when nothing supplied one) for listings.
+/// Take `name` out of the merged set. A full off-list entry wins over lower
+/// priority config, including an earlier off-list; `{}` keeps the prior config.
 fn switchOff(arena: Allocator, merged: *Merged, name: []const u8, off_entry: Value) void {
-    const config = if (merged.servers.fetchOrderedRemove(name)) |kv| kv.value else off_entry;
-    if (merged.disabled.get(name) == null) merged.disabled.put(arena, name, config) catch {};
+    const removed = merged.servers.fetchOrderedRemove(name);
+    const config = if (hasConfig(off_entry)) off_entry else if (removed) |kv| kv.value else merged.disabled.get(name) orelse off_entry;
+    merged.disabled.put(arena, name, config) catch {};
 }
 
 /// Name every config file that existed but could not be used. A file graff
@@ -417,11 +415,90 @@ test "off-lists take servers out of the merge, imported names included" {
     try testing.expect(merged.servers.get("parked") == null);
     try testing.expectEqualStrings("https://g/mcp", merged.disabled.get("docs").?.object.get("url").?.string);
     try testing.expectEqualStrings("/bin/parked", merged.disabled.get("parked").?.object.get("command").?.string);
+    try testing.expectEqualStrings("/bin/kept", merged.disabled.get("kept").?.object.get("command").?.string);
     try testing.expect(merged.disabled.get("local") == null);
     try testing.expectEqual(Merged.Source.global, merged.source("docs"));
     try testing.expectEqual(Merged.Source.global, merged.source("parked"));
     try testing.expectEqual(Merged.Source.project, merged.source("local"));
     try testing.expectEqual(Merged.Source.imported, merged.source("from-elsewhere"));
+}
+
+test "a disabled-only GRAFF_MCP_CONFIG override preserves project servers and lists disabled entries (#1589)" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "global.json", .data =
+        \\{"disabledMcpServers":{"parked":{"command":"/bin/parked"}}}
+    });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = ".mcp.json", .data =
+        \\{"mcpServers":{"local":{"command":"./srv"}}}
+    });
+
+    const merged = loadTmpOverride(arena_state.allocator(), tmp.dir);
+    try testing.expect(merged.found and !merged.invalid_global and !merged.invalid_project);
+    try testing.expectEqual(@as(usize, 1), merged.servers.count());
+    try testing.expectEqualStrings("./srv", merged.servers.get("local").?.object.get("command").?.string);
+    try testing.expect(merged.project.get("local") != null);
+    try testing.expect(merged.servers.get("parked") == null);
+    try testing.expectEqual(@as(usize, 1), merged.disabled.count());
+    try testing.expectEqualStrings("/bin/parked", merged.disabled.get("parked").?.object.get("command").?.string);
+    try testing.expectEqual(Merged.Source.global, merged.source("parked"));
+}
+
+test "full project disabled entries beat enabled and already-disabled global config (#1589)" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const globals = [_][]const u8{
+        \\{"mcpServers":{"docs":{"url":"https://global.example/mcp"}}}
+        ,
+        \\{"disabledMcpServers":{"docs":{"url":"https://global-off.example/mcp"}}}
+        ,
+        \\{"mcpServers":{"docs":{"url":"https://global.example/mcp"}},"disabledMcpServers":{"docs":{}}}
+        ,
+    };
+    for (globals) |global_config| {
+        var tmp = testing.tmpDir(.{});
+        defer tmp.cleanup();
+        try tmp.dir.writeFile(testing.io, .{ .sub_path = "global.json", .data = global_config });
+        try tmp.dir.writeFile(testing.io, .{ .sub_path = ".mcp.json", .data =
+            \\{"disabledMcpServers":{"docs":{"command":"./project-docs","args":["--local"]}}}
+        });
+
+        const merged = loadTmp(arena_state.allocator(), tmp.dir);
+        try testing.expectEqual(@as(usize, 0), merged.servers.count());
+        try testing.expectEqual(@as(usize, 1), merged.disabled.count());
+        const config = merged.disabled.get("docs").?.object;
+        try testing.expectEqualStrings("./project-docs", config.get("command").?.string);
+        try testing.expectEqualStrings("--local", config.get("args").?.array.items[0].string);
+        try testing.expect(config.get("url") == null);
+        try testing.expectEqual(Merged.Source.project, merged.source("docs"));
+    }
+}
+
+test "project disabled tombstones retain enabled or already-disabled global config (#1589)" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const globals = [_][]const u8{
+        \\{"mcpServers":{"docs":{"command":"/bin/global-docs"}}}
+        ,
+        \\{"disabledMcpServers":{"docs":{"command":"/bin/global-docs"}}}
+        ,
+    };
+    for (globals) |global_config| {
+        var tmp = testing.tmpDir(.{});
+        defer tmp.cleanup();
+        try tmp.dir.writeFile(testing.io, .{ .sub_path = "global.json", .data = global_config });
+        try tmp.dir.writeFile(testing.io, .{ .sub_path = ".mcp.json", .data =
+            \\{"disabledMcpServers":{"docs":{}}}
+        });
+
+        const merged = loadTmp(arena_state.allocator(), tmp.dir);
+        try testing.expectEqual(@as(usize, 0), merged.servers.count());
+        try testing.expectEqual(@as(usize, 1), merged.disabled.count());
+        try testing.expectEqualStrings("/bin/global-docs", merged.disabled.get("docs").?.object.get("command").?.string);
+        try testing.expectEqual(Merged.Source.global, merged.source("docs"));
+    }
 }
 
 test "a malformed off-list leaves the servers alone" {

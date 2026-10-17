@@ -72,6 +72,23 @@ test "the inventory marks which claims the caller may release" {
     , text);
 }
 
+test "keyless publication status lists every claim instead of resolving a single publication" {
+    const claims = @import("artifact_claim.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const ar = arena.allocator();
+    const io = std.testing.io;
+    claims.resetForTest();
+    defer claims.resetForTest();
+    claims.setTestOwner(.{ .session = "owner", .pid = 11, .start_id = 1 });
+    try std.testing.expect(!(try claims.handleTool(ar, io, "claim", "publication", "release", "")).is_error);
+    try std.testing.expect(!(try claims.handleTool(ar, io, "claim", "issue", "12", "")).is_error);
+    const result = try claims.handleTool(ar, io, "status", "publication", "", "");
+    try std.testing.expect(std.mem.startsWith(u8, result.text, "2/32 claims held:"));
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "publication release") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.text, "issue 12") != null);
+}
+
 test "a full ledger and a keyless status list the claims (#1614)" {
     const claims = @import("artifact_claim.zig");
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);

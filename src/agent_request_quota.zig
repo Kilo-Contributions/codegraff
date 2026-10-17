@@ -98,6 +98,8 @@ pub fn transportCode(err: anyerror) ?[]const u8 {
 /// The existing one-shot login refresh and consented plan handoff remain the
 /// only exceptions. Never send a quota fault through an auth refresh ladder.
 pub fn handle(self: *@import("agent.zig").Agent, etype: []const u8, code: ?[]const u8, msg: []const u8, refreshed: *bool) !bool {
+    // A retry, handoff or unrelated rejection must not retain a prior action.
+    self.last_api_reauth = null;
     const fault = classify(etype, code, msg) orelse return false;
     const policy = @import("agent_request_policy.zig");
     if (fault == .quota and policy.handOffExhaustedPlan(self)) {
@@ -108,6 +110,12 @@ pub fn handle(self: *@import("agent.zig").Agent, etype: []const u8, code: ?[]con
         self.closeCodexWs();
         return true;
     }
+    // This boundary sees both verified transport statuses and parsed JSON/SSE
+    // faults, after the existing refresh/handoff policy has declined a retry.
+    // Classification already established auth; retain any structured code so
+    // a non-auth code still vetoes a login action (including generic 403).
+    if (fault == .authentication)
+        self.last_api_reauth = @import("auth_recovery.zig").forFailure(self.provider, code orelse "authentication_error", "");
     self.last_api_error = switch (fault) {
         .quota => "provider quota/billing cap: credit or allowance exhausted; retry requires account action",
         .authentication => "provider authentication failed: sign in again or check the API key",

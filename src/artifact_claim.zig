@@ -246,13 +246,13 @@ pub fn handleToolIn(arena: Allocator, io: Io, action: []const u8, kind_s: []cons
         .is_error = true,
     };
     const me = selfOwner(io);
-    const now: i64 = 0;
+    if (std.mem.eql(u8, action, "status") and key.len == 0) return .{ .text = try @import("artifact_claim_inventory.zig").status(arena, io, ledger.slice(), me), .is_error = false };
     if (claim_ledger.ambiguous(ledger.slice(), kind, key, repo)) return .{ .text = "claim repository is ambiguous; specify repo explicitly", .is_error = true };
     const existing = claim_ledger.findIn(ledger.slice(), kind, key, repo) orelse
         if (kind == .publication) claim_stale.publicationRecord(ledger.slice(), key, repo) else null;
     const live = if (existing) |c| ownerLive(io, c.owner) else false;
     if (std.mem.eql(u8, action, "claim") or std.mem.eql(u8, action, "acquire")) {
-        const msg = claim_ledger.acquireIn(ledger, storage, kind, key, me, now, live, repo) catch |err| switch (err) {
+        const msg = claim_ledger.acquireIn(ledger, storage, kind, key, me, 0, live, repo) catch |err| switch (err) {
             error.ClaimHeld => return .{ .text = refuseText(arena, kind, key, existing.?.owner), .is_error = true },
             else => |e| return .{ .text = try @import("artifact_claim_inventory.zig").acquireFail(arena, io, e, ledger.slice(), me), .is_error = true }, // #1614: at capacity, list what can be released
         };
@@ -288,7 +288,7 @@ pub fn handleToolIn(arena: Allocator, io: Io, action: []const u8, kind_s: []cons
             .id => |id| id,
             else => receiver.start_id,
         };
-        const msg = claim_ledger.handoffIn(ledger, storage, kind, key, me, .{ .session = receiver.session_id, .pid = receiver.pid, .start_id = start_id }, now, live, repo) catch |err| switch (err) {
+        const msg = claim_ledger.handoffIn(ledger, storage, kind, key, me, .{ .session = receiver.session_id, .pid = receiver.pid, .start_id = start_id }, 0, live, repo) catch |err| switch (err) {
             error.ClaimHeld => return .{ .text = "cannot hand off a claim you do not own", .is_error = true },
             error.NoClaim => return .{ .text = "no claim to hand off", .is_error = true },
             else => return .{ .text = "handoff failed", .is_error = true },
@@ -302,7 +302,7 @@ pub fn handleToolIn(arena: Allocator, io: Io, action: []const u8, kind_s: []cons
             const v = claim_ledger.verdictIn(ledger.slice(), c.kind, c.key, me, live, c.repo orelse repo);
             return .{ .text = try std.fmt.allocPrint(arena, "claim {s} {s}: {s} owner=\"{s}\"", .{ @tagName(c.kind), c.key, @tagName(v), c.owner.session }), .is_error = false };
         }
-        return .{ .text = if (key.len == 0) try @import("artifact_claim_inventory.zig").status(arena, io, ledger.slice(), me) else "no claim", .is_error = false }; // #1614: keyless status lists the ledger
+        return .{ .text = "no claim", .is_error = false };
     }
     return .{ .text = "action must be claim, release, handoff, or status", .is_error = true };
 }
