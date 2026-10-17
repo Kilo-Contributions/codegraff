@@ -493,6 +493,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     const emsg = if (eo) |e| (if (e.get("message")) |mv| (if (mv == .string) mv.string else "") else "") else "";
                     const ecode = errorCode(root);
                     if (try quota.handle(self, etype, ecode, emsg, &auth_refreshed)) continue;
+                    if (@import("interactions_chain.zig").dropRejected(self, body)) continue; // stored Interaction gone → full replay
                     if (recoverContextOverflow(self, emsg, ecode, &context_retried)) continue; // #193/#203: streamed error event overflow (by code or phrasing) → trim + retry
                     if (policy.retryWithout(self, emsg, &force, &stream_usage)) continue; // ADR 0219: Anthropic errors take the ladder too
                     if (try policy.afterServerErrorOrParseReject(self, etype, ecode, emsg, &server_retries, &gw_retry)) continue;
@@ -544,6 +545,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
             const emsg = if (eo) |e| (if (e.get("message")) |mv| (if (mv == .string) mv.string else "") else "") else "";
             const ecode = errorCode(root);
             if (try quota.handle(self, etype, ecode, emsg, &auth_refreshed)) continue;
+            if (@import("interactions_chain.zig").dropRejected(self, body)) continue; // stored Interaction gone → full replay
             if (recoverContextOverflow(self, emsg, ecode, &context_retried)) continue; // #193/#203: {"type":"error"} overflow (by code or phrasing) → trim + retry
             if (policy.retryWithout(self, emsg, &force, &stream_usage)) continue; // ADR 0219: Anthropic errors take the ladder too
             if (try policy.afterServerErrorOrParseReject(self, etype, ecode, emsg, &server_retries, &gw_retry)) continue;
@@ -553,6 +555,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
         };
         if (apiErrorMessage(root)) |msg| {
             if (try quota.handle(self, "", errorCode(root), msg, &auth_refreshed)) continue;
+            if (@import("interactions_chain.zig").dropRejected(self, body)) continue; // stored Interaction gone → full replay
             if (policy.retryWithout(self, msg, &force, &stream_usage)) continue;
             // #148: a stale login token 401s here with the provider's "API Key
             // invalid/expired"; adopt a newer on-disk token or force a refresh
