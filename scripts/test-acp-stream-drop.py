@@ -18,20 +18,40 @@ import time
 MARKER = '[response ended early: connection dropped]'
 
 
+def stop_worker(proc, reader_thread):
+    # Reap before TemporaryDirectory exits: a live Windows cwd locks its tree.
+    try:
+        if os.name == 'posix':
+            os.killpg(proc.pid, signal.SIGKILL)
+        else:
+            proc.kill()
+    except ProcessLookupError:
+        pass
+    proc.wait(timeout=10)
+    if reader_thread is not None:
+        reader_thread.join(timeout=10)
+        assert not reader_thread.is_alive(), 'ACP stdout reader did not stop'
+    for pipe in (proc.stdin, proc.stdout):
+        if pipe:
+            pipe.close()
+
+
 def main():
     binary = str(Path(sys.argv[1] if len(sys.argv) > 1 else 'zig-out/bin/graff').resolve())
     with tempfile.TemporaryDirectory(prefix='graff-acp-drop-') as temp:
         env = {k: v for k, v in os.environ.items() if not k.endswith('_API_KEY')}
         config = Path(temp) / 'mcp.json'
         config.write_text('{"mcpServers":{}}')
-        env.update(HOME=temp, CODEGRAFF_API_KEY='fake-test-key', GRAFF_MCP_CONFIG=str(config),
+        env.update(HOME=temp, USERPROFILE=temp, CODEGRAFF_API_KEY='fake-test-key', GRAFF_MCP_CONFIG=str(config),
                    GRAFF_NO_TELEMETRY='1', GRAFF_FLEET='off', GRAFF_NO_SMOLIFY='1',
                    GRAFF_NO_CODEDB_GUARD='1', GRAFF_FORCE_DROP_ALWAYS='1')
         proc = None
+        reader_thread = None
         try:
             proc = subprocess.Popen([binary, 'acp', '--yolo'], cwd=temp, env=env,
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL, text=True, start_new_session=True)
+                                    stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
+                                    start_new_session=os.name == 'posix')
             events = queue.Queue()
 
             def reader():
@@ -41,7 +61,8 @@ def main():
                     except ValueError:
                         pass
                 events.put(None)
-            threading.Thread(target=reader, daemon=True).start()
+            reader_thread = threading.Thread(target=reader, daemon=True)
+            reader_thread.start()
 
             def call(method, params, id, budget=25):
                 proc.stdin.write(json.dumps(dict(jsonrpc='2.0', method=method, params=params, id=id)) + '\n')
@@ -65,17 +86,10 @@ def main():
             texts = [json.dumps(m) for m in rows if isinstance(m, dict) and m.get('role') == 'assistant']
             assert any(MARKER in t for t in texts), f'no end marker saved: {texts}'
             assert not any('interrupted by user' in t for t in texts), texts
-            print(f'PASS ACP stream drop: turn saved as {MARKER!r}, never a user interrupt')
+            print(f'PASS ACP stream drop: turn saved as {MARKER!r}, never a user interrupt', flush=True)
         finally:
             if proc:
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                proc.wait(timeout=2)
-                for pipe in (proc.stdin, proc.stdout):
-                    if pipe:
-                        pipe.close()
+                stop_worker(proc, reader_thread)
 
 
 if __name__ == '__main__':
