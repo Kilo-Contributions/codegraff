@@ -46,9 +46,11 @@ pub const Flags = struct {
     zai_login: bool = false,
     chatgpt_login: bool = false,
     anthropic_login: bool = false,
+    anthropic_console_login: bool = false,
     help_flag: bool = false,
     version_flag: bool = false,
     print_flag: bool = false,
+    stream_json_flag: bool = false, // --output-format stream-json: one-shot lifecycle + result
     update_force: bool = false, // graff update --force
     selftest_spinner_flag: bool = false, // --selftest-spinner: headless spinner render for the PTY anti-stealth test
     selftest_markdown_flag: bool = false, // --selftest-markdown: render the real streaming markdown fixture in a PTY
@@ -166,6 +168,11 @@ pub fn parse(init: std.process.Init) !Flags {
                     main_mod.show_cost = true;
                 } else if (std.mem.eql(u8, arg, "--json")) {
                     main_mod.json_mode = true;
+                } else if (std.mem.eql(u8, arg, "--output-format")) {
+                    const format = it.next() orelse std.process.fatal("--output-format needs text|stream-json", .{});
+                    if (!std.mem.eql(u8, format, "text") and !std.mem.eql(u8, format, "stream-json"))
+                        std.process.fatal("--output-format needs text|stream-json", .{});
+                    flags.stream_json_flag = std.mem.eql(u8, format, "stream-json");
                 } else if (std.mem.eql(u8, arg, "--max-tool-calls")) {
                     const mv = it.next() orelse std.process.fatal("--max-tool-calls needs a non-negative integer — graff --help", .{});
                     main_mod.max_tool_calls = std.fmt.parseInt(u64, mv, 10) catch std.process.fatal("--max-tool-calls needs a non-negative integer, got '{s}'", .{mv});
@@ -263,13 +270,14 @@ pub fn parse(init: std.process.Init) !Flags {
         if (flags.login_flag and flags.positionals.items.len > 1) {
             const name = flags.positionals.items[1];
             const target = loginTarget(name) orelse
-                std.process.fatal("unknown login '{s}' — graff login [codegraff|chatgpt|kimi|xai|zai|anthropic]", .{name});
+                std.process.fatal("unknown login '{s}' — graff login [codegraff|chatgpt|anthropic|kimi|xai|zai]", .{name});
             flags.codex_login = std.mem.eql(u8, target, "codex");
             flags.kimi_login = std.mem.eql(u8, target, "kimi");
             flags.xai_login = std.mem.eql(u8, target, "xai");
             flags.zai_login = std.mem.eql(u8, target, "zai");
             flags.chatgpt_login = std.mem.eql(u8, target, "chatgpt-new");
-            flags.anthropic_login = std.mem.eql(u8, target, "anthropic");
+            flags.anthropic_console_login = std.ascii.eqlIgnoreCase(name, "console");
+            flags.anthropic_login = std.mem.eql(u8, target, "anthropic") and !flags.anthropic_console_login;
         }
     }
 
@@ -284,6 +292,10 @@ pub fn parse(init: std.process.Init) !Flags {
         flags.oneshot_prompt = try std.mem.join(arena, " ", flags.positionals.items);
     }
     if (flags.print_flag and flags.oneshot_prompt == null) std.process.fatal("-p needs a prompt: harness -p \"do something\"", .{});
+    if (flags.stream_json_flag) {
+        if (flags.oneshot_prompt == null) std.process.fatal("--output-format stream-json needs a one-shot prompt", .{});
+        main_mod.json_mode = true;
+    }
     if (flags.branch_flag != null and flags.resume_flag == null) std.process.fatal("--branch needs --resume <source>", .{});
     if (flags.branch_flag != null and (flags.new_session_flag or flags.no_resume_flag)) std.process.fatal("--branch cannot be combined with --new or --no-resume", .{});
 
@@ -332,9 +344,10 @@ pub fn acpLoginIsLogin(positionals: *std.ArrayList([]const u8)) void {
 
 pub fn loginTarget(name: []const u8) ?[]const u8 {
     const aliases = [_][2][]const u8{
-        .{ "codex", "chatgpt-new" }, .{ "chatgpt", "chatgpt-new" }, .{ "openai", "chatgpt-new" },  .{ "gpt", "chatgpt-new" },
-        .{ "oai", "chatgpt-new" },   .{ "codegraff", "codegraff" }, .{ "graff", "codegraff" },     .{ "kimi", "kimi" },
-        .{ "xai", "xai" },           .{ "grok", "xai" },            .{ "anthropic", "anthropic" }, .{ "console", "anthropic" },
+        .{ "codex", "chatgpt-new" }, .{ "chatgpt", "chatgpt-new" }, .{ "openai", "chatgpt-new" }, .{ "gpt", "chatgpt-new" },
+        .{ "oai", "chatgpt-new" },   .{ "codegraff", "codegraff" }, .{ "graff", "codegraff" },    .{ "kimi", "kimi" },
+        .{ "xai", "xai" },           .{ "grok", "xai" },            .{ "ant", "anthropic" },      .{ "anthropic", "anthropic" },
+        .{ "console", "anthropic" },
     };
     for (aliases) |pair| if (std.ascii.eqlIgnoreCase(name, pair[0])) return pair[1];
     if (@import("oauth_zai.zig").isLoginName(name)) return "zai";
@@ -348,8 +361,9 @@ test "loginTarget: every ChatGPT name, codex included, is the plan's sign-in; un
     try std.testing.expectEqualStrings("codegraff", loginTarget("graff").?);
     try std.testing.expectEqualStrings("xai", loginTarget("grok").?);
     try std.testing.expectEqualStrings("kimi", loginTarget("kimi").?);
+    for ([_][]const u8{ "ant", "anthropic", "ANT", "Anthropic", "console", "Console" }) |name|
+        try std.testing.expectEqualStrings("anthropic", loginTarget(name).?);
     try std.testing.expectEqualStrings("zai", loginTarget("zai").?);
-    try std.testing.expectEqualStrings("anthropic", loginTarget("anthropic").?);
     try std.testing.expect(loginTarget("chatgptt") == null);
     try std.testing.expect(loginTarget("") == null);
 }

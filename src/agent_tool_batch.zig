@@ -157,7 +157,7 @@ pub fn takeOutput(self: *Agent, call: ToolCall, output: ToolOutput, handle_thres
         self.eval_verified = false;
         self.eval_repair_pending = false;
     }
-    return .{ .text = text, .is_error = output.is_error, .cancelled = output.cancelled, .pending = output.pending, .ms = output.ms };
+    return .{ .text = text, .is_error = output.is_error, .cancelled = output.cancelled, .pending = output.pending, .ms = output.ms, .run_task = output.run_task };
 }
 
 pub fn handleTarget(self: *Agent) tool_handle.Target {

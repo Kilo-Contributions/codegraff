@@ -10,6 +10,40 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.42
+
+- Keeps reasoning-only output-limit replies out of subsequent requests and saved history while preserving partial answers and valid tool-call reasoning.
+- Shows each subagent's resolved worker model in ACP activity, including fallback selections, without breaking older activity records.
+- Retains large-session loading, bounded MCP task deadlines, streamed progress, oversized tool results and parked-command outcomes.
+- Reports compaction failures without ending the session and bounds repeated runaway replies.
+- Integrates current main with the existing release fixes; release builds verify cached artifact restoration before packaging.
+
+## v0.302.41
+
+- Adds native subscription browser sign-in with shared CLI, REPL and ACP credential recovery; metered-key access remains separate.
+- Preserves independent MCP structured results, displays resource links and embedded text, and answers inbound pings during initialization and tool waits.
+- Gives loopback inference request-local deadline allowances without extending unrelated remote requests.
+- Adds repeatable isolated native-CLI fixture comparisons with explicit routing checks and separately labeled task subsets.
+- Retains all changes from v0.302.40 and current main.
+
+## v0.302.40
+
+- Integrates the pending stream recovery, claim inventory, workspace skills, stored conversation, MCP configuration, companion update and typed ACP sign-in recovery changes.
+- Preserves partial replies and unread tool results, secret-free configuration listings, and atomic installer replacement.
+- Hosted compaction remains explicitly opt-in; existing local-summary and provider-owned compaction defaults are unchanged.
+- Includes the unattended-run recovery and one-shot result contracts from the unpublished v0.302.39 draft.
+
+See `docs/releases/v0.302.40.md` for the release summary.
+
+## v0.302.39
+
+### Unattended runs
+
+- Output limits continue with bounded recovery and incremental file writes; incomplete tool calls are never executed.
+- Empty replies retry with cancellable, jittered backoff. Account-limit and sign-in failures stop with distinct exit codes instead of wasting retries.
+- `-p --output-format stream-json` emits a session handle at startup and a final result with status, usage, cost completeness and checkpoint status. Forced budget landings report partial work, not completion.
+- Buffered generation gets request-local silence allowances, and raw MCP startup exceptions are debug-only. Recovery still uses session checkpoints, not exactly-once journal replay.
+
 ## v0.302.38
 
 ### Windows

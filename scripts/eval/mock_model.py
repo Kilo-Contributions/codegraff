@@ -90,7 +90,7 @@ class ScriptedModel:
                 model.request_headers.append({k.lower(): v for k, v in self.headers.items()})
                 reply = model.next_reply(body)
                 if reply.get("http_status"):
-                    payload = json.dumps({"error": {"message": reply.get("error", "Scripted request failure")}}).encode()
+                    payload = reply.get("raw_error_body", json.dumps({"error": {"message": reply.get("error", "Scripted request failure")}})).encode()
                     self.send_response(reply["http_status"])
                     self.send_header("content-type", "application/json")
                     self.send_header("content-length", str(len(payload)))

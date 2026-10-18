@@ -9,7 +9,7 @@
 //!
 //!   1. the PROVIDER's declared plan (`ProviderSpec.sub_login`), and
 //!   2. HOW this session's credential was obtained
-//!      (`Keys.CredentialSource` — `.login` vs `.environment`/`.stored`).
+//!      (`Keys.CredentialSource` — `.login` vs metered keys/Console profiles).
 //!
 //! It is the login that is flat-rate, not the vendor. `graff login xai` buys a
 //! SuperGrok plan; `XAI_API_KEY` is metered api.x.ai access. Same provider,
@@ -101,7 +101,7 @@ pub fn costFor(provider_id: []const u8, source: CredentialSource) CostClass {
     if (!subscriptionLogin(provider_id)) return .api;
     return switch (source) {
         .login, .none => .plan,
-        .environment, .stored, .session => .api,
+        .environment, .profile, .stored, .session => .api,
     };
 }
 
@@ -142,9 +142,11 @@ test "a flat-rate login and a metered key on the same seat bill differently (#47
     // it is only ever reached by login — but the source still gates it.
     try std.testing.expectEqual(Billing.sub, forSeat("codex", "gpt-5.5", .login));
 
-    // A metered vendor's login (none exists today) would still be priced, and
-    // the codegraff gateway's device login draws on credits, not a plan.
-    try std.testing.expectEqual(Billing.priced, forSeat("anthropic", "claude-sonnet-4-6", .login));
+    // Anthropic's native subscription login is distinct from its metered key;
+    // the codegraff gateway's device login still draws on credits, not a plan.
+    try std.testing.expectEqual(Billing.sub, forSeat("anthropic", "claude-sonnet-4-6", .login));
+    try std.testing.expectEqual(Billing.priced, forSeat("anthropic", "claude-sonnet-4-6", .environment));
+    try std.testing.expectEqual(Billing.priced, forSeat("anthropic", "claude-sonnet-4-6", .profile));
     try std.testing.expectEqual(Billing.priced, forSeat("codegraff", "claude-sonnet-5", .login));
 
     // Unpriced stays unpriced: no plan, no price row.
@@ -189,6 +191,8 @@ test "costFor: the picker's badge follows the credential, then the provider" {
     try std.testing.expectEqual(CostClass.credits, costFor("codegraff", .environment));
     try std.testing.expectEqual(CostClass.api, costFor("openai", .environment));
     try std.testing.expectEqual(CostClass.api, costFor("anthropic", .stored));
+    try std.testing.expectEqual(CostClass.api, costFor("anthropic", .profile));
+    try std.testing.expectEqual(CostClass.plan, costFor("anthropic", .login));
 
     // Same provider, two credentials, two answers — `graff login xai` buys a
     // plan, XAI_API_KEY buys metered api.x.ai.
@@ -214,7 +218,7 @@ test "costFor agrees with forSeat wherever both have an opinion" {
     // Two classifiers over one fact is how #471 happened. They answer
     // different questions, but a plan seat must never be a metered badge.
     for (provider_mod.provider_specs) |spec| {
-        for ([_]CredentialSource{ .none, .environment, .login, .stored, .session }) |src| {
+        for (std.enums.values(CredentialSource)) |src| {
             const class = costFor(spec.id, src);
             const sub = forSeat(spec.id, "definitely-not-in-the-price-sheet", src) == .sub;
             if (sub) try std.testing.expectEqual(CostClass.plan, class);

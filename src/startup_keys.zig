@@ -253,8 +253,9 @@ fn missingCredentials() noreturn {
     std.process.fatal(
         \\no API key found. quickest fixes:
         \\  graff login                         free codegraff key (device-code OAuth)
+        \\  graff login anthropic               Claude subscription browser sign-in (also: ant)
         \\  graff key set <provider> <key>      store a key (macOS Keychain, else 0600 file)
-        \\  graff login anthropic               Anthropic Console account (its workspace's API credits)
+        \\  graff login console                 Anthropic Console account (its workspace's API credits)
         \\  export ANTHROPIC_API_KEY=sk-ant-…   or CODEGRAFF/DEEPSEEK/OPENAI/MINIMAX/XIAOMI/KIMI/MOONSHOT/XAI/ZAI _API_KEY
         \\a Codex CLI login (~/.codex/auth.json) is also picked up automatically.
     , .{});
@@ -321,7 +322,7 @@ pub fn resolveKeysOptional(io: Io, gpa: Allocator, arena: Allocator, environ_map
     // ANTHROPIC_PROFILE outranks a stored key; the active one fills in after.
     const ap = @import("anthropic_profile.zig");
     if (keys.get("anthropic") == null) if (ap.load(io, arena, environ_map, keys_cli.homeEnv(environ_map) orelse "", true)) |t| {
-        _ = keys.set("anthropic", t, .login);
+        _ = keys.set("anthropic", t, .profile);
     };
     const selective_stored_keys = hasSelectiveStoredKeyScope(model_flag);
     var stored_keys_loaded = !selective_stored_keys;
@@ -338,9 +339,13 @@ pub fn resolveKeysOptional(io: Io, gpa: Allocator, arena: Allocator, environ_map
         } else keys_cli.loadMissingStoredKeys(io, gpa, arena, home, &keys, .all);
     }
     const home = keys_cli.homeEnv(environ_map) orelse "";
-    if (keys.get("anthropic") == null) if (ap.load(io, arena, environ_map, home, false)) |t| {
-        _ = keys.set("anthropic", t, .login);
-    };
+    if (keys.get("anthropic") == null) {
+        if (ap.load(io, arena, environ_map, home, false)) |t| _ = keys.set("anthropic", t, .profile);
+    } else if (keys.source("anthropic") == .login and !credential_failover.standingBy("anthropic")) {
+        // The Claude plan took the slot first; keep the Console sign-in in
+        // reserve so a spent plan hands over instead of failing every turn.
+        if (ap.load(io, arena, environ_map, home, false)) |t| credential_failover.parkBehindPlan("anthropic", .login, t, .profile);
+    }
     var model_catalog: models_cache.LazyCodexCatalog = .{ .codex_home = oauth.codexHomeDir(arena, home) orelse "" };
     const saved_model: ?serde.SavedModel = if (model_flag == null) serde.loadModel(io, arena, home) else null;
     // Dynamic Codex discovery is observable only when startup may select

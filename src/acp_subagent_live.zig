@@ -219,9 +219,9 @@ pub const ChildSink = struct {
             },
             .tool_result => |v| {
                 if (v.ask_user or std.mem.eql(u8, v.name, "attempt_completion")) return;
-                stream.writeToolDone(w, self.id, v.id, v.is_error or v.cancelled, v.text) catch return;
+                stream.writeToolDone(w, self.id, v.id, v.is_error or v.cancelled, v.text, v.run_task) catch return;
             },
-            .tool_rejected => |v| stream.writeToolDone(w, self.id, v.id, true, v.message) catch return,
+            .tool_rejected => |v| stream.writeToolDone(w, self.id, v.id, true, v.message, null) catch return,
             else => return,
         }
         w.flush() catch {};
@@ -295,9 +295,9 @@ pub const ChildSink = struct {
             },
             .tool_result => |v| {
                 if (v.ask_user or std.mem.eql(u8, v.name, "attempt_completion")) return;
-                stream.writeToolDone(w, self.id, v.id, v.is_error or v.cancelled, v.text) catch return;
+                stream.writeToolDone(w, self.id, v.id, v.is_error or v.cancelled, v.text, v.run_task) catch return;
             },
-            .tool_rejected => |v| stream.writeToolDone(w, self.id, v.id, true, v.message) catch return,
+            .tool_rejected => |v| stream.writeToolDone(w, self.id, v.id, true, v.message, null) catch return,
             else => return,
         }
         const parsed = std.json.parseFromSliceLeaky(std.json.Value, a, w.buffered(), .{}) catch return;

@@ -10,12 +10,12 @@ const Value = std.json.Value;
 const Allocator = std.mem.Allocator;
 const mcp_elicitation = @import("mcp_elicitation.zig");
 const mcp_http = @import("mcp_http.zig");
+const mcp_inbound = @import("mcp_inbound.zig");
 const mcp_protocol = @import("mcp_protocol.zig");
 const mcp_stdio = @import("mcp_stdio.zig");
 const mcp_teardown = @import("mcp_teardown.zig");
 const mcp_notify = @import("mcp_notify.zig");
 const mcp_wait = @import("mcp_wait.zig");
-
 const legacy_protocol = mcp_protocol.legacy_protocol;
 const modern_protocol = mcp_protocol.modern_protocol;
 
@@ -318,12 +318,12 @@ pub fn finishInitialized(server: *Server) void {
 /// graff already spends on the same child's `initialize`. `GRAFF_MCP_PROBE_MS`
 /// moves it either way.
 pub var stdio_probe_timeout_ms: i64 = 5_000;
-
 fn stdioProbeReadTask(server: *Server, response_alloc: Allocator, id: i64) anyerror!Value {
     const stdio = &server.transport.stdio;
     const r = &stdio.stdout_reader.interface;
     while (true) {
         const line = try mcp_stdio.takeLine(r);
+        if (try mcp_inbound.replyStdio(&stdio.stdin_writer.interface, response_alloc, line)) continue;
         if (mcp_http.matchingResponse(response_alloc, line, id)) |parsed| return parsed;
     }
 }

@@ -16,6 +16,8 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
     defer if (!self.sub) @import("peer_idle.zig").noteTurnEnd();
     var pending_work = empty_completion.PendingWork.begin(self);
     var bounced_answer: empty_completion.BounceAnswer = .{};
+    var length: @import("agent_length.zig").State = .{};
+    self.empty_completion_retries = 0;
     self.length_cutoffs = 0; // agent_length_cutoff.zig: rewinds this turn
     self.completed = null;
     self.yielded = null;
@@ -44,7 +46,7 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
         // meter (last_context_tokens, server-reported) catches up. Estimate the
         // full input locally and compact BEFORE sending so we never ship an
         // over-cap request (codex run_pre_sampling_compact / opencode isOverflow).
-        if (self.inputOverCompactThreshold()) {
+        if (self.inputOverCompactThreshold() and !readBatchFirst(self)) {
             // Bracket the compaction with codex-WS resets, mirroring how every
             // other compactOrRecover call site is bookended by runTurn's
             // closeCodexWs (299 + defer 300). Mid-turn the WS can be live with a
@@ -84,11 +86,10 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
         // empty length replies on every exit before another call or save.
         const reply_start = self.messages.items.len;
         defer @import("agent_length_cutoff.zig").discardEmptyReply(self, root, reply_start);
-        const done = try @import("agent_steps.zig").stepForWire(self, root);
+        const done = try length.step(self, root);
         if (done) |final_text| {
             if (self.yielded != null) return review_deadline.finish(final_text);
             if (@import("tool_call_repair.zig").endsTurn(self, final_text)) return review_deadline.finish(final_text); // final: no retry/nudge
-            if (try @import("agent_length_cutoff.zig").handle(self, root, hist_len)) continue;
             // Retry empty replies; reconcile plain finals with live work (#745).
             if (try bounced_answer.retry(self, final_text, hist_len)) continue;
             if (try @import("named_work.zig").handle(self, final_text)) continue;
@@ -100,4 +101,22 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
         }
         self.empty_completion_retries = 0;
     }
+}
+
+/// Over the compaction line, but the history ends on a tool batch the model
+/// has not read and almost everything else is that batch. A compaction keeps
+/// the batch verbatim (compact_cut.unreadToolBatch), so it could only
+/// summarize the small prefix in front of it: a summary round trip that buys
+/// little. Send the request instead and compact once the model has read the
+/// batch. Near the window (95%) the ordinary recovery runs regardless.
+fn readBatchFirst(self: *Agent) bool {
+    const compact_cut = @import("compact_cut.zig");
+    const items = self.messages.items;
+    if (compact_cut.unreadToolBatch(items) == null) return false;
+    if (self.provider.nearContextLimit(self.effectiveContextTokens())) return false;
+    const start = compact_cut.recentContextStart(items, @import("agent_compact.zig").recent_context_tokens);
+    const prefix = compact_cut.suffixTokens(items[0..start], 0);
+    if (prefix >= self.provider.compactAt() / 4) return false;
+    if (self.tracer) |tr| tr.note("compact", "deferred: the model has not read the newest tool results");
+    return true;
 }

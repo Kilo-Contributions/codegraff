@@ -24,6 +24,27 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.42
+    \\  • output-limit recovery keeps later requests and saved history valid
+    \\  • ACP subagent activity shows the resolved worker model
+    \\  • current main plus session, MCP, compaction and parked-command fixes
+    \\
+    \\0.302.41
+    \\  • native subscription sign-in across terminal and ACP clients
+    \\  • MCP structured results, resource content and inbound ping handling
+    \\  • request-local loopback deadlines and repeatable fixture comparisons
+    \\
+    \\0.302.40
+    \\  • stream recovery preserves partial replies across ACP and resume
+    \\  • workspace skills in headless runs; actionable claim inventory
+    \\  • MCP off-lists and JSON configuration listing; atomic companion updates
+    \\  • stored conversation continuation and typed sign-in recovery
+    \\
+    \\0.302.39
+    \\  • unattended runs recover from output limits and empty replies
+    \\  • one-shot stream-json reports a resume handle, outcome and usage
+    \\  • exhausted budgets and account limits stop with distinct exit codes
+    \\
     \\0.302.38
     \\  • Windows: faster start, and the companion is found on PATH
     \\
@@ -202,7 +223,8 @@ pub const usage_text =
     \\  graff [-p] "prompt"              one-shot: run the prompt, print the answer, exit
     \\  graff login                      get a codegraff key (device-code OAuth)
     \\  graff login chatgpt              ChatGPT sign-in (also: codex, openai)
-    \\  graff login anthropic            Anthropic Console sign-in (runs `ant auth login`)
+    \\  graff login anthropic            Claude subscription browser sign-in (also: ant)
+    \\  graff login console              metered Console sign-in through the `ant` CLI
     \\  graff login kimi                 Kimi Code OAuth login (device-code)
     \\  graff login xai                  Grok/SuperGrok OAuth login (device-code)
     \\  graff login zai                  Z.AI Coding Plan OAuth login
@@ -275,6 +297,7 @@ pub const usage_text =
     \\  --no-lean        opt a one-shot out of the implied --lean: full tool surface + eager MCP schemas, the pre-default -p behavior
     \\  --no-local-tools embedder mode: hard-disable the built-in bash/bash_output/bash_kill/read_file/edit_file/write_file/codedb tools for the whole process (subagents included), so graff can run outside the sandbox and get its coding tools from an MCP server instead; webfetch, orchestration and MCP tools still work (GRAFF_NO_LOCAL_TOOLS=1)
     \\  -p, --print      one-shot print mode (answer on stdout, progress on stderr)
+    \\  --output-format text|stream-json  one-shot output; stream-json emits run_started and result
     \\  --timing         show per-tool wall-clock on result lines
     \\  --cost           show running session spend in the prompt
     \\  --json           structured stdio protocol (JSON in, JSONL events out)

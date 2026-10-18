@@ -116,6 +116,13 @@ pub fn buildBody(gpa: Allocator, provider: Provider, prompt: []const u8) ![]u8 {
             try s.write(prompt);
         },
         .anthropic => {
+            const oauth = @import("anthropic_oauth_wire.zig");
+            if (oauth.active(provider)) {
+                try s.objectField("system");
+                try s.beginArray();
+                try oauth.writeSystemPrefix(&s);
+                try s.endArray();
+            }
             // ADR 0219: a Claude model that thinks by default spends max_tokens
             // on thinking first; 256 left no answer. Room, and little thinking.
             const claude = @import("claude_wire.zig");

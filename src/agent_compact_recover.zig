@@ -113,6 +113,7 @@ pub fn compactOrRecover(self: *Agent, trim_on_fail: bool) void {
                 self.compact_transport_failures = 0;
                 return; // user hit Esc mid-compaction
             },
+            error.CompactionOff => return, // explicit credit policy: preserve history without emergency trimming
             error.EmptySummary, error.IncompleteSummary, error.ActivePromptPinned => {}, // compact() already explained it
             else => {
                 if (main_mod.json_mode)

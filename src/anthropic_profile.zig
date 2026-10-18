@@ -1,8 +1,8 @@
 //! Anthropic Console sign-in: graff uses the credential Anthropic's own CLI
 //! (`ant auth login`) writes, exactly as Anthropic's SDKs do, so a Console
 //! account and its workspace's API credits run claude-* models without an API
-//! key. graff never runs Anthropic's OAuth client itself: `ant auth login`
-//! signs in, and `ant auth print-credentials --access-token` refreshes.
+//! key. This Console flow delegates sign-in to `ant auth login`, and
+//! refresh to `ant auth print-credentials --access-token`.
 //!
 //! Layout (Anthropic SDK `config` package): the directory is
 //! `ANTHROPIC_CONFIG_DIR`, else `%APPDATA%\Anthropic` on Windows, else
@@ -16,7 +16,8 @@
 //! Precedence follows the SDK's: `ANTHROPIC_API_KEY` wins and profiles are
 //! not read; a profile named by `ANTHROPIC_PROFILE` outranks a key stored with
 //! `graff key`; the active profile fills in only when nothing else did.
-//! A claude.ai subscription login is not a credential graff uses.
+//! Native subscription OAuth is separate (oauth_anthropic.zig); Console
+//! profiles remain metered and use ordinary Messages formatting.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -175,7 +176,7 @@ pub fn pastesCode(environ_map: anytype) bool {
     return environ_map.get("DISPLAY") == null and environ_map.get("WAYLAND_DISPLAY") == null;
 }
 
-/// `graff login anthropic`: Anthropic's CLI signs in (browser, Console
+/// `graff login console`: Anthropic's CLI signs in (browser, Console
 /// account, workspace); graff then reads what it wrote.
 pub fn login(io: Io, arena: Allocator, environ_map: anytype, home: []const u8) !void {
     const style = &@import("ansi.zig").style;
@@ -190,7 +191,7 @@ pub fn login(io: Io, arena: Allocator, environ_map: anytype, home: []const u8) !
         error.FileNotFound => {
             try out.writeAll(
                 \\graff signs in to an Anthropic Console account through Anthropic's CLI, `ant`, which isn't installed.
-                \\Install it, then run `graff login anthropic` again:
+                \\Install it, then run `graff login console` again:
                 \\  macOS:   brew install anthropics/tap/ant
                 \\  Linux:   release binaries at https://github.com/anthropics/anthropic-cli/releases
                 \\  Go:      go install github.com/anthropics/anthropic-cli/cmd/ant@latest
@@ -214,6 +215,13 @@ pub fn login(io: Io, arena: Allocator, environ_map: anytype, home: []const u8) !
     try out.writeAll("\n");
     try out.flush();
 }
+
+/// Live environment for Console login/reload from the REPL, which has no Init.
+pub const ProcessEnv = struct {
+    pub fn get(_: ProcessEnv, name: [:0]const u8) ?[]const u8 {
+        return if (std.c.getenv(name.ptr)) |value| std.mem.span(value) else null;
+    }
+};
 
 const testing = std.testing;
 
@@ -321,16 +329,42 @@ test "an expiring Console token is refreshed through ant, and sent as a bearer t
     // The provider built from it authenticates with Bearer, not x-api-key.
     const provider_mod = @import("provider.zig");
     var keys: provider_mod.Keys = .{ .values = @splat(null) };
-    try testing.expect(keys.set("anthropic", "sk-ant-oat01-new", .login));
+    try testing.expect(keys.set("anthropic", "sk-ant-oat01-new", .profile));
     const p = keys.build(provider_mod.specFor("anthropic").?, "sk-ant-oat01-new", "claude-opus-5-5");
     try testing.expectEqual(provider_mod.Provider.Auth.bearer, p.auth);
+    try testing.expect(keys.set("anthropic", "sk-ant-api03-k", .environment));
     const api_key = keys.build(provider_mod.specFor("anthropic").?, "sk-ant-api03-k", "claude-opus-5-5");
     try testing.expectEqual(provider_mod.Provider.Auth.x_api_key, api_key.auth);
     // The model list (router_catalog) authenticates the same way.
     var hb: [4]std.http.Header = undefined;
-    const hs = @import("router_catalog.zig").catalogHeaders(a, provider_mod.specFor("anthropic").?, "sk-ant-oat01-new", .login, &hb).?;
+    const hs = @import("router_catalog.zig").catalogHeaders(a, provider_mod.specFor("anthropic").?, "sk-ant-oat01-new", .profile, &hb).?;
     try testing.expectEqualStrings("Authorization", hs[1].name);
     try testing.expectEqualStrings("Bearer sk-ant-oat01-new", hs[1].value);
+    try testing.expectEqual(@as(usize, 3), hs.len); // no subscription beta
+    const refreshed = @import("oauth.zig").refreshOAuthKeyForSource(io, testing.allocator, a, "", "anthropic", false, null, "", .profile).?;
+    try testing.expectEqualStrings("sk-ant-oat01-new", refreshed.key);
+    var agent: @import("agent.zig").Agent = .{
+        .gpa = testing.allocator,
+        .arena = a,
+        .io = io,
+        .client = undefined,
+        .provider = p,
+        .messages = .init(a),
+        .sub = false,
+        .label = "",
+        .out = null,
+    };
+    agent.provider.api_key = "stale-console-token";
+    const policy = @import("agent_request_policy.zig");
+    policy.refreshLoginKeyBeforeSend(&agent);
+    try testing.expectEqualStrings("sk-ant-oat01-new", agent.provider.api_key);
+    agent.provider.api_key = "rejected-console-token";
+    var attempted = false;
+    try testing.expect(policy.retryAfterAuthRefresh(&agent, "Unauthorized", &attempted));
+    try testing.expect(attempted);
+    try testing.expectEqualStrings("sk-ant-oat01-new", agent.provider.api_key);
+    try testing.expectEqual(provider_mod.Keys.CredentialSource.profile, agent.provider.source);
+    try testing.expect(!policy.retryAfterAuthRefresh(&agent, "Unauthorized", &attempted));
 }
 
 test "sign-in pastes a code whenever no local browser can finish it" {

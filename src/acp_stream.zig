@@ -108,11 +108,11 @@ pub fn writeToolStatus(w: *Io.Writer, session_id: []const u8, id: []const u8, st
     });
 }
 
-pub fn writeToolDone(w: *Io.Writer, session_id: []const u8, id: []const u8, is_error: bool, text: []const u8) !void {
+pub fn writeToolDone(w: *Io.Writer, session_id: []const u8, id: []const u8, is_error: bool, text: []const u8, run_task: ?@import("engine_events.zig").RunTaskMeta) !void {
     const status: []const u8 = if (is_error) "failed" else "completed";
     v2.breakMessage();
-    if (text.len == 0) return writeToolStatus(w, session_id, id, status);
-    try @import("acp_view_meta.zig").writeDone(w, session_id, id, status, text);
+    if (text.len == 0 and run_task == null) return writeToolStatus(w, session_id, id, status);
+    try @import("acp_view_meta.zig").writeDone(w, session_id, id, status, text, run_task);
 }
 
 fn storeId(id_buf: *[64]u8, id: []const u8) []const u8 {
@@ -220,7 +220,7 @@ pub fn translateTracked(
             try writeToolStatus(w, session_id, use_id, "completed");
             return .tool_end;
         }
-        try writeToolDone(w, session_id, use_id, is_error, text);
+        try writeToolDone(w, session_id, use_id, is_error, text, @import("run_task_meta.zig").fromEvent(ev));
         return .tool_end;
     }
     if (std.mem.eql(u8, typ, "ask_user")) {

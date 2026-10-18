@@ -462,4 +462,5 @@ test {
     _ = @import("mcp_reconnect.zig");
     _ = @import("mcp_listing.zig");
     _ = @import("mcp_failures.zig");
+    _ = @import("mcp_list_json.zig");
 }

@@ -25,6 +25,7 @@ const toolResultMessage = messages_mod.toolResultMessage;
 const turn_checkpoint = @import("turn_checkpoint.zig");
 const tool_call_args = @import("tool_call_args.zig");
 const tool_call_repair = @import("tool_call_repair.zig");
+const length = @import("agent_length.zig");
 
 pub fn surfaceUnstreamedText(self: *Agent, text: []const u8) !void {
     if (self.sub or self.streamed_text or text.len == 0) return;
@@ -108,7 +109,8 @@ pub fn stepResponses(self: *Agent, response: std.json.ObjectMap) !?[]const u8 {
             const call_id = if (item.object.get("call_id")) |c| (if (c == .string) c.string else continue) else continue;
             const args = if (item.object.get("arguments")) |a| (if (a == .string) a.string else "") else "";
             const parsed = tool_call_args.parse(self.scratchAlloc(), args); // #124: execution-only tree
-            try calls.append(self.gpa, .{ .id = call_id, .name = name, .input = parsed.input, .args_ok = parsed.valid });
+            const cut = length.callCut(self.gpa, length.limited(.responses, response), item.object, args);
+            try calls.append(self.gpa, .{ .id = call_id, .name = name, .input = parsed.input, .args_ok = parsed.valid and !cut, .cut = cut });
         }
     }
     tool_call_args.repairHistory(self.gpa, self.arena, self.messages.items);
@@ -180,6 +182,11 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
         return line;
     }
 
+    const oauth = @import("anthropic_oauth_wire.zig");
+    if (oauth.active(self.provider)) {
+        const names = try oauth.ToolNames.init(self.scratchAlloc(), self.toolsJson());
+        try names.decodeContent(self.arena, content);
+    }
     var assistant: std.json.ObjectMap = .empty;
     try assistant.put(self.arena, "role", .{ .string = "assistant" });
     try assistant.put(self.arena, "content", content);
@@ -202,7 +209,9 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
             const id = if (block.object.get("id")) |x| (if (x == .string) x.string else "") else "";
             const why = tool_call_args.takeInvalidMark(&block.object);
             const input = block.object.get("input") orelse Value{ .object = .empty };
-            try calls.append(self.gpa, .{ .id = id, .name = name, .input = input, .args_ok = why == .none, .cut = why == .cut });
+            const cut = why == .cut or (length.limited(.anthropic, root) and !block.object.contains("input"));
+            if (!block.object.contains("input") or input != .object) try block.object.put(self.arena, "input", .{ .object = .empty });
+            try calls.append(self.gpa, .{ .id = id, .name = name, .input = input, .args_ok = why == .none and !cut and input == .object, .cut = cut });
         }
     }
     self.pairContextMeterWithCurrentLocal();
@@ -230,7 +239,7 @@ pub fn stepAnthropic(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
     }
 
     if (std.mem.eql(u8, stop_reason, "pause_turn")) return null;
-    if (!std.mem.eql(u8, stop_reason, "end_turn")) try self.say("[stopped: {s}]\n", .{stop_reason});
+    if (!std.mem.eql(u8, stop_reason, "end_turn") and !length.limited(.anthropic, root)) try self.say("[stopped: {s}]\n", .{stop_reason});
     return final_text;
 }
 
@@ -267,18 +276,35 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
         try self.sayApiError("api error: choice had no message", .{});
         return error.ApiError;
     };
-    // Lost arguments rebuilt from the reply's own tool-call markup (MiMo only).
-    if (@import("effort_route.zig").mimoRoute(self.provider.id, self.provider.model))
-        _ = try tool_call_repair.repairCalls(self.arena, self.scratchAlloc(), &message, self.toolsJson());
-    // Announced tools come back untyped where the wire types only declared ones (MiMo, Claude).
-    if (@import("additional_tools.zig").active(self.provider))
-        _ = try tool_call_repair.retypeArgs(self.arena, self.scratchAlloc(), &message, self.toolsJson());
-    // #1247: calls the server's parser left in `content` as markup.
-    _ = try tool_call_repair.recoverInlineCalls(self.arena, self.scratchAlloc(), &message, self.toolsJson());
+    // Never reconstruct executable arguments from a reply cut mid-output.
+    if (!length.limited(.openai, root)) {
+        // Lost arguments rebuilt from the reply's own tool-call markup (MiMo only).
+        if (@import("effort_route.zig").mimoRoute(self.provider.id, self.provider.model))
+            _ = try tool_call_repair.repairCalls(self.arena, self.scratchAlloc(), &message, self.toolsJson());
+        // Announced tools come back untyped where the wire types only declared ones (MiMo, Claude).
+        if (@import("additional_tools.zig").active(self.provider))
+            _ = try tool_call_repair.retypeArgs(self.arena, self.scratchAlloc(), &message, self.toolsJson());
+        // #1247: calls the server's parser left in `content` as markup.
+        _ = try tool_call_repair.recoverInlineCalls(self.arena, self.scratchAlloc(), &message, self.toolsJson());
+    }
     const msg_obj = tools_mod.json_args.object(message) orelse {
         try self.sayApiError("api error: choice message was not an object", .{});
         return error.ApiError;
     };
+    // A length stop may spend its entire budget reasoning. Chat rejects
+    // replaying an assistant with neither content nor tool calls (#1646).
+    // Keep real partial answers and tool-call reasoning verbatim; only this
+    // empty reply stays out of history, including on budget/cancel exits.
+    const has_content = if (msg_obj.get("content")) |c| switch (c) {
+        .string => std.mem.trim(u8, c.string, " \t\r\n").len > 0,
+        .array => c.array.items.len > 0,
+        else => false,
+    } else false;
+    const has_calls = if (msg_obj.get("tool_calls")) |t| t == .array and t.array.items.len > 0 else false;
+    if (length.limited(.openai, root) and !has_content and !has_calls) {
+        self.pairContextMeterWithCurrentLocal();
+        return "";
+    }
     try self.messages.append(message); // echo verbatim (content may be null)
 
     var final_text: []const u8 = "";
@@ -303,7 +329,8 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
             const name = if (function.object.get("name")) |n| (if (n == .string) n.string else "") else "";
             if (name.len == 0) continue; // can't dispatch a nameless call
             const id = if (tc.object.get("id")) |x| (if (x == .string) x.string else "") else "";
-            try calls.append(self.gpa, .{ .id = id, .name = name, .input = parsed.input, .args_ok = parsed.valid and why == .none, .cut = why == .cut });
+            const cut = why == .cut or length.callCut(self.gpa, length.limited(.openai, root), tc.object, args_str);
+            try calls.append(self.gpa, .{ .id = id, .name = name, .input = parsed.input, .args_ok = parsed.valid and why == .none and !cut, .cut = cut });
         }
     };
     tool_call_args.repairMessage(self.gpa, self.arena, &self.messages.items[self.messages.items.len - 1]);
@@ -338,7 +365,7 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
     // not). An unconditional `.?` here panicked the whole harness on that input;
     // null-guard it like every other field read in this file (#134 audit P0).
     if (choice.get("finish_reason")) |finish| {
-        if (finish == .string and !std.mem.eql(u8, finish.string, "stop")) try self.say("[stopped: {s}]\n", .{finish.string});
+        if (finish == .string and !std.mem.eql(u8, finish.string, "stop") and !length.limited(.openai, root)) try self.say("[stopped: {s}]\n", .{finish.string});
     }
     return final_text;
 }

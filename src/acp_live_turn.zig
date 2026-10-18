@@ -43,9 +43,26 @@ pub const LiveTurn = struct {
         meter.write(w, self.session_id, used, window, meter.knownCostUsd(self.root.io)) catch {};
     }
 
+    pub fn bindSession(ctx: *anyopaque, session_id: []const u8) void {
+        const self: *LiveTurn = @ptrCast(@alignCast(ctx));
+        self.session_id = session_id;
+        self.root.last_api_reauth = null;
+    }
+
+    pub fn errorRecovery(ctx: *anyopaque, err: anyerror) ?@import("auth_recovery.zig").Recovery {
+        const self: *LiveTurn = @ptrCast(@alignCast(ctx));
+        return switch (err) {
+            error.ApiError, error.ProviderAuthenticationFailed => self.root.last_api_reauth,
+            else => null,
+        };
+    }
+
     pub fn errorMessage(ctx: *anyopaque, err: anyerror) []const u8 {
         const self: *LiveTurn = @ptrCast(@alignCast(ctx));
-        return if (err == error.ApiError) self.root.last_api_error orelse "Provider request failed" else @errorName(err);
+        return switch (err) {
+            error.ApiError, error.ProviderAuthenticationFailed => self.root.last_api_error orelse "Provider request failed",
+            else => @errorName(err),
+        };
     }
 
     pub fn signalCancel() void {
@@ -181,6 +198,13 @@ pub const LiveTurn = struct {
                     "assistant",
                     cancel_source.marker(self.cancelled_source.?),
                 ));
+            }
+            // #1639: like the REPL, a turn the transport ended keeps its
+            // partial reply and says why, so the next prompt (and a resume)
+            // sees where the answer stopped instead of no reply at all.
+            if (!isolated and (err == error.StreamDropped or err == error.StreamStalled)) {
+                const ended = try @import("stream_reconnect.zig").endedEarlyText(arena, self.root.partial_text.items, err == error.StreamStalled);
+                try self.root.messages.append(try messages.textMessage(arena, "assistant", ended));
             }
             if (isolated) {
                 const marker = if (err == error.Interrupted or err == error.Canceled)

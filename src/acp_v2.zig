@@ -114,6 +114,17 @@ pub fn writeFailed(w: *Io.Writer, sid: []const u8, message: []const u8) !void {
     });
 }
 
+pub fn writeFailedRecovery(w: *Io.Writer, sid: []const u8, message: []const u8, recovery: ?@import("auth_recovery.zig").Recovery) !void {
+    const data = recovery orelse return writeFailed(w, sid, message);
+    breakMessage();
+    try notify(w, sid, .{
+        .sessionUpdate = "state_update",
+        .state = "idle",
+        .stopReason = "_error",
+        ._meta = .{ .@"graff/error" = message, .@"graff/reauth" = data },
+    });
+}
+
 pub fn writeUsage(w: *Io.Writer, sid: []const u8, used: u64, size: u64) !void {
     try notify(w, sid, .{ .sessionUpdate = "usage_update", .used = used, .size = size });
 }
@@ -149,12 +160,16 @@ const TerminalAuth = struct {
     type: []const u8 = "terminal",
     args: []const []const u8,
 };
-const terminal_login = [_]TerminalAuth{.{
-    .methodId = acp_auth.terminal_login.id,
-    .name = acp_auth.terminal_login.name,
-    .description = acp_auth.terminal_login.description,
-    .args = acp_auth.terminal_login.args,
-}};
+const terminal_login = blk: {
+    var methods: [acp_auth.advertised.len]TerminalAuth = undefined;
+    for (acp_auth.advertised, 0..) |method, i| methods[i] = .{
+        .methodId = method.id,
+        .name = method.name,
+        .description = method.description,
+        .args = method.args,
+    };
+    break :blk methods;
+};
 
 fn clientTerminalAuth(params: ?Value) bool {
     const p = params orelse return false;
@@ -265,4 +280,6 @@ test "v2 initialize uses info and object-marker capabilities" {
     out = w.buffered();
     try std.testing.expect(std.mem.indexOf(u8, out, "\"image\":{}") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"methodId\":\"graff-login\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"methodId\":\"graff-login-anthropic\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"args\":[\"login\",\"anthropic\"]") != null);
 }
