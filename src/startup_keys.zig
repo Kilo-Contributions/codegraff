@@ -339,9 +339,13 @@ pub fn resolveKeysOptional(io: Io, gpa: Allocator, arena: Allocator, environ_map
         } else keys_cli.loadMissingStoredKeys(io, gpa, arena, home, &keys, .all);
     }
     const home = keys_cli.homeEnv(environ_map) orelse "";
-    if (keys.get("anthropic") == null) if (ap.load(io, arena, environ_map, home, false)) |t| {
-        _ = keys.set("anthropic", t, .profile);
-    };
+    if (keys.get("anthropic") == null) {
+        if (ap.load(io, arena, environ_map, home, false)) |t| _ = keys.set("anthropic", t, .profile);
+    } else if (keys.source("anthropic") == .login and !credential_failover.standingBy("anthropic")) {
+        // The Claude plan took the slot first; keep the Console sign-in in
+        // reserve so a spent plan hands over instead of failing every turn.
+        if (ap.load(io, arena, environ_map, home, false)) |t| credential_failover.parkBehindPlan("anthropic", .login, t, .profile);
+    }
     var model_catalog: models_cache.LazyCodexCatalog = .{ .codex_home = oauth.codexHomeDir(arena, home) orelse "" };
     const saved_model: ?serde.SavedModel = if (model_flag == null) serde.loadModel(io, arena, home) else null;
     // Dynamic Codex discovery is observable only when startup may select
