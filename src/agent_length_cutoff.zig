@@ -67,6 +67,25 @@ pub fn handle(self: *Agent, root: std.json.ObjectMap, hist_len: usize) !bool {
     return rewind(self, hist_len, "[reply hit the output limit before any tool call — dropped it and asked for the next step]\n");
 }
 
+/// Run after reply recovery has inspected the original reasoning. A Chat
+/// length stop with neither content nor tool calls cannot be replayed, even
+/// when cancellation/budget exhaustion prevents a rewind. Never trim prior
+/// work, valid tool-call reasoning, or the recovery note that replaced it.
+pub fn discardEmptyReply(self: *Agent, root: std.json.ObjectMap, reply_start: usize) void {
+    if (self.provider.kind != .openai or !cutAtLimit(root) or reply_start >= self.messages.items.len) return;
+    const message = self.messages.items[reply_start];
+    if (message != .object) return;
+    const role = strIn(message.object, "role") orelse return;
+    if (!std.mem.eql(u8, role, "assistant")) return;
+    if (message.object.get("tool_calls")) |calls| if (calls == .array and calls.array.items.len > 0) return;
+    if (message.object.get("content")) |content| switch (content) {
+        .string => if (std.mem.trim(u8, content.string, " \t\r\n").len > 0) return,
+        .array => if (content.array.items.len > 0) return,
+        else => {},
+    };
+    _ = self.messages.orderedRemove(reply_start);
+}
+
 /// The stream stopped itself (`error.ReplyRunaway`): rewind the same way.
 /// False with no rewind left: finishError ends the turn.
 pub fn recoverRunaway(self: *Agent, err: anyerror, hist_len: usize) !bool {
@@ -265,4 +284,52 @@ test "ReplySize: text past the limit stops a mid-task reply; a tool call, an una
     agent.provider.model = "codegraff/deepseek-flash";
     var raw: ReplySize = .{};
     try std.testing.expect(!raw.feed(&agent, reason_ev, 0));
+}
+
+test "empty length reply cleanup keeps recovery notes and valid prior tool reasoning on both chat routes" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    for ([_][]const u8{ "deepseek", "codegraff" }) |provider| {
+        for ([_][]const u8{ "null", "\"\"", "\" \\n\"" }) |content| {
+            for ([_]bool{ false, true }) |retries_spent| {
+                var agent: Agent = .{
+                    .gpa = std.testing.allocator,
+                    .arena = a,
+                    .io = std.testing.io,
+                    .client = undefined,
+                    .provider = .{ .id = provider, .kind = .openai, .auth = .bearer, .url = "", .api_key = "", .model = "deepseek-flash", .context = 100_000 },
+                    .messages = .init(a),
+                    .sub = true,
+                    .label = "test",
+                    .out = null,
+                };
+                try agent.messages.append(try messages.textMessage(a, "user", "Write the artifact"));
+                const prior = try parse(a, "{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"keep tool reasoning\",\"tool_calls\":[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{}\"}}]}");
+                try agent.messages.append(prior);
+                try agent.messages.append(try messages.toolResultMessage(a, .openai, "c", "saved work", false));
+                const start = agent.messages.items.len;
+                const root = (try parse(a, try std.fmt.allocPrint(a, "{{\"choices\":[{{\"finish_reason\":\"length\",\"message\":{{\"role\":\"assistant\",\"content\":{s},\"reasoning_content\":\"unfinished thought\",\"tool_calls\":[]}}}}]}}", .{content}))).object;
+                _ = try agent.stepOpenAI(root);
+                // Exhaustion used to leave an invalid assistant in saved history.
+                if (retries_spent) agent.empty_completion_retries = @import("agent_empty_completion.zig").max_consecutive;
+                try std.testing.expectEqual(!retries_spent, try @import("agent_empty_completion.zig").handle(&agent, "", start));
+                discardEmptyReply(&agent, root, start);
+                try std.testing.expectEqual(start + @as(usize, if (retries_spent) 0 else 1), agent.messages.items.len);
+                const body = try agent.buildBody(null, false, false, false);
+                defer std.testing.allocator.free(body);
+                try std.testing.expect(std.mem.indexOf(u8, body, "unfinished thought") == null);
+                try std.testing.expect(std.mem.indexOf(u8, body, "keep tool reasoning") != null);
+                try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_call_id\":\"c\"") != null);
+                if (!retries_spent) try std.testing.expect(std.mem.indexOf(u8, body, "Think briefly") != null);
+                // Cleanup is not a blanket reasoning filter or a partial-answer rewind.
+                try agent.messages.append(prior);
+                discardEmptyReply(&agent, root, agent.messages.items.len - 1);
+                try std.testing.expectEqualStrings("keep tool reasoning", agent.messages.items[agent.messages.items.len - 1].object.get("reasoning_content").?.string);
+                try agent.messages.append(try messages.textMessage(a, "assistant", "partial document"));
+                discardEmptyReply(&agent, root, agent.messages.items.len - 1);
+                try std.testing.expectEqualStrings("partial document", agent.messages.items[agent.messages.items.len - 1].object.get("content").?.string);
+            }
+        }
+    }
 }

@@ -79,6 +79,11 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
             if (try @import("agent_length_cutoff.zig").recoverRunaway(self, err, hist_len)) continue;
             return review_deadline.finish(try @import("agent_model_loop.zig").finishError(self, err));
         };
+        // request() may compact history; capture this reply's actual boundary.
+        // Keep reasoning available to recovery, then exclude non-replayable
+        // empty length replies on every exit before another call or save.
+        const reply_start = self.messages.items.len;
+        defer @import("agent_length_cutoff.zig").discardEmptyReply(self, root, reply_start);
         const done = try @import("agent_steps.zig").stepForWire(self, root);
         if (done) |final_text| {
             if (self.yielded != null) return review_deadline.finish(final_text);
