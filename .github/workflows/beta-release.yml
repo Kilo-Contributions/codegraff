@@ -60,7 +60,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          python3 scripts/build-release.py --target "$TARGET" --version "$BETA_VERSION" --verify-restore
+          python3 scripts/build-release.py --target "$TARGET" --version "$BETA_VERSION" --verify-restore --portable-host
           name="graff-$TARGET"
           mkdir "$name"
           case "$TARGET" in *-windows) bin=graff.exe ;; *) bin=graff ;; esac

@@ -17,6 +17,6 @@ runs:
       uses: actions/cache@v6
       with:
         path: .nanocompile-cache
-        key: nanocompile-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-dec24ac-${{ github.sha }}
+        key: nanocompile-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-8b9a747-${{ github.sha }}
         restore-keys: |
-          nanocompile-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-dec24ac-
+          nanocompile-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-8b9a747-

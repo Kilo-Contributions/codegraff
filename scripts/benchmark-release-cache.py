@@ -29,9 +29,11 @@ def main():
     parser.add_argument("--target", required=True, choices=release.TARGETS)
     parser.add_argument("--mode", required=True, choices=("plain", "nano"))
     parser.add_argument("--phase", required=True, choices=("cold", "warm"))
+    parser.add_argument("--portable-host", action="store_true")
     args = parser.parse_args()
     start = time.perf_counter()
-    metrics = {"target": args.target, "mode": args.mode, "phase": args.phase}
+    metrics = {"target": args.target, "mode": args.mode, "phase": args.phase,
+               "host_identity": "platform" if args.portable_host else "native"}
     zig = Path(shutil.which("zig")).resolve()
     cache = ROOT / ".nanocompile-cache"
     env = release.environment(cache)
@@ -39,10 +41,11 @@ def main():
     def run(command):
         subprocess.run(command, cwd=ROOT, env=env, check=True)
 
-    # Fetch is reported separately, but also included in total invocation time.
-    timed(metrics, "fetch_seconds", lambda: run([str(zig), "build", "--fetch=all"]))
+    # Readiness validation is included, even when it avoids the native runner.
+    metrics["dependencies_reused"] = timed(metrics, "fetch_seconds",
+        lambda: release.fetch_dependencies(zig, env))
     contract, output = timed(metrics, "contract_seconds", lambda: release.contract(
-        args.target, "0.302.43", zig))
+        args.target, "0.302.43", zig, portable_host=args.portable_host))
     state_path = ROOT / ".benchmark-state" / (args.mode + "-" + args.target + ".json")
     expected = None
     if args.phase == "warm":

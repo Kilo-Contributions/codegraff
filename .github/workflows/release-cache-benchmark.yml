@@ -39,7 +39,7 @@ jobs:
         run: test "$RESTORED" = true
 
       - name: Cold build
-        run: python3 scripts/benchmark-release-cache.py --target '${{ matrix.target }}' --mode '${{ matrix.mode }}' --phase cold
+        run: python3 scripts/benchmark-release-cache.py --target '${{ matrix.target }}' --mode '${{ matrix.mode }}' --phase cold --portable-host
 
       - name: Save measured build caches
         uses: actions/cache/save@v6
@@ -47,6 +47,7 @@ jobs:
           path: |
             .zig-cache
             .zig-global-cache
+            zig-pkg
             .nanocompile-cache
             .benchmark-state
           key: release-benchmark-v1-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}-${{ matrix.target }}
@@ -95,13 +96,14 @@ jobs:
           path: |
             .zig-cache
             .zig-global-cache
+            zig-pkg
             .nanocompile-cache
             .benchmark-state
           key: release-benchmark-v1-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}-${{ matrix.target }}
           fail-on-cache-miss: true
 
       - name: Warm rebuild or declared-task restore
-        run: python3 scripts/benchmark-release-cache.py --target '${{ matrix.target }}' --mode '${{ matrix.mode }}' --phase warm
+        run: python3 scripts/benchmark-release-cache.py --target '${{ matrix.target }}' --mode '${{ matrix.mode }}' --phase warm --portable-host
 
       - name: Save timing results
         uses: actions/upload-artifact@v7
