@@ -59,6 +59,7 @@ jobs:
         with:
           name: cold-${{ matrix.mode }}-${{ matrix.target }}
           path: .benchmark-results/*.json
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 
@@ -113,5 +114,6 @@ jobs:
         with:
           name: warm-${{ matrix.mode }}-${{ matrix.target }}
           path: .benchmark-results/*.json
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
