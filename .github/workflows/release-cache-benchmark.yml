@@ -25,21 +25,18 @@ jobs:
       - name: Install pinned Zig without build caches
         run: python3 scripts/install-zig-ci.py
 
-      - name: Checkout pinned nanocompile
+      - name: Setup pinned nanocompile
         if: matrix.mode == 'nano'
-        uses: actions/checkout@v7
+        id: nanocompile
+        uses: ./.github/actions/setup-nanocompile-binary
         with:
-          repository: justrach/nanocompile
-          ref: dec24ac64b2c810cca247f850ed1784830362df5
-          path: .nanocompile-source
-          persist-credentials: false
+          binary-base-url: ${{ secrets.NANOCOMPILE_BINARY_BASE_URL }}
 
-      - name: Build pinned nanocompile
+      - name: Require the object-store binary for this experiment
         if: matrix.mode == 'nano'
-        working-directory: .nanocompile-source
-        run: |
-          zig build -Doptimize=ReleaseFast --prefix "$GITHUB_WORKSPACE/.nanocompile-tools"
-          echo "NANOCOMPILE_EXE=$GITHUB_WORKSPACE/.nanocompile-tools/bin/nanocompile" >> "$GITHUB_ENV"
+        env:
+          RESTORED: ${{ steps.nanocompile.outputs.restored }}
+        run: test "$RESTORED" = true
 
       - name: Cold build
         run: python3 scripts/benchmark-release-cache.py --target '${{ matrix.target }}' --mode '${{ matrix.mode }}' --phase cold
@@ -79,21 +76,18 @@ jobs:
       - name: Install pinned Zig without build caches
         run: python3 scripts/install-zig-ci.py
 
-      - name: Checkout pinned nanocompile
+      - name: Setup pinned nanocompile
         if: matrix.mode == 'nano'
-        uses: actions/checkout@v7
+        id: nanocompile
+        uses: ./.github/actions/setup-nanocompile-binary
         with:
-          repository: justrach/nanocompile
-          ref: dec24ac64b2c810cca247f850ed1784830362df5
-          path: .nanocompile-source
-          persist-credentials: false
+          binary-base-url: ${{ secrets.NANOCOMPILE_BINARY_BASE_URL }}
 
-      - name: Build pinned nanocompile
+      - name: Require the object-store binary for this experiment
         if: matrix.mode == 'nano'
-        working-directory: .nanocompile-source
-        run: |
-          zig build -Doptimize=ReleaseFast --prefix "$GITHUB_WORKSPACE/.nanocompile-tools"
-          echo "NANOCOMPILE_EXE=$GITHUB_WORKSPACE/.nanocompile-tools/bin/nanocompile" >> "$GITHUB_ENV"
+        env:
+          RESTORED: ${{ steps.nanocompile.outputs.restored }}
+        run: test "$RESTORED" = true
 
       - name: Restore measured build caches
         uses: actions/cache/restore@v6
