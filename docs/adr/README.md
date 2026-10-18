@@ -312,6 +312,10 @@ record only when you need the evidence or the edge cases.
 | [0293](0293-ci-reuses-checksum-pinned-tool-binaries.md) | Restore pinned CI executables from optional object storage only after checking a reviewed SHA-256; unavailable artifacts retain the pinned-source fallback. |
 | [0294](0294-release-task-reuse-is-explicitly-host-portable.md) | Only audited fixed-target/baseline-CPU release tasks opt into platform host identity; identical compiler/manifest/package snapshots avoid redundant native fetch preparation. |
 
+| [0295](0295-worker-native-turns-share-the-chat-step.md) | Experimental Worker-native turns share the native chat step; JSPI supplies bounded host I/O, not a proxy or a second agent loop. |
+| [0296](0296-worker-tasks-own-remote-sandbox-cleanup.md) | Worker/DO tasks retain the agent loop and delegate Linux execution to remote sandboxes with explicit ownership, deletion and bounded leases. |
+| [0297](0297-sdk-managed-replay-reuses-the-relay.md) | The fetch-only managed SDK reuses account relay/device tapes; prompt retries are explicit, durability limits are stated, and content-free OTLP export remains opt-in and observational. |
+
 ## When to write one
 
 Write an ADR when a decision is load-bearing and non-obvious: it was reached

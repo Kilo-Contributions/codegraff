@@ -10,6 +10,14 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.44
+
+- Adds an experimental Worker-native Zig/Wasm chat step with explicit host tools and remote sandbox cleanup.
+- Adds managed-device SDK sessions with persisted receipts, bounded reconnect and device event replay; prompt submissions are never automatically retried.
+- Adds a shared opt-in, metadata-only OTLP exporter for managed and Worker-native execution.
+- Ships SDK 0.5.0 with managed, tracing, Worker and sandbox entry points. Worker-native conversations do not yet have durable checkpoints; managed trace storage requires a separately deployed collector.
+- Retains all changes from v0.302.43.
+
 ## v0.302.43
 
 - Uses the updated subscription context default instead of the older blanket cap, avoiding premature compaction.
