@@ -19,11 +19,7 @@ fn str(object: std.json.ObjectMap, key: []const u8) []const u8 {
 pub fn limited(kind: Kind, root: std.json.ObjectMap) bool {
     return switch (kind) {
         .anthropic => std.mem.eql(u8, str(root, "stop_reason"), "max_tokens"),
-        .openai => blk: {
-            const choices = root.get("choices") orelse break :blk false;
-            if (choices != .array or choices.array.items.len == 0 or choices.array.items[0] != .object) break :blk false;
-            break :blk std.mem.eql(u8, str(choices.array.items[0].object, "finish_reason"), "length");
-        },
+        .openai => @import("agent_chat_step.zig").limited(root),
         .responses => blk: {
             // Do not retry content filters or an interrupted stream merely
             // because they too are marked incomplete.

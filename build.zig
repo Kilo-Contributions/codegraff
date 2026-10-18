@@ -307,4 +307,20 @@ pub fn build(b: *std.Build) void {
     wasm.rdynamic = true;
     const wasm_step = b.step("wasm-core", "Build graff-core.wasm (in-process ACP)");
     wasm_step.dependOn(&b.addInstallArtifact(wasm, .{}).step);
+
+    // Experimental JSPI host: shared chat step, with model/tools supplied by
+    // the Worker. No native Agent I/O or the echo-only ACP embedding surface.
+    const worker = b.addExecutable(.{
+        .name = "graff-worker",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wasm_worker_main.zig"),
+            .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
+            .optimize = if (optimize == .debug) .small else optimize,
+            .strip = true,
+        }),
+    });
+    worker.entry = .disabled;
+    worker.rdynamic = true;
+    const worker_step = b.step("wasm-worker", "Build the experimental Worker-native Graff core");
+    worker_step.dependOn(&b.addInstallArtifact(worker, .{}).step);
 }

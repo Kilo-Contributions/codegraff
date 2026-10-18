@@ -98,15 +98,7 @@ pub fn toolResultMessage(arena: Allocator, kind: Provider.Kind, call_id: []const
             try obj.put(arena, "content", .{ .string = text });
             if (is_error) try obj.put(arena, "is_error", .{ .bool = true });
         },
-        .openai => {
-            try obj.put(arena, "role", .{ .string = "tool" });
-            try obj.put(arena, "tool_call_id", .{ .string = call_id });
-            const body = if (is_error)
-                try std.fmt.allocPrint(arena, "[error] {s}", .{text})
-            else
-                text;
-            try obj.put(arena, "content", .{ .string = body });
-        },
+        .openai => return @import("chat_message.zig").toolResult(arena, call_id, text, is_error),
         .responses => {
             try obj.put(arena, "type", .{ .string = "function_call_output" });
             try obj.put(arena, "call_id", .{ .string = call_id });
