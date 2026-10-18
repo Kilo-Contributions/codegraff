@@ -309,6 +309,7 @@ record only when you need the evidence or the edge cases.
 | [0291](0291-release-builds-use-declared-task-caching.md) | Pin nanocompile and cache complete release build tasks with explicit inputs, tool resources, and a verified byte-identical restore before packaging. |
 
 | [0292](0292-sol-subscription-context-is-500k.md) | GPT-6.1 Sol uses a 500k subscription window on Codex and ChatGPT sign-in; smaller catalog windows still win, other models retain their conservative caps, and API maxima do not widen subscription defaults. |
+| [0293](0293-ci-reuses-checksum-pinned-tool-binaries.md) | Restore pinned CI executables from optional object storage only after checking a reviewed SHA-256; unavailable artifacts retain the pinned-source fallback. |
 
 ## When to write one
 

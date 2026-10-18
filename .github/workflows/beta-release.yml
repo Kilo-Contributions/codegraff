@@ -53,6 +53,7 @@ jobs:
       - uses: ./.github/actions/setup-nanocompile
         with:
           target: ${{ matrix.target }}
+          binary-base-url: ${{ secrets.NANOCOMPILE_BINARY_BASE_URL }}
       - name: Cross-compile beta CLI (${{ matrix.target }})
         env:
           BETA_VERSION: ${{ needs.plan.outputs.version }}
