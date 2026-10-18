@@ -14,6 +14,8 @@ pub const Meta = struct {
     id: []const u8,
     label: []const u8,
     task: []const u8,
+    provider: []const u8 = "",
+    model: []const u8 = "",
     status: []const u8 = "working",
     updatedAt: i64 = 0,
     truncated: bool = false,
@@ -84,6 +86,14 @@ pub const Recorder = struct {
         for (self.events.items) |event| self.freeEvent(event);
         self.events.deinit(self.a);
         self.dir.close(self.io);
+    }
+    /// Identity strings are borrowed for the recorder's run lifetime, like label/task.
+    pub fn setModel(self: *Recorder, provider: []const u8, model: []const u8) void {
+        self.mu.lockUncancelable(self.io);
+        defer self.mu.unlock(self.io);
+        self.meta.provider = util.utf8Prefix(provider, 256);
+        self.meta.model = util.utf8Prefix(model, 256);
+        self.publish(true);
     }
     pub fn engineSink(self: *Recorder) sink.EngineSink {
         return .{ .ctx = self, .vt = &vtable };
@@ -229,6 +239,16 @@ test "child activity coalesces deltas and bounds retained events and text" {
     try std.testing.expect(r.meta.truncated);
     try std.testing.expect(!validId("../elsewhere"));
     try std.testing.expect(validId("sa-001-abc"));
+    var identity: [257]u8 = undefined;
+    @memset(identity[0..255], 'a');
+    @memcpy(identity[255..], "é");
+    r.setModel(&identity, &identity);
+    try std.testing.expectEqual(@as(usize, 255), r.meta.provider.len);
+    try std.testing.expectEqualStrings(identity[0..255], r.meta.model);
+    const legacy = try std.json.parseFromSlice(Meta, std.testing.allocator, "{\"id\":\"old-child\",\"label\":\"Old\",\"task\":\"Review\"}", .{});
+    defer legacy.deinit();
+    try std.testing.expectEqualStrings("", legacy.value.provider);
+    try std.testing.expectEqualStrings("", legacy.value.model);
 }
 
 test "frontendless child SSE reaches its own activity sink and final snapshot" {
@@ -240,6 +260,18 @@ test "frontendless child SSE reaches its own activity sink and final snapshot" {
     defer a.free(root);
     var recorder = try Recorder.init(a, io, root, "child-one", "Review", "Check the boundary");
     defer recorder.deinit();
+    recorder.setModel("provider-a", "resolved-model-a");
+    // Identity is visible before any engine event, despite the publish throttle.
+    inline for (.{ "child-one.meta", "child-one.json" }) |name| {
+        const identity_bytes = try recorder.dir.readFileAlloc(io, name, a, .limited(file_limit));
+        defer a.free(identity_bytes);
+        const T = if (comptime std.mem.endsWith(u8, name, ".meta")) Meta else Snapshot;
+        const identity = try std.json.parseFromSlice(T, a, identity_bytes, .{});
+        defer identity.deinit();
+        const meta = if (T == Meta) identity.value else identity.value.agent;
+        try std.testing.expectEqualStrings("provider-a", meta.provider);
+        try std.testing.expectEqualStrings("resolved-model-a", meta.model);
+    }
     var arena = std.heap.ArenaAllocator.init(a);
     defer arena.deinit();
     var agent: @import("agent.zig").Agent = .{
@@ -266,6 +298,8 @@ test "frontendless child SSE reaches its own activity sink and final snapshot" {
     defer a.free(bytes);
     const parsed = try std.json.parseFromSlice(Snapshot, a, bytes, .{});
     defer parsed.deinit();
+    try std.testing.expectEqualStrings("provider-a", parsed.value.agent.provider);
+    try std.testing.expectEqualStrings("resolved-model-a", parsed.value.agent.model);
     try std.testing.expectEqualStrings("completed", parsed.value.agent.status);
     try std.testing.expectEqualStrings("Review finished", parsed.value.response);
     try std.testing.expectEqual(@as(usize, 4), parsed.value.events.len);
