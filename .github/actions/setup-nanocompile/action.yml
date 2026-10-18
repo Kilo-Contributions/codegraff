@@ -1,0 +1,29 @@
+name: Setup nanocompile release cache
+description: Build a pinned nanocompile and restore the target's declared-task cache
+inputs:
+  target:
+    description: Release-matrix target
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+      with:
+        repository: justrach/nanocompile
+        ref: dec24ac64b2c810cca247f850ed1784830362df5
+        path: .nanocompile-source
+        persist-credentials: false
+    - name: Build pinned nanocompile
+      shell: bash
+      working-directory: .nanocompile-source
+      run: |
+        zig build -Doptimize=ReleaseFast --prefix "$GITHUB_WORKSPACE/.nanocompile-tools"
+        echo "NANOCOMPILE_EXE=$GITHUB_WORKSPACE/.nanocompile-tools/bin/nanocompile" >> "$GITHUB_ENV"
+        echo "NANOCOMPILE_DIR=$GITHUB_WORKSPACE/.nanocompile-cache" >> "$GITHUB_ENV"
+    - name: Restore nanocompile task artifacts
+      uses: actions/cache@v6
+      with:
+        path: .nanocompile-cache
+        key: nanocompile-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-dec24ac-${{ github.sha }}
+        restore-keys: |
+          nanocompile-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-dec24ac-
