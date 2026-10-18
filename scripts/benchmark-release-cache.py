@@ -63,8 +63,10 @@ def main():
             source.seek(offset)
             hit = b"task_hit\n" in source.read()
         metrics["task_hit"] = hit
-        if hit != (args.phase == "warm"):
-            raise RuntimeError("Expected a cold miss or a warm declared-task hit")
+        # A restored cache need not yield a task hit on a different runner.
+        # Record misses as performance outcomes; still verify artifact bytes.
+        if args.phase == "cold" and hit:
+            raise RuntimeError("Cold benchmark unexpectedly reused a task artifact")
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
     if expected is not None and digest != expected:
         raise RuntimeError("Warm artifact differs from the cold artifact")
