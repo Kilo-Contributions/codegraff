@@ -295,6 +295,8 @@ record only when you need the evidence or the edge cases.
 | [0282](0282-claude-system-breakpoint-closes-before-the-repo-context.md) | On Claude, the system prompt is two text blocks with the same bytes: the cache breakpoint closes the static instructions, before the project instructions and layout, so every repo shares the tools + instructions prefix. |
 | [0283](0283-agents-prepare-and-linked.md) | New task worktrees symlink the gitignored paths `.agents/linked` lists from the main checkout and run `.agents/prepare` when `.graff/workspace.toml` names no setup script. |
 
+| [0292](0292-sol-subscription-context-is-500k.md) | GPT-6.1 Sol uses a 500k subscription window on Codex and ChatGPT sign-in; smaller catalog windows still win, other models retain their conservative caps, and API maxima do not widen subscription defaults. |
+
 ## When to write one
 
 Write an ADR when a decision is load-bearing and non-obvious: it was reached

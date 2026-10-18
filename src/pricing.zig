@@ -177,13 +177,12 @@ pub const CatalogPrice = struct { in: f64, out: f64, cache: f64, high_at: u64 = 
 pub const ModelProtocol = enum { provider_default, kimi, anthropic };
 pub const ThinkingSupport = enum { unknown, no, both, only };
 
-// Hard cap on the usable input for ANY codex (ChatGPT-account) model. The
-// backend enforces ~272k input for every gpt-5.x regardless of what the /models
-// catalog advertises (e.g. 372k for sol/terra/luna, which is NOT honored for
-// input). contextFor() clamps every codex resolution path to this so
-// auto-compaction (80%) fires before the backend's "input exceeds the context
-// window" rejection. 270k -> compaction at 216k, ~56k below the ~272k wall.
+// Conservative subscription input cap for older/unverified models: their
+// advertised total window may exceed what the backend accepts as input.
 pub const codex_context_window: u64 = 270_000;
+// Use GPT-6.1 Sol's announced subscription default, not the API's larger
+// maximum (ADR 0292).
+pub const sol_subscription_context_window: u64 = 500_000;
 
 pub const model_table = @import("pricing_models.zig").rows;
 
@@ -307,19 +306,20 @@ pub var context_overlay: []const ModelInfo = &.{};
 pub fn contextFor(provider_id: []const u8, model: []const u8) u64 {
     // The ChatGPT plan route caps input like the Codex backend it shares.
     const is_codex = std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "chatgpt-new");
+    const subscription_cap = if (std.mem.eql(u8, model, "gpt-6.1-sol")) sol_subscription_context_window else codex_context_window;
     // Provider-specific baked row is authoritative (gateway gpt-5.5 = 400k, not
     // the API's 1.05M), so it wins over the fresh name-only overlay below.
     for (models()) |m| {
         if (std.mem.eql(u8, m.provider, provider_id) and std.mem.eql(u8, m.name, model))
-            return if (is_codex) @min(m.context, codex_context_window) else m.context;
+            return if (is_codex) @min(m.context, subscription_cap) else m.context;
     }
     // Fresh overlay (models.dev refresh), then the baked name-only fallback. A
     // name-only window may exceed what the Codex backend honors — cap codex.
     for (context_overlay) |m| {
-        if (std.mem.eql(u8, m.name, model)) return if (is_codex) @min(m.context, codex_context_window) else m.context;
+        if (std.mem.eql(u8, m.name, model)) return if (is_codex) @min(m.context, subscription_cap) else m.context;
     }
     for (models()) |m| {
-        if (std.mem.eql(u8, m.name, model)) return if (is_codex) @min(m.context, codex_context_window) else m.context;
+        if (std.mem.eql(u8, m.name, model)) return if (is_codex) @min(m.context, subscription_cap) else m.context;
     }
     return default_context;
 }
