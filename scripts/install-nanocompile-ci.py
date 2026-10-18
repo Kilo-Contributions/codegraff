@@ -11,10 +11,10 @@ import urllib.parse
 import urllib.request
 
 
-REVISION = "dec24ac64b2c810cca247f850ed1784830362df5"
+REVISION = "8b9a74763516919553b71282cdf1d645161e8459"
 ZIG_VERSION = "0.17.0"
 TARGET = "x86_64-linux-musl"
-SHA256 = "8f7943e71444caf00a5c2563e69f360d6b32ad97f368e829cbb6f7c449e3bf45"
+SHA256 = "f1dd15b05dd4ad3365eee7a47a13c80407f2473693bd02ca13b981b7d20fab26"
 ROOT = Path(__file__).resolve().parents[1]
 
 

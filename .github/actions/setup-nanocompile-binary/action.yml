@@ -23,7 +23,7 @@ runs:
       uses: actions/checkout@v7
       with:
         repository: justrach/nanocompile
-        ref: dec24ac64b2c810cca247f850ed1784830362df5
+        ref: 8b9a74763516919553b71282cdf1d645161e8459
         path: .nanocompile-source
         persist-credentials: false
 

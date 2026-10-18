@@ -310,6 +310,7 @@ record only when you need the evidence or the edge cases.
 
 | [0292](0292-sol-subscription-context-is-500k.md) | GPT-6.1 Sol uses a 500k subscription window on Codex and ChatGPT sign-in; smaller catalog windows still win, other models retain their conservative caps, and API maxima do not widen subscription defaults. |
 | [0293](0293-ci-reuses-checksum-pinned-tool-binaries.md) | Restore pinned CI executables from optional object storage only after checking a reviewed SHA-256; unavailable artifacts retain the pinned-source fallback. |
+| [0294](0294-release-task-reuse-is-explicitly-host-portable.md) | Only audited fixed-target/baseline-CPU release tasks opt into platform host identity; identical compiler/manifest/package snapshots avoid redundant native fetch preparation. |
 
 ## When to write one
 
