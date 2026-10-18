@@ -10,6 +10,14 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.42
+
+- Keeps reasoning-only output-limit replies out of subsequent requests and saved history while preserving partial answers and valid tool-call reasoning.
+- Shows each subagent's resolved worker model in ACP activity, including fallback selections, without breaking older activity records.
+- Retains large-session loading, bounded MCP task deadlines, streamed progress, oversized tool results and parked-command outcomes.
+- Reports compaction failures without ending the session and bounds repeated runaway replies.
+- Integrates current main with the existing release fixes; release builds verify cached artifact restoration before packaging.
+
 ## v0.302.41
 
 - Adds native subscription browser sign-in with shared CLI, REPL and ACP credential recovery; metered-key access remains separate.

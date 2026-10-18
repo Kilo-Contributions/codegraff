@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.42
+    \\  • output-limit recovery keeps later requests and saved history valid
+    \\  • ACP subagent activity shows the resolved worker model
+    \\  • current main plus session, MCP, compaction and parked-command fixes
+    \\
     \\0.302.41
     \\  • native subscription sign-in across terminal and ACP clients
     \\  • MCP structured results, resource content and inbound ping handling

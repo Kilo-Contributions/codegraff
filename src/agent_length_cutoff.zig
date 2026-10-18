@@ -4,11 +4,14 @@
 //! provider streams reasoning summaries, in reasoning) until the output cap
 //! stops it: minutes of "wait, let me re-check the spec" with no tool call,
 //! after which the turn ended as if that text were the answer. Two stops,
-//! both rewinding the reply and asking for the next action once per turn:
+//! both rewinding the reply and asking for the next action:
 //!   * `handle`: the provider already cut the reply at its output limit;
 //!   * `ReplySize` + `recoverRunaway`: the reply passed `runaway_bytes` of text
 //!     (or of summary reasoning) before any tool call, so the stream is
 //!     stopped early instead of waiting for the cap.
+//! A turn gets `max_rewinds` rewinds; a runaway after that still stops the
+//! stream, and the turn ends like a model loop (agent_model_loop.finishError)
+//! instead of streaming to the output cap.
 //! The cut reply is never the answer, and keeping it would re-bill its tokens
 //! as input on every later call. A turn with no tool call yet is left alone:
 //! a long first answer stays as written.
@@ -27,6 +30,10 @@ pub const note = "Your previous reply ran long without a tool call and was cut o
 /// that end in a tool call stay well under it.
 pub const runaway_bytes: usize = 24 * 1024;
 
+/// Rewinds per turn. A model can run away again after a rewind, and a second
+/// runaway left alone streams all the way to the output cap.
+pub const max_rewinds: u8 = 2;
+
 /// The provider stopped because it ran out of output budget, in any of the
 /// response shapes graff reads: chat finish_reason, Anthropic stop_reason,
 /// Responses incomplete_details, Interactions status.
@@ -43,10 +50,14 @@ pub fn cutAtLimit(root: std.json.ObjectMap) bool {
     return false;
 }
 
-/// Mid-task (the turn has used tools) and not yet spent this turn.
+/// Mid-task: the turn has used tools, outside compaction and schema replies.
+fn midTask(self: *const Agent) bool {
+    return self.tool_calls_this_turn > 0 and !self.compaction_request and self.output_schema == null;
+}
+
+/// Mid-task with a rewind left this turn.
 fn armed(self: *const Agent) bool {
-    return !self.length_cutoff_used and self.tool_calls_this_turn > 0 and
-        !self.compaction_request and self.output_schema == null;
+    return self.length_cutoffs < max_rewinds and midTask(self);
 }
 
 /// Rewind a mid-task reply the provider cut at its output limit and add the
@@ -56,9 +67,29 @@ pub fn handle(self: *Agent, root: std.json.ObjectMap, hist_len: usize) !bool {
     return rewind(self, hist_len, "[reply hit the output limit before any tool call — dropped it and asked for the next step]\n");
 }
 
+/// Run after reply recovery has inspected the original reasoning. A Chat
+/// length stop with neither content nor tool calls cannot be replayed, even
+/// when cancellation/budget exhaustion prevents a rewind. Never trim prior
+/// work, valid tool-call reasoning, or the recovery note that replaced it.
+pub fn discardEmptyReply(self: *Agent, root: std.json.ObjectMap, reply_start: usize) void {
+    if (self.provider.kind != .openai or !cutAtLimit(root) or reply_start >= self.messages.items.len) return;
+    const message = self.messages.items[reply_start];
+    if (message != .object) return;
+    const role = strIn(message.object, "role") orelse return;
+    if (!std.mem.eql(u8, role, "assistant")) return;
+    if (message.object.get("tool_calls")) |calls| if (calls == .array and calls.array.items.len > 0) return;
+    if (message.object.get("content")) |content| switch (content) {
+        .string => if (std.mem.trim(u8, content.string, " \t\r\n").len > 0) return,
+        .array => if (content.array.items.len > 0) return,
+        else => {},
+    };
+    _ = self.messages.orderedRemove(reply_start);
+}
+
 /// The stream stopped itself (`error.ReplyRunaway`): rewind the same way.
+/// False with no rewind left: finishError ends the turn.
 pub fn recoverRunaway(self: *Agent, err: anyerror, hist_len: usize) !bool {
-    if (err != error.ReplyRunaway) return false;
+    if (err != error.ReplyRunaway or self.length_cutoffs >= max_rewinds) return false;
     self.partial_text.clearRetainingCapacity();
     if (self.streamed_text) if (self.out) |w| {
         w.writeAll("\n") catch {};
@@ -71,7 +102,7 @@ pub fn recoverRunaway(self: *Agent, err: anyerror, hist_len: usize) !bool {
 
 fn rewind(self: *Agent, hist_len: usize, line: []const u8) !bool {
     if (!@import("agent_empty_completion.zig").PendingWork.canRequest(self)) return false;
-    self.length_cutoff_used = true;
+    self.length_cutoffs += 1;
     const keep = @min(hist_len, self.messages.items.len);
     self.closeCodexWs();
     self.messages.shrinkRetainingCapacity(keep);
@@ -97,7 +128,7 @@ pub const ReplySize = struct {
         }
         self.text += text_len;
         self.reasoning += reasoningDelta(kind, event).len;
-        if (!armed(agent)) return false;
+        if (!midTask(agent)) return false;
         return self.text > runaway_bytes or (summaryReasoning(agent.provider.model) and self.reasoning > runaway_bytes);
     }
 };
@@ -214,7 +245,7 @@ test "ReplySize: text past the limit stops a mid-task reply; a tool call, an una
     var agent: Agent = undefined;
     agent.provider.kind = .openai;
     agent.provider.model = "codegraff/gemini-4-argon";
-    agent.length_cutoff_used = false;
+    agent.length_cutoffs = 0;
     agent.tool_calls_this_turn = 1;
     agent.compaction_request = false;
     agent.output_schema = null;
@@ -230,15 +261,18 @@ test "ReplySize: text past the limit stops a mid-task reply; a tool call, an una
     try std.testing.expect(!with_tool.feed(&agent, tool_ev, 0));
     try std.testing.expect(!with_tool.feed(&agent, text_ev, runaway_bytes * 2));
 
-    // No tool call yet this turn, or already rewound once: never stopped.
+    // No tool call yet this turn: never stopped.
     agent.tool_calls_this_turn = 0;
     var first: ReplySize = .{};
     try std.testing.expect(!first.feed(&agent, text_ev, runaway_bytes * 2));
     agent.tool_calls_this_turn = 1;
-    agent.length_cutoff_used = true;
+
+    // Rewinds spent: still stopped (the turn then ends instead of rewinding).
+    agent.length_cutoffs = max_rewinds;
     var spent: ReplySize = .{};
-    try std.testing.expect(!spent.feed(&agent, text_ev, runaway_bytes * 2));
-    agent.length_cutoff_used = false;
+    try std.testing.expect(spent.feed(&agent, text_ev, runaway_bytes * 2));
+    try std.testing.expect(!try recoverRunaway(&agent, error.ReplyRunaway, 0));
+    agent.length_cutoffs = 0;
 
     // Reasoning counts only for summary-reasoning (Gemini) models.
     var big: std.ArrayList(u8) = .empty;
@@ -250,4 +284,55 @@ test "ReplySize: text past the limit stops a mid-task reply; a tool call, an una
     agent.provider.model = "codegraff/deepseek-flash";
     var raw: ReplySize = .{};
     try std.testing.expect(!raw.feed(&agent, reason_ev, 0));
+}
+
+test "empty length reply cleanup keeps recovery notes and valid prior tool reasoning on both chat routes" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    for ([_][]const u8{ "deepseek", "codegraff" }) |provider| {
+        for ([_][]const u8{ "null", "\"\"", "\" \\n\"" }) |content| {
+            for ([_]bool{ false, true }) |retries_spent| {
+                var agent: Agent = .{
+                    .gpa = std.testing.allocator,
+                    .arena = a,
+                    .io = std.testing.io,
+                    .client = undefined,
+                    .provider = .{ .id = provider, .kind = .openai, .auth = .bearer, .url = "", .api_key = "", .model = "deepseek-flash", .context = 100_000 },
+                    .messages = .init(a),
+                    .sub = true,
+                    .label = "test",
+                    .out = null,
+                };
+                try agent.messages.append(try messages.textMessage(a, "user", "Write the artifact"));
+                const prior = try parse(a, "{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"keep tool reasoning\",\"tool_calls\":[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{}\"}}]}");
+                try agent.messages.append(prior);
+                try agent.messages.append(try messages.toolResultMessage(a, .openai, "c", "saved work", false));
+                const start = agent.messages.items.len;
+                const root = (try parse(a, try std.fmt.allocPrint(a, "{{\"choices\":[{{\"finish_reason\":\"length\",\"message\":{{\"role\":\"assistant\",\"content\":{s},\"reasoning_content\":\"unfinished thought\",\"tool_calls\":[]}}}}]}}", .{content}))).object;
+                // Exercise cleanup independently of the stepper's early exclusion.
+                try agent.messages.append(root.get("choices").?.array.items[0].object.get("message").?);
+                // Exhaustion used to leave an invalid assistant in saved history.
+                if (retries_spent) agent.empty_completion_retries = @import("agent_empty_completion.zig").max_consecutive;
+                if (retries_spent) {
+                    try std.testing.expectError(error.EmptyCompletion, @import("agent_empty_completion.zig").handle(&agent, "", start));
+                } else try std.testing.expect(try @import("agent_empty_completion.zig").handle(&agent, "", start));
+                discardEmptyReply(&agent, root, start);
+                try std.testing.expectEqual(start + @as(usize, if (retries_spent) 0 else 1), agent.messages.items.len);
+                const body = try agent.buildBody(null, false, false, false);
+                defer std.testing.allocator.free(body);
+                try std.testing.expect(std.mem.indexOf(u8, body, "unfinished thought") == null);
+                try std.testing.expect(std.mem.indexOf(u8, body, "keep tool reasoning") != null);
+                try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_call_id\":\"c\"") != null);
+                if (!retries_spent) try std.testing.expect(std.mem.indexOf(u8, body, "Think briefly") != null);
+                // Cleanup is not a blanket reasoning filter or a partial-answer rewind.
+                try agent.messages.append(prior);
+                discardEmptyReply(&agent, root, agent.messages.items.len - 1);
+                try std.testing.expectEqualStrings("keep tool reasoning", agent.messages.items[agent.messages.items.len - 1].object.get("reasoning_content").?.string);
+                try agent.messages.append(try messages.textMessage(a, "assistant", "partial document"));
+                discardEmptyReply(&agent, root, agent.messages.items.len - 1);
+                try std.testing.expectEqualStrings("partial document", agent.messages.items[agent.messages.items.len - 1].object.get("content").?.string);
+            }
+        }
+    }
 }
