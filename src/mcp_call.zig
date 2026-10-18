@@ -208,5 +208,9 @@ fn invoke(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: Va
         out_alloc.free(text);
         return .{ .text = try out_alloc.dupe(u8, mcp_elicitation.fallback), .is_error = true };
     }
+    if (mcp_elicitation.rejectsApp(text)) {
+        defer out_alloc.free(text);
+        return .{ .text = try std.mem.concat(out_alloc, u8, &.{ text, mcp_elicitation.bare_process_app_note }), .is_error = is_error };
+    }
     return .{ .text = text, .is_error = is_error };
 }

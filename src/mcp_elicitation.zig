@@ -180,6 +180,21 @@ pub fn acceptContent(arena: Allocator, schema: ?Value) ?[]const u8 {
     return aw.toOwnedSlice() catch null;
 }
 
+/// Appended to a Computer Use reply that rejects an app (#1610). Its app
+/// list only holds applications it can identify as such; a window owned by
+/// a bare process (`java -jar`, a script interpreter, a dev server) is not
+/// selectable, and without this the agent read the rejection as the app
+/// having failed to launch.
+pub const bare_process_app_note =
+    \\
+    \\
+    \\[graff: Computer Use selects only the applications it lists. An app started as a bare process, such as `java -jar`, a script interpreter or a dev server, is not selectable even while its window is open. This does not mean the app failed to launch. Verify it another way (its own output, logs or a screenshot), or tell the user it cannot be inspected here.]
+;
+
+pub fn rejectsApp(text: []const u8) bool {
+    return contains(text, "Invalid app:");
+}
+
 pub fn looksUnavailable(text: []const u8) bool {
     return contains(text, "createElicitation is unavailable") or
         contains(text, "does not support form elicitation") or
@@ -324,6 +339,15 @@ test "replyBody: accept carries content, decline names no form fields (#768)" {
     const no = try replyBody(a, 7, .decline, "{}");
     try testing.expect(contains(no, "\"action\":\"decline\""));
     try testing.expect(!contains(no, "\"content\""));
+}
+
+test "an app rejection gets the bare-process note (#1610)" {
+    try testing.expect(rejectsApp("Error: Invalid app: java"));
+    try testing.expect(rejectsApp("Invalid app: /usr/bin/java"));
+    try testing.expect(!rejectsApp("app state ok"));
+    try testing.expect(!rejectsApp("invalid application bundle"));
+    try testing.expect(contains(bare_process_app_note, "java -jar"));
+    try testing.expect(contains(bare_process_app_note, "does not mean the app failed to launch"));
 }
 
 test "looksUnavailable / surface rewrite the node_repl form-elicitation crash (#768)" {
