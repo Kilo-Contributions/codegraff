@@ -326,6 +326,7 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
     var activity = @import("subagent_activity.zig").start(gpa, ctx.io, sub_id, label, prompt);
     defer if (activity) |*recorder| recorder.deinit();
     if (activity) |*recorder| {
+        recorder.setModel(agent.provider.id, agent.provider.model);
         if (@import("subagent_activity.zig").interruptRequested(ctx.io, recorder.dir, sub_id)) {
             recorder.finish(false, "Interrupted.");
             return .{ .output = .{ .text = try gpa.dupe(u8, "Interrupted."), .is_error = true }, .usage = .{} };
@@ -365,9 +366,9 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
     const acp_children = @import("acp_subagent_live.zig");
     const detached = ctx.subagent_feedback != null;
     const announce_child = acp_children.eligible(kind, ctx.depth, detached);
-    const announced = announce_child and acp_children.announce(ctx.io, sub_id, label, prompt, ctx.parent_tool_call_id);
+    const announced = announce_child and acp_children.announce(ctx.io, sub_id, label, prompt, ctx.parent_tool_call_id, agent.provider.id, agent.provider.model);
     const background_handle: ?acp_children.BackgroundHandle = if (detached and std.mem.eql(u8, kind, "subagent") and ctx.depth == 0 and ctx.parent_tool_call_id.len > 0)
-        acp_children.announceBackground(arena, ctx.io, sub_id, label, prompt, ctx.parent_tool_call_id)
+        acp_children.announceBackground(arena, ctx.io, sub_id, label, prompt, ctx.parent_tool_call_id, agent.provider.id, agent.provider.model)
     else
         null;
     const background_announced = background_handle != null;
@@ -377,9 +378,10 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
         .io = ctx.io,
         .recorder = agent.sink,
         .background_handle = background_handle,
-        .progress = if (progress_on) .{ .parent_call_id = ctx.parent_tool_call_id, .child_id = sub_id, .name = label } else null,
+        .progress = if (progress_on) .{ .parent_call_id = ctx.parent_tool_call_id, .child_id = sub_id, .name = label, .provider = agent.provider.id, .model = agent.provider.model } else null,
     };
     if (announced or background_announced or progress_on) agent.sink = child_stream.engineSink();
+    if (progress_on) child_stream.startProgress();
     var child_state: []const u8 = "failed";
     defer if (announced) acp_children.finish(ctx.io, sub_id, child_state, ctx.parent_tool_call_id);
     defer if (background_handle) |handle| acp_children.finishBackground(ctx.io, handle, sub_id, child_stream.seq, child_state);
