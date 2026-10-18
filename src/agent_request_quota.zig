@@ -31,6 +31,9 @@ pub fn isQuotaExceeded(body: []const u8) bool {
         "credits_exhausted",                            "credit_limit_exceeded", "insufficient_funds",
         "http 402",                                     "exhausted_credit",      "credit_balance_too_low",
         "subscription_sharing_v2_usage_limit_exceeded",
+        // A Claude subscription past its extra usage answers 400
+        // invalid_request_error with only this phrase to go on.
+        "out of extra usage",
     };
     for (needles) |needle| if (util.indexOfIgnoreCase(body, needle) != null) return true;
     return false;
@@ -173,6 +176,7 @@ test "isQuotaExceeded (#opencode-parity): billing cap detected, transient thrott
     try std.testing.expect(isQuotaExceeded("{\"error\":{\"code\":\"insufficient_quota\",\"message\":\"You exceeded your current quota\"}}"));
     try std.testing.expect(isQuotaExceeded("Quota Exceeded for this key"));
     try std.testing.expect(isQuotaExceeded("{\"error\":{\"code\":\"subscription_sharing_usage_limit_exceeded\"}}"));
+    try std.testing.expectEqual(Fault.quota, classify("invalid_request_error", null, "You're out of extra usage. Add more at claude.ai/settings/usage and keep going.").?);
     // transient rate-limit -> NOT a quota cap; must still retry
     try std.testing.expect(!isQuotaExceeded("Rate limit reached. Please try again in 20s."));
     try std.testing.expect(!isQuotaExceeded("429 too many requests"));
