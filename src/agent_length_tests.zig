@@ -93,20 +93,45 @@ test "length continuation allowance stays bounded across tool progress and reset
     try std.testing.expectEqual(@as(u8, 1), next_turn.continuations);
 }
 
-test "length continuation preserves reasoning-only output instead of empty-completion rewind" {
+test "length continuation excludes empty chat replies from the next request without rewinding prior work" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var buffer: [4096]u8 = undefined;
+    var buffer: [16384]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    var agent = fixture(arena.allocator(), &writer, .openai);
-    var state: length.State = .{};
-    const root = try parse(agent.arena, "{\"choices\":[{\"finish_reason\":\"length\",\"message\":{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"unfinished thought\"}}]}");
-    try std.testing.expect((try state.step(&agent, root)) == null);
-    try std.testing.expectEqual(@as(usize, 2), agent.messages.items.len);
-    try std.testing.expectEqualStrings("unfinished thought", agent.messages.items[0].object.get("reasoning_content").?.string);
-    const serialized = try std.json.Stringify.valueAlloc(agent.arena, agent.messages.items[1], .{});
-    try std.testing.expect(std.mem.indexOf(u8, serialized, "Think briefly") != null);
-    try std.testing.expectEqual(@as(u8, 0), agent.empty_completion_retries);
+    for ([_][]const u8{ "deepseek", "codegraff" }) |provider| {
+        for ([_][]const u8{ "null", "\"\"", "\"  \\n\"" }) |content| {
+            var agent = fixture(arena.allocator(), &writer, .openai);
+            agent.io = std.testing.io;
+            agent.provider.id = provider;
+            agent.provider.model = "deepseek-flash";
+            var state: length.State = .{};
+            try agent.messages.append(try messages.textMessage(agent.arena, "user", "Write the document"));
+            const prior = try parse(agent.arena, "{\"role\":\"assistant\",\"content\":\"partial document\",\"reasoning_content\":\"prior useful reasoning\"}");
+            try agent.messages.append(.{ .object = prior });
+            const raw = try std.fmt.allocPrint(agent.arena, "{{\"choices\":[{{\"finish_reason\":\"length\",\"message\":{{\"role\":\"assistant\",\"content\":{s},\"reasoning_content\":\"unfinished thought\",\"tool_calls\":[]}}}}]}}", .{content});
+            const root = try parse(agent.arena, raw);
+            // Even the last allowed reply must not poison saved/resumed history.
+            for (0..length.max_continuations) |_| try std.testing.expect((try state.step(&agent, root)) == null);
+            try std.testing.expectError(error.OutputLengthExceeded, state.step(&agent, root));
+            try std.testing.expectEqual(@as(usize, 2 + length.max_continuations), agent.messages.items.len);
+            try std.testing.expectEqual(length.max_continuations, state.continuations);
+            try std.testing.expectEqual(@as(u8, 0), agent.empty_completion_retries);
+            const body = try agent.buildBody(null, false, false, false);
+            defer std.testing.allocator.free(body);
+            try std.testing.expect(std.mem.indexOf(u8, body, "unfinished thought") == null);
+            try std.testing.expect(std.mem.indexOf(u8, body, "prior useful reasoning") != null);
+            try std.testing.expect(std.mem.indexOf(u8, body, "Think briefly") != null);
+            const request = try parse(agent.arena, body);
+            var assistants: usize = 0;
+            for (request.get("messages").?.array.items) |message| {
+                if (!std.mem.eql(u8, message.object.get("role").?.string, "assistant")) continue;
+                assistants += 1;
+                try std.testing.expectEqualStrings("partial document", message.object.get("content").?.string);
+            }
+            try std.testing.expectEqual(@as(usize, 1), assistants);
+            try std.testing.expectEqualStrings("saved the document", (try state.step(&agent, try parse(agent.arena, chat_done))).?);
+        }
+    }
 }
 
 test "length continuation respects run budgets and both engine cancellation flags without granting another call" {
@@ -160,7 +185,7 @@ test "length continuation never dispatches truncated tool calls and leaves repla
     var buffer: [4096]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
     const cases = [_]struct { kind: Kind, raw: []const u8 }{
-        .{ .kind = .openai, .raw = "{\"choices\":[{\"finish_reason\":\"length\",\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]}}]}" },
+        .{ .kind = .openai, .raw = "{\"choices\":[{\"finish_reason\":\"length\",\"message\":{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"keep tool reasoning\",\"tool_calls\":[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]}}]}" },
         .{ .kind = .responses, .raw = "{\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"output\":[{\"type\":\"function_call\",\"call_id\":\"c\",\"name\":\"read_file\",\"arguments\":\"\"}]}" },
         .{ .kind = .anthropic, .raw = "{\"stop_reason\":\"max_tokens\",\"content\":[{\"type\":\"tool_use\",\"id\":\"c\",\"name\":\"read_file\"}]}" },
     };
@@ -174,6 +199,13 @@ test "length continuation never dispatches truncated tool calls and leaves repla
         try std.testing.expect(std.mem.indexOf(u8, result, "truncated: the response ended") != null);
         const history = try std.json.Stringify.valueAlloc(agent.arena, agent.messages.items[0], .{});
         try std.testing.expect(std.mem.indexOf(u8, history, "graff_invalid_input") == null);
+        if (case.kind == .openai) {
+            const body = try agent.buildBody(null, false, false, false);
+            defer std.testing.allocator.free(body);
+            try std.testing.expect(std.mem.indexOf(u8, body, "keep tool reasoning") != null);
+            try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_calls\"") != null);
+            try std.testing.expect(std.mem.indexOf(u8, body, "\"tool_call_id\":\"c\"") != null);
+        }
         try std.testing.expectEqual(@as(u8, 1), state.continuations);
     }
 }

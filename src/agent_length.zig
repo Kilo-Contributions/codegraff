@@ -96,8 +96,9 @@ pub const State = struct {
             return error.OutputLengthExceeded;
         }
         var body: []const u8 = note;
-        // Never route a reasoning-only length stop through empty-completion
-        // rewind: preserve its history, but break the reasoning-budget loop.
+        // Keep the length allowance separate from empty-completion retries.
+        // Chat's non-replayable empty reply is excluded by stepOpenAI; still
+        // use its reasoning to break the reasoning-budget loop.
         if (done) |text| if (std.mem.trim(u8, text, " \t\r\n").len == 0 and reasoningOnly(self.provider.kind, root)) {
             body = try std.fmt.allocPrint(self.arena, "{s} {s}", .{ note, @import("agent_empty_completion.zig").reasoning_budget_note });
         };

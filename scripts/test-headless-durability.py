@@ -60,6 +60,13 @@ def run_case(binary, script, code=0, reason="completed", extra=(), resume=False,
                 assert (work / "result.txt").read_text() == "saved\n"
                 assert len(model.requests) == 3, model.requests
                 assert "increment" in json.dumps(model.requests[1]).lower() or "pieces" in json.dumps(model.requests[1]).lower(), model.requests[1]
+                for request in model.requests[1:]:
+                    for message in request.get("messages", []):
+                        if message.get("role") == "assistant":
+                            assert message.get("content") or message.get("tool_calls"), message
+                if script[0].get("stream_deltas"):
+                    assert "Think briefly" in json.dumps(model.requests[1]), model.requests[1]
+                    assert "unfinished thought" not in json.dumps(model.requests[1]), model.requests[1]
             if resume:
                 assert (work / "result.txt").read_text() == "saved\n"
                 resumed = subprocess.run(command + ["--resume", final["session_id"], "-p", "Continue from the saved checkpoint."],
@@ -83,6 +90,9 @@ def main():
     print("PASS plain stdout preserved; startup resume handle on stderr", flush=True)
     run_case(binary, [{"text": "partial draft", "finish": "length"}, write, {"text": "saved"}])
     print("PASS length continues through file write; one terminal JSON result", flush=True)
+    run_case(binary, [{"stream_deltas": [{"role": "assistant", "reasoning_content": "unfinished thought"}],
+                       "finish": "length"}, write, {"text": "saved"}])
+    print("PASS reasoning-only length stop sends valid history and continues through file write", flush=True)
     run_case(binary, [write, {"text": "saved"}], code=3, reason="budget_exhausted", extra=("--max-model-calls", "1"), resume=True)
     print("PASS budget stop saves partial work and resumes by emitted session id", flush=True)
     run_case(binary, [{"text": "Partial work remains; continue with more budget."}], code=3, reason="budget_exhausted", extra=("--max-model-calls", "1"))

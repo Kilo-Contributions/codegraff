@@ -291,6 +291,20 @@ pub fn stepOpenAI(self: *Agent, root: std.json.ObjectMap) !?[]const u8 {
         try self.sayApiError("api error: choice message was not an object", .{});
         return error.ApiError;
     };
+    // A length stop may spend its entire budget reasoning. Chat rejects
+    // replaying an assistant with neither content nor tool calls (#1646).
+    // Keep real partial answers and tool-call reasoning verbatim; only this
+    // empty reply stays out of history, including on budget/cancel exits.
+    const has_content = if (msg_obj.get("content")) |c| switch (c) {
+        .string => std.mem.trim(u8, c.string, " \t\r\n").len > 0,
+        .array => c.array.items.len > 0,
+        else => false,
+    } else false;
+    const has_calls = if (msg_obj.get("tool_calls")) |t| t == .array and t.array.items.len > 0 else false;
+    if (length.limited(.openai, root) and !has_content and !has_calls) {
+        self.pairContextMeterWithCurrentLocal();
+        return "";
+    }
     try self.messages.append(message); // echo verbatim (content may be null)
 
     var final_text: []const u8 = "";
