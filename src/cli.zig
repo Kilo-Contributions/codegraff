@@ -24,6 +24,10 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.43
+    \\  • updated subscription context capacity avoids premature compaction
+    \\  • model catalog and ACP usage updates report the same window
+    \\
     \\0.302.42
     \\  • output-limit recovery keeps later requests and saved history valid
     \\  • ACP subagent activity shows the resolved worker model

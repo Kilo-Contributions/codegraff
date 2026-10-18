@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.43
+
+- Uses the updated subscription context default instead of the older blanket cap, avoiding premature compaction.
+- Reports consistent context capacity through the model catalog and ACP usage updates; smaller catalog limits remain respected.
+- Retains all changes from v0.302.42.
+
 ## v0.302.42
 
 - Keeps reasoning-only output-limit replies out of subsequent requests and saved history while preserving partial answers and valid tool-call reasoning.
