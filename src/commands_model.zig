@@ -217,9 +217,16 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
         return true;
     }
     if (std.mem.eql(u8, line, "/compact")) {
-        _ = root.manualCompact() catch |err| switch (err) {
-            error.ApiError, error.EmptySummary, error.IncompleteSummary, error.InvalidCompactionResponse => {},
-            else => |e| return e,
+        // #1620: every failure says so here. A propagated error ended the REPL
+        // loop, and the exit save then printed "session saved" over a history
+        // compaction never touched.
+        const was_degraded = root.compact_pin_degraded;
+        _ = root.manualCompact() catch |err| {
+            const announced = err == error.ActivePromptPinned and !was_degraded and root.compact_pin_degraded;
+            if (compactFailureText(err, announced)) |text| {
+                try out.print("{s}[{s}]{s}\n", .{ style.dim, text, style.reset });
+                try out.flush();
+            }
         };
         return true;
     }
@@ -483,6 +490,46 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
         return true;
     }
     return false;
+}
+
+/// The one line `/compact` prints when it leaves history unchanged; null when
+/// the compaction path already printed its own (empty/incomplete summary, a
+/// first pinned-turn skip).
+pub fn compactFailureText(err: anyerror, announced: bool) ?[]const u8 {
+    return switch (err) {
+        error.EmptySummary, error.IncompleteSummary => null,
+        error.ActivePromptPinned => if (announced) null else "compaction skipped: the current turn must stay verbatim, history unchanged",
+        error.ServerCompactionRequired => "compaction failed: history holds a provider compaction item and the provider did not compact it, history unchanged",
+        error.InvalidCompactionResponse => "compaction failed: incomplete or invalid compacted history, history unchanged",
+        error.Interrupted, error.Canceled => "compaction cancelled, history unchanged",
+        error.ApiError => "compaction failed: provider error, history unchanged",
+        error.CompactionOff => "compaction is off: Codegraff credits are used up",
+        else => "compaction failed, history unchanged",
+    };
+}
+
+test "#1620 /compact names every failure instead of ending the session" {
+    try std.testing.expect(compactFailureText(error.EmptySummary, false) == null);
+    try std.testing.expect(compactFailureText(error.ActivePromptPinned, true) == null);
+    for ([_]anyerror{ error.ActivePromptPinned, error.ServerCompactionRequired, error.InvalidCompactionResponse, error.ApiError, error.OutOfMemory }) |err|
+        try std.testing.expect(std.mem.indexOf(u8, compactFailureText(err, false).?, "unchanged") != null);
+}
+
+test "#1620 a /compact that cannot run prints why and keeps the REPL going" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const support = @import("agent_compact_test_support.zig");
+    var root = support.subAgent(a, false);
+    root.compact_pin_degraded = false;
+    // An opaque provider compaction item: a local summary must refuse it.
+    root.messages = try support.msg1(a, "user", "earlier");
+    try root.messages.append(try std.json.parseFromSliceLeaky(Value, a, "{\"type\":\"compaction\",\"encrypted_content\":\"x\"}", .{}));
+    var keys: Keys = .{ .values = @splat("test") };
+    var aw: Io.Writer.Allocating = .init(a);
+    try std.testing.expect(try tryHandle(&root, &keys, a, "/compact", &aw.writer));
+    try std.testing.expect(std.mem.indexOf(u8, aw.written(), "history unchanged") != null);
+    try std.testing.expectEqual(@as(usize, 2), root.messages.items.len);
 }
 
 test {
