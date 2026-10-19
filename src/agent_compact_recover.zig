@@ -43,6 +43,7 @@ pub fn emergencyTrim(self: *Agent) usize {
             self.pending_goal_note = goal_flow.compactionSnapshot(self.arena, self) catch null;
         const after_tokens = self.fullInputEstimateTokens();
         compact.accountForReclaimedTokens(self, before_tokens -| after_tokens);
+        @import("context_savings.zig").noteCompaction(before_tokens, after_tokens);
         return cut;
     }
     // #163: no clean user turn to cut at (a runaway tool loop). Don't wedge the

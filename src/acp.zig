@@ -93,7 +93,12 @@ fn liveAfter(ctx: *anyopaque, arena: Allocator, text: []const u8, prompt: ?std.j
 fn liveMeter(ctx: *anyopaque) engine.Meter {
     const live: *LiveTurn = @ptrCast(@alignCast(ctx));
     const root = live.root;
-    return .{ .used = root.effectiveContextTokens(), .window = root.provider.context, .cost_usd = @import("acp_context_meter.zig").knownCostUsd(root.io) };
+    return .{
+        .used = root.effectiveContextTokens(),
+        .window = root.provider.context,
+        .cost_usd = @import("acp_context_meter.zig").knownCostUsd(root.io),
+        .savings = @import("context_savings.zig").snap(root.io),
+    };
 }
 
 /// The ACP user message: GUI `@[image]` attachments become native vision

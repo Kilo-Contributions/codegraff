@@ -40,7 +40,7 @@ pub const LiveTurn = struct {
         const window = self.root.provider.context;
         if (window == 0 or used == self.last_meter_used) return;
         self.last_meter_used = used;
-        meter.write(w, self.session_id, used, window, meter.knownCostUsd(self.root.io)) catch {};
+        meter.write(w, self.session_id, used, window, meter.knownCostUsd(self.root.io), @import("context_savings.zig").snap(self.root.io)) catch {};
     }
 
     pub fn bindSession(ctx: *anyopaque, session_id: []const u8) void {
