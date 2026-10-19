@@ -415,7 +415,9 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
             agent.sleepInterruptible(@import("retry_jitter.zig").ms(agent.io, subagent_retry.backoffMs(fail_kind, attempts))) catch break :ask r; // #1274
         }
     };
-    try @import("subagent_retained.zig").checkpoint(&agent, ctx);
+    // A worker that ran keeps its report and usage when its state can't be
+    // saved for follow-ups; the save error used to replace both (#1671).
+    const retained_failure: ?anyerror = if (@import("subagent_retained.zig").checkpoint(&agent, ctx)) |_| null else |e| e;
     const run_ms: i64 = @intCast(@max(0, sub_start.untilNow(ctx.io, .awake).toMilliseconds()));
     const run_ok = if (report) |r| r.len > 0 else |_| false;
     const interrupted = if (activity) |*recorder| @import("subagent_activity.zig").interruptRequested(ctx.io, recorder.dir, sub_id) else false;
@@ -511,14 +513,27 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
         }
     }
     defer if (extra_owned) gpa.free(extra);
+    const unsaved = if (retained_failure) |e| try retainedFailureNote(arena, e) else "";
 
     if (empty) return .{
-        .output = .{ .text = try std.fmt.allocPrint(gpa, "{s}{s}", .{ report_body, extra }), .is_error = true },
+        .output = .{ .text = try std.fmt.allocPrint(gpa, "{s}{s}{s}", .{ report_body, extra, unsaved }), .is_error = true },
         .usage = usage,
     };
     if (detail) |p| return .{
-        .output = .{ .text = try std.fmt.allocPrint(gpa, "{s}\n\n[subagent {s} · inspect: {s}]{s}", .{ text, sub_id, p, extra }) },
+        .output = .{ .text = try std.fmt.allocPrint(gpa, "{s}\n\n[subagent {s} · inspect: {s}]{s}{s}", .{ text, sub_id, p, extra, unsaved }) },
         .usage = usage,
     };
-    return .{ .output = .{ .text = try std.fmt.allocPrint(gpa, "{s}{s}", .{ text, extra }) }, .usage = usage };
+    return .{ .output = .{ .text = try std.fmt.allocPrint(gpa, "{s}{s}{s}", .{ text, extra, unsaved }) }, .usage = usage };
+}
+
+/// The report still stands; only continuing this worker is lost.
+pub fn retainedFailureNote(a: Allocator, err: anyerror) ![]const u8 {
+    return std.fmt.allocPrint(a, "\n\n[worker state was not saved for follow-ups ({t}); this report is complete, but agent_message and resume cannot continue this worker]", .{err});
+}
+
+/// A worker whose run never started: setup failed before its first step,
+/// so nothing it would do has happened yet (#1671).
+pub fn startFailure(gpa: Allocator, err: anyerror) ToolOutput {
+    const text = std.fmt.allocPrint(gpa, "subagent did not start: {t}. It failed during setup, before its first step, so no tools ran.", .{err}) catch return .{ .is_error = true };
+    return .{ .text = text, .is_error = true };
 }

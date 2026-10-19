@@ -235,7 +235,7 @@ pub fn agentJobPump(job: *AgentJob, gpa: Allocator, io: Io) void {
     var ctx = job.ctx;
     ctx.subagent_feedback = &job.feedback;
     var run = runSub(ctx, "subagent", job.label, job.prompt, job.sys_override, job.niche, job.isolation, job.isolation_fallback, job.pin, job.effort) catch |err| SubRun{
-        .output = failure(gpa, err),
+        .output = @import("subagent_run.zig").startFailure(gpa, err),
         .usage = .{ .duration_ms = @intCast(@max(0, t0.untilNow(io, .awake).toMilliseconds())) },
     };
     const undelivered = job.feedback.close(io);

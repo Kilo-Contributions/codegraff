@@ -129,3 +129,16 @@ test "a child's api-error cause reaches the parent verbatim (#287/#299)" {
         try std.testing.expect(std.mem.indexOf(u8, out.text, "ApiError") == null); // never the bare error name
     }
 }
+
+test "a failed state save keeps the report; a failed start says nothing ran (#1671)" {
+    const a = std.testing.allocator;
+    const note = try run.retainedFailureNote(a, error.FileNotFound);
+    defer a.free(note);
+    try std.testing.expect(std.mem.indexOf(u8, note, "FileNotFound") != null);
+    try std.testing.expect(std.mem.indexOf(u8, note, "this report is complete") != null);
+    const start = run.startFailure(a, error.FileNotFound);
+    defer a.free(start.text);
+    try std.testing.expect(start.is_error);
+    try std.testing.expect(std.mem.startsWith(u8, start.text, "subagent did not start: FileNotFound."));
+    try std.testing.expect(std.mem.indexOf(u8, start.text, "no tools ran") != null);
+}
