@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.46
+    \\  • images over ACP reach the hosted default models
+    \\  • a worker keeps its report when its state can't be saved
+    \\  • a client's own cancel isn't called the user's
+    \\
     \\0.302.45
     \\  • ACP context meter reports what graff kept out of context
     \\  • render_html says a page is saved, not displayed

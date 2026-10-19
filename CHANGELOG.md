@@ -10,6 +10,14 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.46
+
+- Images attached over ACP now reach the hosted default models; graff dropped them before the model saw them.
+- A worker that ran and reported keeps its report and usage when its state can't be saved for follow-ups, instead of coming back as only an error (#1671).
+- A cancel an ACP client marks as its own (`_meta["graff/cancelSource"] = "client"`) ends the turn as stopped by the client, not as interrupted by the user (#1611).
+- Computer Use says that an app owned by a bare process can't be selected, so agents don't read the rejection as a failed launch.
+- Retains all changes from v0.302.45.
+
 ## v0.302.45
 
 - Reports what graff kept out of the model's context (tool output kept in handle files, tokens freed by compaction, provider cache reads) on the ACP context meter as `_meta["codegraff/savings"]`; Harness shows it next to its context meter.
