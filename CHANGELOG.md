@@ -10,6 +10,13 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.45
+
+- Reports what graff kept out of the model's context (tool output kept in handle files, tokens freed by compaction, provider cache reads) on the ACP context meter as `_meta["codegraff/savings"]`; Harness shows it next to its context meter.
+- `render_html` now reports a page as saved and ready to open, never as displayed, and its description no longer promises inline display.
+- `workspace use` says project instructions follow the tree; the instructions update names the directory its file came from, and a switch is noticed even when both files match in size and time.
+- Retains all changes from v0.302.44.
+
 ## v0.302.44
 
 - Adds an experimental Worker-native Zig/Wasm chat step with explicit host tools and remote sandbox cleanup.
