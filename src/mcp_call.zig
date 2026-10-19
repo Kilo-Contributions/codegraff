@@ -217,5 +217,12 @@ fn invoke(reg: *Registry, out_alloc: Allocator, qualified: []const u8, input: Va
         out_alloc.free(text);
         return .{ .text = try out_alloc.dupe(u8, mcp_elicitation.fallback), .is_error = true };
     }
+    if (mcp_elicitation.rejectsApp(text)) {
+        defer out_alloc.free(text);
+        // The note follows the original text, so a structured range still
+        // addresses the same bytes in the copy.
+        const noted = try std.mem.concat(out_alloc, u8, &.{ text, mcp_elicitation.bare_process_app_note });
+        return .{ .text = noted, .is_error = is_error, .run_task = run_task, .structured_text = if (structured_range) |range| noted[range.start..range.end] else null };
+    }
     return .{ .text = text, .is_error = is_error, .run_task = run_task, .structured_text = if (structured_range) |range| text[range.start..range.end] else null };
 }
