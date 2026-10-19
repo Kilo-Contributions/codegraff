@@ -337,6 +337,7 @@ pub fn handleLine(d: *Dispatch, arena: Allocator, w: *Io.Writer, line: []const u
     }
     if (std.mem.eql(u8, req.method, "session/cancel")) {
         cancel_flag.store(true, .release);
+        @import("cancel_source.zig").noteAcp(req.params);
         if (on_cancel) |hook| hook();
         if (req.id != null) return respond(w, req, struct {}{});
         return;
