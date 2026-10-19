@@ -42,7 +42,7 @@ pub const LoadSessionFn = *const fn (ctx: *anyopaque, arena: Allocator, w: *Io.W
 /// Optional per-turn context meter: used and window tokens (plus the known
 /// session cost) for the standard `usage_update` (acp_context_meter.zig).
 /// Null when the embed has no live agent (pure in-process loop, tests).
-pub const Meter = struct { used: u64, window: u64, cost_usd: ?f64 = null };
+pub const Meter = struct { used: u64, window: u64, cost_usd: ?f64 = null, savings: @import("context_savings.zig").Snapshot = .{} };
 pub const MeterFn = *const fn (ctx: *anyopaque) Meter;
 /// Vendor-method escape hatch: gets every request the core loop does not
 /// claim; returns true when it answered (false falls through to -32601).
@@ -255,7 +255,7 @@ pub fn emitMeter(d: *Dispatch, w: *Io.Writer, sid: []const u8) !void {
     if (d.meter) |meter| {
         // Report live occupancy independently of the model catalog.
         const m = meter(d.ctx);
-        if (m.window > 0) try @import("acp_context_meter.zig").write(w, sid, m.used, m.window, m.cost_usd);
+        if (m.window > 0) try @import("acp_context_meter.zig").write(w, sid, m.used, m.window, m.cost_usd, m.savings);
     }
 }
 
