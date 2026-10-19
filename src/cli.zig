@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.45
+    \\  • ACP context meter reports what graff kept out of context
+    \\  • render_html says a page is saved, not displayed
+    \\  • workspace use: instructions follow the tree you switch to
+    \\
     \\0.302.43
     \\  • updated subscription context capacity avoids premature compaction
     \\  • model catalog and ACP usage updates report the same window
