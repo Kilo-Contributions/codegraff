@@ -66,7 +66,7 @@ pub const LiveTurn = struct {
     }
 
     pub fn signalCancel() void {
-        cancel_source.cancel(.acp_cancel); // #728
+        cancel_source.cancel(cancel_source.takeAcp()); // #728, #1611
     }
 
     pub fn cancelled() bool {
