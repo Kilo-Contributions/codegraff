@@ -65,16 +65,53 @@ pub fn assistantText(arena: Allocator, root: std.json.ObjectMap) ![]const u8 {
 /// output, so a tally that skipped it would understate every call.
 /// `total_cached_tokens` is the cached PORTION of the input, matching how the
 /// other wires report a cache read.
+///
+/// A request that continued a stored Interaction reports only its new steps as
+/// `total_input_tokens`. The whole prompt the model read is in
+/// `model_invocation_token_counts` (and `raw_prompt_token`), with the part read
+/// from cache beside it; Google documents the continued history as input, so
+/// both the context meter and the cost read the whole prompt (see promptUsage).
 pub fn recordUsage(self: *@import("agent.zig").Agent, u: std.json.ObjectMap, fallback: u64) void {
     const ctx = @import("agent_context.zig");
-    const in_tokens = ctx.usageInt(u, "total_input_tokens");
+    const p = promptUsage(u);
     const out_tokens = ctx.usageInt(u, "total_output_tokens") +| ctx.usageInt(u, "total_thought_tokens");
-    const total = @max(ctx.usageInt(u, "total_tokens"), in_tokens +| out_tokens);
+    const total = @max(ctx.usageInt(u, "total_tokens"), p.prompt +| out_tokens);
     if (total > 0) ctx.replaceContextTokens(self, @intCast(total)) else ctx.floorContextTokens(self, fallback);
     self.last_usage_includes_output = total > 0;
-    const cached = ctx.usageInt(u, "total_cached_tokens");
-    if (cached > 0) self.last_cache_read = @intCast(cached);
-    self.recordCost(@max(in_tokens - cached, 0), cached, 0, out_tokens);
+    if (p.cached > 0) self.last_cache_read = @intCast(p.cached);
+    self.recordCost(@max(p.prompt - p.cached, 0), p.cached, 0, out_tokens);
+}
+
+pub const PromptUsage = struct { prompt: i64, cached: i64 };
+
+/// The prompt the model read and how much of it came from cache. Per-invocation
+/// counts are the full prompt even on a continued Interaction, where the flat
+/// `total_input_tokens` / `total_cached_tokens` cover only the new steps.
+pub fn promptUsage(u: std.json.ObjectMap) PromptUsage {
+    const ctx = @import("agent_context.zig");
+    var inv_prompt: i64 = 0;
+    var inv_cached: i64 = 0;
+    if (u.get("model_invocation_token_counts")) |mi| if (mi == .array) for (mi.array.items) |inv| {
+        if (inv != .object) continue;
+        inv_prompt +|= modalitySum(inv.object.get("prompt_tokens_details"));
+        inv_cached +|= modalitySum(inv.object.get("cache_tokens_details"));
+    };
+    const prompt = @max(@max(ctx.usageInt(u, "total_input_tokens"), ctx.usageInt(u, "raw_prompt_token")), inv_prompt);
+    const cached = @min(@max(ctx.usageInt(u, "total_cached_tokens"), inv_cached), prompt);
+    return .{ .prompt = prompt, .cached = cached };
+}
+
+fn modalitySum(v: ?Value) i64 {
+    const list = v orelse return 0;
+    if (list != .array) return 0;
+    var n: i64 = 0;
+    for (list.array.items) |d| {
+        if (d != .object) continue;
+        if (d.object.get("tokens")) |t| if (t == .integer and t.integer > 0) {
+            n +|= t.integer;
+        };
+    }
+    return n;
 }
 
 /// A function_result rebuilt out of band (vision/repl replay), where only the
@@ -100,6 +137,21 @@ pub fn imagePart(arena: Allocator, ib: *std.json.ObjectMap, img: anytype) !void 
     }
 }
 
+/// `{"type":"model_output","content":[{"type":"text","text":"…"}]}` — an
+/// assistant text turn graff writes itself (an interrupt marker, a review
+/// reply), in the shape the endpoint echoes back.
+pub fn modelOutput(arena: Allocator, text: []const u8) !Value {
+    var part: std.json.ObjectMap = .empty;
+    try part.put(arena, "type", .{ .string = "text" });
+    try part.put(arena, "text", .{ .string = try arena.dupe(u8, text) });
+    var content = std.json.Array.init(arena);
+    try content.append(.{ .object = part });
+    var obj: std.json.ObjectMap = .empty;
+    try obj.put(arena, "type", .{ .string = "model_output" });
+    try obj.put(arena, "content", .{ .array = content });
+    return .{ .object = obj };
+}
+
 /// One turn on the Interactions wire: echo the model's steps into history,
 /// dispatch any function_call steps, and answer with the visible text once the
 /// model stops calling tools. Mirrors stepOpenAI / stepResponses.
@@ -113,6 +165,8 @@ pub fn step(self: *@import("agent.zig").Agent, root: std.json.ObjectMap) !?[]con
         try self.sayApiError("api error: interaction steps were not a list", .{});
         return error.ApiError;
     }
+    // The stored Interaction now holds these steps too (interactions_chain.zig).
+    try @import("interactions_chain.zig").record(self, root, steps.array.items);
     // Echo every step back verbatim next turn — the thought signature is opaque
     // and the endpoint validates it, so it must survive unedited.
     for (steps.array.items) |st| try self.messages.append(st);
@@ -161,15 +215,22 @@ pub fn step(self: *@import("agent.zig").Agent, root: std.json.ObjectMap) !?[]con
 /// A user message becomes a user_input step and assistant text a model_output
 /// step; content parts keep only the text and image shapes this wire takes.
 pub fn normalizeHistory(a: Allocator, history: *std.json.Array) void {
-    for (history.items) |*item| {
-        if (item.* != .object or item.object.get("type") != null) continue;
-        const role = item.object.get("role") orelse continue;
-        const content = item.object.get("content") orelse continue;
-        if (role != .string) continue;
-        const user = std.mem.eql(u8, role.string, "user");
-        if (!user and !std.mem.eql(u8, role.string, "assistant")) continue;
-        item.* = roleStep(a, user, content, item.object.get(@import("session_wake.zig").origin_key)) catch continue;
+    var kept: usize = 0;
+    for (history.items) |item| {
+        const normalized = normalize: {
+            if (item != .object or item.object.get("type") != null) break :normalize item;
+            const role = item.object.get("role") orelse break :normalize item;
+            const content = item.object.get("content") orelse break :normalize item;
+            if (role != .string) break :normalize item;
+            const user = std.mem.eql(u8, role.string, "user");
+            if (!user and !std.mem.eql(u8, role.string, "assistant")) break :normalize item;
+            if (content == .string and std.mem.trim(u8, content.string, " \t\r\n").len == 0) continue;
+            break :normalize roleStep(a, user, content, item.object.get(@import("session_wake.zig").origin_key)) catch item;
+        };
+        history.items[kept] = normalized;
+        kept += 1;
     }
+    history.shrinkRetainingCapacity(kept);
 }
 
 fn roleStep(a: Allocator, user: bool, content: Value, origin: ?Value) !Value {
@@ -262,4 +323,51 @@ test "assistantText concatenates model_output text and ignores thoughts" {
     , .{});
     defer parsed.deinit();
     try std.testing.expectEqualStrings("one two", try assistantText(arena, parsed.value.object));
+}
+
+test "a continued Interaction is metered on the whole prompt it read" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    // Shape returned for a follow-up on a stored Interaction: the flat totals
+    // cover only the new step, the invocation counts the whole prompt.
+    const chained = try std.json.parseFromSliceLeaky(Value, arena,
+        \\{"total_input_tokens":134,"total_cached_tokens":114,"raw_prompt_token":38383,
+        \\ "model_invocation_token_counts":[{"prompt_tokens_details":[{"modality":"text","tokens":38383}],
+        \\  "cache_tokens_details":[{"modality":"text","tokens":32768}]}]}
+    , .{});
+    const p = promptUsage(chained.object);
+    try std.testing.expectEqual(@as(i64, 38383), p.prompt);
+    try std.testing.expectEqual(@as(i64, 32768), p.cached);
+    // A stateless request without invocation detail falls back to the totals.
+    const flat = try std.json.parseFromSliceLeaky(Value, arena, "{\"total_input_tokens\":500,\"total_cached_tokens\":200}", .{});
+    const q = promptUsage(flat.object);
+    try std.testing.expectEqual(@as(i64, 500), q.prompt);
+    try std.testing.expectEqual(@as(i64, 200), q.cached);
+}
+
+test "chat-shaped text turns become steps before they reach the wire" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const messages = @import("messages.zig");
+    var history = std.json.Array.init(a);
+    try history.append(try messages.textMessage(a, "user", "Is 391 prime?"));
+    try history.append(try std.json.parseFromSliceLeaky(Value, a, "{\"type\":\"thought\",\"signature\":\"S\"}", .{}));
+    try history.append(try messages.textMessage(a, "assistant", "No: 17 x 23."));
+    try history.append(try messages.textMessage(a, "assistant", "  "));
+    try history.append(try @import("session_wake.zig").message(a, "[a note]"));
+    normalizeHistory(a, &history);
+    try std.testing.expectEqual(@as(usize, 4), history.items.len); // the blank turn is dropped
+    try std.testing.expectEqualStrings("user_input", history.items[0].object.get("type").?.string);
+    try std.testing.expectEqualStrings("Is 391 prime?", history.items[0].object.get("content").?.string);
+    try std.testing.expectEqualStrings("thought", history.items[1].object.get("type").?.string);
+    try std.testing.expectEqualStrings("model_output", history.items[2].object.get("type").?.string);
+    try std.testing.expectEqualStrings("No: 17 x 23.", history.items[2].object.get("content").?.array.items[0].object.get("text").?.string);
+    // A wake note keeps its origin tag (it is stripped on the wire, not here).
+    try std.testing.expect(history.items[3].object.get(@import("session_wake.zig").origin_key) != null);
+    // Idempotent: a second pass leaves the converted history alone.
+    const before = history.items.ptr;
+    normalizeHistory(a, &history);
+    try std.testing.expectEqual(before, history.items.ptr);
 }

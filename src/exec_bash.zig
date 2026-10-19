@@ -432,6 +432,7 @@ fn execUnchecked(ctx: ToolCtx, call: tools.ToolCall) !ToolOutput {
                 // finite one keeps the wait-until-exit `action=output`.
                 const server = server_like;
                 if (server) jobs.markPersistent(io, r.id);
+                jobs.markParked(io, r.id); // #1486
                 @import("subagent_interactive.zig").request(ctx);
                 break :blk .{ .text = try startedText(gpa, r.id, cmd, ssh, if (server) .server else .finite, wait_ms / 1000, r.output), .pending = true };
             },

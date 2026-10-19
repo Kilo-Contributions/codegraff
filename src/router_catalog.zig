@@ -225,16 +225,16 @@ pub fn parseModels(arena: Allocator, provider_id: []const u8, data: []const u8) 
     };
 }
 
-/// Catalog GET auth mirrors chat auth: Bearer for OpenAI-style routers and an
-/// Anthropic Console sign-in (ADR 0281); an Anthropic API key sends x-api-key +
-/// anthropic-version. xAI OAuth user tokens also need X-XAI-Token-Auth.
+/// Catalog auth matches native subscription, Console profile and API-key routes.
 pub fn catalogHeaders(arena: Allocator, spec: provider.ProviderSpec, key: []const u8, source: provider.Keys.CredentialSource, buf: *[4]std.http.Header) ?[]const std.http.Header {
     buf[0] = .{ .name = "Accept", .value = "application/json" };
     if (spec.auth == .x_api_key) {
-        const console = @import("anthropic_profile.zig").bearerToken(spec.id, key);
-        buf[1] = if (console) .{ .name = "Authorization", .value = std.fmt.allocPrint(arena, "Bearer {s}", .{key}) catch return null } else .{ .name = "x-api-key", .value = key };
+        const login = std.mem.eql(u8, spec.id, "anthropic") and source == .login;
+        const bearer = login or (std.mem.eql(u8, spec.id, "anthropic") and source == .profile);
+        buf[1] = .{ .name = if (bearer) "Authorization" else "x-api-key", .value = if (bearer) std.fmt.allocPrint(arena, "Bearer {s}", .{key}) catch return null else key };
         buf[2] = .{ .name = "anthropic-version", .value = root.anthropic_version };
-        return buf[0..3];
+        buf[3] = .{ .name = "anthropic-beta", .value = "claude-code-20250219,oauth-2025-04-20" };
+        return buf[0..if (login) @as(usize, 4) else 3];
     }
     const bearer = std.fmt.allocPrint(arena, "Bearer {s}", .{key}) catch return null;
     buf[1] = .{ .name = "Authorization", .value = bearer };

@@ -95,7 +95,7 @@ pub fn afterServerErrorOrParseReject(self: *Agent, etype: []const u8, code: ?[]c
     // its diagnostic also mentions capacity or a request-body parse error,
     // or a ChatGPT plan code OpenAI says to stop on, such as a spent allowance
     // whose message says "try again later" (ADR 0221).
-    if (isModelUnavailable(code) or isStructuredOverflow(code) or quota.isPlanStop(code)) return false;
+    if (quota.classify(etype, code, msg) != null or isModelUnavailable(code) or isStructuredOverflow(code) or quota.isPlanStop(code)) return false;
     if (try retryTransientServerError(self, etype, code, msg, server_retries)) return true;
     if (try retryShortGatewayFlake(self, etype, code, msg, server_retries)) return true;
     return retryBodyParseAfterTimeouts(self, msg, state);
@@ -123,7 +123,7 @@ pub fn isShortGatewayFlake(etype: []const u8, code: ?[]const u8, msg: []const u8
     // Gateway 110-byte follow-up. etype is often invalid_request_error, which
     // would otherwise hard-fail on the "invalid" needle. Auth/quota still die,
     // and so does every ChatGPT plan code: its 503s have the transient ladder.
-    if (isModelUnavailable(code) or isStructuredOverflow(code) or quota.isPlanCode(code)) return false;
+    if (quota.classify(etype, code, msg) != null or isModelUnavailable(code) or isStructuredOverflow(code) or quota.isPlanCode(code)) return false;
     if (isBodyParseRejection(msg)) return true;
     const hard = [_][]const u8{ "invalid", "authentication", "unauthorized", "insufficient", "quota", "permission", "tool_choice", "not found" };
     for (hard) |n| {
@@ -193,7 +193,7 @@ pub const max_server_retries: usize = 3; // #opencode-parity: bounded retries fo
 /// surfaced mid-stream and should be retried, not hard-failed. Billing / quota /
 /// invalid-input errors are NOT transient and fall through to a hard fail.
 pub fn isTransientServerError(etype: []const u8, code: ?[]const u8, msg: []const u8) bool {
-    if (isModelUnavailable(code)) return false;
+    if (quota.classify(etype, code, msg) != null or isModelUnavailable(code) or quota.isPlanStop(code)) return false;
     // ChatGPT plan usage or user data temporarily unavailable (503, possibly
     // mid-stream): keep the credentials and back off like an overload.
     if (quota.isPlanTransient(code)) return true;
@@ -388,6 +388,21 @@ test "serverRetryDelayMs honors try-again/retry-after seconds, ignores 0 and >60
     try std.testing.expect(serverRetryDelayMs("try again in 0 seconds") == null);
     try std.testing.expect(serverRetryDelayMs("retry after 90 seconds") == null);
     try std.testing.expect(serverRetryDelayMs("try again in 350000 seconds") == null);
+}
+
+test "terminal provider faults outrank every gateway retry ladder" {
+    for ([_][]const u8{ "exhausted credit; try again", "insufficient credits; upstream overloaded", "API key expired; server_error", "Body must be valid JSON; exhausted credit" }) |msg| {
+        try std.testing.expect(!isShortGatewayFlake("api_error", null, msg));
+        try std.testing.expect(!isTransientServerError("server_error", null, msg));
+    }
+    try std.testing.expect(!isShortGatewayFlake("api_error", "402", "Body must be valid JSON"));
+    try std.testing.expect(!isTransientServerError("server_error", "401", "overloaded"));
+    var self: Agent = undefined; // a terminal guard must never access retry IO/state
+    var retries: usize = 0;
+    var state: GatewayRetryState = .{ .transport_timeouts = 3 };
+    try std.testing.expect(!try afterServerErrorOrParseReject(&self, "server_error", "402", "Body must be valid JSON", &retries, &state));
+    try std.testing.expectEqual(@as(usize, 0), retries);
+    try std.testing.expectEqual(@as(usize, 0), state.parse_retries);
 }
 
 test "#748: error-only SSE is not a truncated gateway body" {

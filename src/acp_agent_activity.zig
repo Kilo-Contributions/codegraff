@@ -41,7 +41,7 @@ pub fn updates(a: A, snapshot: activity.Snapshot) ![]std.json.Value {
             try input.put(a, @tagName(event.input_key), .{ .string = event.text });
             try stream.writeToolCall(w, snapshot.agent.id, event.id, event.name, .{ .object = input });
         } else if (std.mem.eql(u8, event.type, "tool_result")) {
-            try stream.writeToolDone(w, snapshot.agent.id, event.id, event.is_error, event.text);
+            try stream.writeToolDone(w, snapshot.agent.id, event.id, event.is_error, event.text, null);
         } else continue;
         try rows.append(a, try std.json.parseFromSliceLeaky(std.json.Value, a, w.buffered(), .{}));
     }

@@ -42,7 +42,7 @@ pub const LoadSessionFn = *const fn (ctx: *anyopaque, arena: Allocator, w: *Io.W
 /// Optional per-turn context meter: used and window tokens (plus the known
 /// session cost) for the standard `usage_update` (acp_context_meter.zig).
 /// Null when the embed has no live agent (pure in-process loop, tests).
-pub const Meter = struct { used: u64, window: u64, cost_usd: ?f64 = null };
+pub const Meter = struct { used: u64, window: u64, cost_usd: ?f64 = null, savings: @import("context_savings.zig").Snapshot = .{} };
 pub const MeterFn = *const fn (ctx: *anyopaque) Meter;
 /// Vendor-method escape hatch: gets every request the core loop does not
 /// claim; returns true when it answered (false falls through to -32601).
@@ -88,6 +88,7 @@ pub const Dispatch = struct {
     mcp_servers: ?McpServersFn = null,
     error_message: ?*const fn (ctx: *anyopaque, err: anyerror) []const u8 = null,
     cancel_info: ?*const fn (ctx: *anyopaque) ?Cancellation = null,
+    error_recovery: ?*const fn (ctx: *anyopaque, err: anyerror) ?@import("auth_recovery.zig").Recovery = null,
     /// Live CLI: adopt the client's cwd, report `_meta["graff/worktree"]` (acp_workspace.zig).
     workspace: ?acp_workspace.Env = null,
     /// ACP v1 draft subagent updates are opt-in at initialize.
@@ -174,7 +175,12 @@ fn turnError(d: *Dispatch, w: *Io.Writer, req: proto.Request, err: anyerror) !vo
     }
     if (err == error.RunBudgetExhausted)
         return respond(w, req, .{ .stopReason = "max_turn_requests" });
-    return respondError(w, req, err_internal, if (d.error_message) |message| message(d.ctx, err) else @errorName(err));
+    const message = if (d.error_message) |describe| describe(d.ctx, err) else @errorName(err);
+    if (d.error_recovery) |recover| if (recover(d.ctx, err)) |data| {
+        if (req.id != null) try proto.writeErrorData(w, req.id, err_auth_required, message, data);
+        return;
+    };
+    return respondError(w, req, err_internal, message);
 }
 
 fn promptTurn(d: *Dispatch, arena: Allocator, w: *Io.Writer, req: proto.Request) !void {
@@ -249,7 +255,7 @@ pub fn emitMeter(d: *Dispatch, w: *Io.Writer, sid: []const u8) !void {
     if (d.meter) |meter| {
         // Report live occupancy independently of the model catalog.
         const m = meter(d.ctx);
-        if (m.window > 0) try @import("acp_context_meter.zig").write(w, sid, m.used, m.window, m.cost_usd);
+        if (m.window > 0) try @import("acp_context_meter.zig").write(w, sid, m.used, m.window, m.cost_usd, m.savings);
     }
 }
 

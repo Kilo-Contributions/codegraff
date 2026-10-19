@@ -59,7 +59,7 @@ pub const rows = [_]ModelInfo{
     // These rows keep Codex usable when auth or discovery is unavailable.
     .{ .provider = "codex", .name = "gpt-6-astra", .context = 272_000, .default_effort = "medium", .default_verbosity = "low" },
     .{ .provider = "codex", .name = "gpt-6-sol", .context = 272_000, .default_effort = "medium", .default_verbosity = "low" },
-    .{ .provider = "codex", .name = "gpt-6.1-sol", .context = 272_000, .default_effort = "low", .default_verbosity = "low" },
+    .{ .provider = "codex", .name = "gpt-6.1-sol", .context = 500_000, .default_effort = "low", .default_verbosity = "low" },
     .{ .provider = "codex", .name = "gpt-6-luna", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-5.6-sol", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-5.6-terra", .context = 272_000 },
@@ -72,9 +72,9 @@ pub const rows = [_]ModelInfo{
     .{ .provider = "codex", .name = "gpt-5.4", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-5.4-mini", .context = 272_000 },
     .{ .provider = "codex", .name = "gpt-5.3-codex-spark", .context = 128_000 },
-    // The ChatGPT plan through the new sign-in (ADR 0221): the same ~272k input
-    // cap as Codex. Offline rows only; there is no live catalog for it yet.
-    .{ .provider = "chatgpt-new", .name = "gpt-6.1-sol", .context = 272_000 },
+    // The ChatGPT plan through the new sign-in (ADR 0221): subscription
+    // defaults, with GPT-6.1 Sol at 500k (ADR 0292). Offline fallback rows.
+    .{ .provider = "chatgpt-new", .name = "gpt-6.1-sol", .context = 500_000 },
     .{ .provider = "chatgpt-new", .name = "gpt-6-astra", .context = 272_000 },
     .{ .provider = "chatgpt-new", .name = "gpt-6-sol", .context = 272_000 },
     .{ .provider = "chatgpt-new", .name = "gpt-6-luna", .context = 272_000 },

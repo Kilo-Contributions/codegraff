@@ -15,6 +15,7 @@ pub fn text(arena: Allocator, todos: []const TodoItem, epoch: u64, incoming: []c
     var doing: usize = 0;
     var open: usize = 0;
     var cancelled: usize = 0;
+    var dropped: usize = 0;
     for (todos) |t| {
         if (t.epoch != epoch or t.retired) continue;
         if (std.mem.eql(u8, t.status, "completed")) {
@@ -22,7 +23,9 @@ pub fn text(arena: Allocator, todos: []const TodoItem, epoch: u64, incoming: []c
         } else if (std.mem.eql(u8, t.status, "in_progress")) {
             doing += 1;
         } else if (std.mem.eql(u8, t.status, "cancelled")) {
-            cancelled += 1; // #1545: parked after a scope change, not pending work
+            cancelled += 1; // scope changed, not pending work (#1545)
+        } else if (@import("goal_state.zig").isDropped(t.status)) {
+            dropped += 1;
         } else {
             open += 1;
         }
@@ -32,6 +35,7 @@ pub fn text(arena: Allocator, todos: []const TodoItem, epoch: u64, incoming: []c
     try w.print("Todo list saved: {d} done, {d} in progress, {d} pending", .{ done, doing, open });
     if (cancelled > 0) try w.print(", {d} cancelled", .{cancelled});
     try w.writeAll(".");
+    if (dropped > 0) try w.print(" {d} dropped (abandoned by user order; no longer blocks completion).", .{dropped});
     var kept_header = false;
     for (todos) |t| {
         if (t.epoch != epoch or t.retired or mentions(incoming, t.content)) continue;
@@ -47,7 +51,7 @@ pub fn text(arena: Allocator, todos: []const TodoItem, epoch: u64, incoming: []c
 fn mark(status: []const u8) []const u8 {
     if (std.mem.eql(u8, status, "completed")) return "[x]";
     if (std.mem.eql(u8, status, "in_progress")) return "[~]";
-    if (std.mem.eql(u8, status, "cancelled")) return "[-]";
+    if (std.mem.eql(u8, status, "cancelled") or @import("goal_state.zig").isDropped(status)) return "[-]";
     return "[ ]";
 }
 
@@ -88,5 +92,23 @@ test "todo_write reply: names what graff kept and what the call dropped" {
         \\[ ] verify the fix
         \\(1 verification item(s) you left out were kept as unresolved acceptance requirements)
         \\(2 open item(s) you left out were dropped; re-list one to keep it)
+    , got);
+}
+
+test "#1545 todo reply distinguishes cancelled and dropped records from pending work" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const todos = [_]TodoItem{
+        .{ .content = "finished", .status = "completed", .epoch = 1 },
+        .{ .content = "scope changed", .status = "cancelled", .epoch = 1 },
+        .{ .content = "abandoned", .status = "dropped", .epoch = 1 },
+        .{ .content = "remaining", .status = "pending", .epoch = 1 },
+    };
+    const got = try text(arena_state.allocator(), &todos, 1, &.{ "finished", "remaining" }, 0, 0);
+    try std.testing.expectEqualStrings(
+        \\Todo list saved: 1 done, 0 in progress, 1 pending, 1 cancelled. 1 dropped (abandoned by user order; no longer blocks completion).
+        \\Kept from before (not in your list):
+        \\[-] scope changed
+        \\[-] abandoned
     , got);
 }

@@ -37,6 +37,9 @@ pub const ExecResult = struct {
     cancelled: bool = false, // ended by user Esc, not by failing (#266)
     pending: bool = false, // asynchronous work has no terminal result yet
     ms: i64 = 0, // wall-clock of the tool exec (external tools only; --timing)
+    /// Set only when a delegated MCP task reported context/usage metadata
+    /// (run_task_meta.zig). Arena-owned like `text`.
+    run_task: ?@import("engine_events.zig").RunTaskMeta = null,
 };
 
 pub const AnswerRequest = struct {
@@ -85,6 +88,8 @@ pub const ToolOutput = struct {
     cancelled: bool = false, // ended by user Esc, not by failing (#266)
     pending: bool = false, // asynchronous work has no terminal result yet
     ms: i64 = 0, // set by execTool
+    /// Delegated MCP task facts, when the call reported them (run_task_meta.zig).
+    run_task: ?@import("engine_events.zig").RunTaskMeta = null,
 };
 
 // `/rewind`'s pre-write file history lives in snapshots.zig (this file is at

@@ -6,9 +6,9 @@
       "id": "anthropic",
       "kind": "anthropic",
       "auth": "x_api_key",
-      "login": "api_key",
+      "login": "anthropic_browser",
       "catalog": "anthropic",
-      "sub_login": false,
+      "sub_login": true,
       "takes_effort": false
     },
     {

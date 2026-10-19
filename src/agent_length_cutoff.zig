@@ -310,10 +310,13 @@ test "empty length reply cleanup keeps recovery notes and valid prior tool reaso
                 try agent.messages.append(try messages.toolResultMessage(a, .openai, "c", "saved work", false));
                 const start = agent.messages.items.len;
                 const root = (try parse(a, try std.fmt.allocPrint(a, "{{\"choices\":[{{\"finish_reason\":\"length\",\"message\":{{\"role\":\"assistant\",\"content\":{s},\"reasoning_content\":\"unfinished thought\",\"tool_calls\":[]}}}}]}}", .{content}))).object;
-                _ = try agent.stepOpenAI(root);
+                // Exercise cleanup independently of the stepper's early exclusion.
+                try agent.messages.append(root.get("choices").?.array.items[0].object.get("message").?);
                 // Exhaustion used to leave an invalid assistant in saved history.
                 if (retries_spent) agent.empty_completion_retries = @import("agent_empty_completion.zig").max_consecutive;
-                try std.testing.expectEqual(!retries_spent, try @import("agent_empty_completion.zig").handle(&agent, "", start));
+                if (retries_spent) {
+                    try std.testing.expectError(error.EmptyCompletion, @import("agent_empty_completion.zig").handle(&agent, "", start));
+                } else try std.testing.expect(try @import("agent_empty_completion.zig").handle(&agent, "", start));
                 discardEmptyReply(&agent, root, start);
                 try std.testing.expectEqual(start + @as(usize, if (retries_spent) 0 else 1), agent.messages.items.len);
                 const body = try agent.buildBody(null, false, false, false);

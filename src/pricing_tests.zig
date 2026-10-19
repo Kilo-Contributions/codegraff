@@ -97,8 +97,40 @@ test "usdFor: per-million math, cache writes, and negative clamping" {
     try std.testing.expectApproxEqAbs(@as(f64, 0.2 + 0.01 + 10.0), pricing.usdForUsage(sol61, "gpt-6.1-sol", 100_000, 100_000, 0, 1_000_000), 1e-9);
     try std.testing.expectApproxEqAbs(@as(f64, 0.8 + 0.04 + 1.5), pricing.usdForUsage(sol61, "gpt-6.1-sol", 200_000, 200_000, 0, 100_000), 1e-9); // long-context tier
     try std.testing.expectEqual(@as(u64, 1_050_000), pricing.contextFor("openai", "gpt-6.1-sol"));
-    try std.testing.expectEqual(pricing.codex_context_window, pricing.contextFor("codex", "gpt-6.1-sol"));
+    try std.testing.expectEqual(@as(u64, 500_000), pricing.contextFor("codex", "gpt-6.1-sol"));
     try std.testing.expect(pricing.providerModelInTable("codex", "gpt-6.1-sol"));
+}
+
+test "Sol subscription context honors route caps and smaller catalogs" {
+    const saved_models = pricing.active_model_table;
+    const saved_overlay = pricing.context_overlay;
+    const saved_pct = provider_mod.g_compact_pct_override;
+    defer pricing.active_model_table = saved_models;
+    defer pricing.context_overlay = saved_overlay;
+    defer provider_mod.g_compact_pct_override = saved_pct;
+    provider_mod.g_compact_pct_override = null;
+    const keys: provider_mod.Keys = .{ .values = @splat(null) };
+    for ([_][]const u8{ "codex", "chatgpt-new" }) |route| {
+        pricing.active_model_table = pricing.model_table[0..];
+        const p = keys.build(provider_mod.specFor(route).?, "", "gpt-6.1-sol");
+        try std.testing.expectEqual(@as(u64, 500_000), p.context);
+        try std.testing.expectEqual(@as(u64, 400_000), p.compactAt());
+        try std.testing.expectEqual(pricing.codex_context_window, pricing.contextFor(route, "gpt-6-sol"));
+        try std.testing.expectEqual(@as(u64, 128_000), pricing.contextFor("codex", "gpt-5.3-codex-spark"));
+        for ([_]u64{ 272_000, 500_000, 1_050_000 }) |advertised| {
+            const rows = [_]pricing.ModelInfo{.{ .provider = route, .name = "gpt-6.1-sol", .context = advertised }};
+            pricing.active_model_table = &rows;
+            try std.testing.expectEqual(@min(advertised, @as(u64, 500_000)), pricing.contextFor(route, "gpt-6.1-sol"));
+        }
+        // A name-only API window cannot bypass the subscription clamp.
+        pricing.active_model_table = &.{};
+        pricing.context_overlay = &.{.{ .provider = "", .name = "gpt-6.1-sol", .context = 1_050_000 }};
+        try std.testing.expectEqual(@as(u64, 500_000), pricing.contextFor(route, "gpt-6.1-sol"));
+        pricing.context_overlay = &.{};
+        pricing.active_model_table = &.{.{ .provider = "openai", .name = "gpt-6.1-sol", .context = 1_050_000 }};
+        try std.testing.expectEqual(@as(u64, 500_000), pricing.contextFor(route, "gpt-6.1-sol"));
+        try std.testing.expectEqual(@as(u64, 1_050_000), pricing.contextFor("openai", "gpt-6.1-sol"));
+    }
 }
 
 test "grok-4.6 window is 500k and compact-at is 80%" {

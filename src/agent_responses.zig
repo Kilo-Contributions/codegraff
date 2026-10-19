@@ -44,6 +44,7 @@ pub fn parseResponses(self: *Agent, body: []const u8) !ResponsesResult {
     var resp_id: ?[]const u8 = null; // response.id, for previous_response_id delta continuation (#codex-ws)
     var saw_completed = false;
     var saw_incomplete = false;
+    var terminal: @import("agent_length.zig").ResponsesTerminal = .{};
     var err_msg: ?[]const u8 = null;
     var err_code: ?[]const u8 = null;
     var err_rid: ?[]const u8 = null;
@@ -63,6 +64,7 @@ pub fn parseResponses(self: *Agent, body: []const u8) !ResponsesResult {
             saw_completed = std.mem.eql(u8, t.string, "response.completed");
             saw_incomplete = std.mem.eql(u8, t.string, "response.incomplete");
             if (v.object.get("response")) |r| if (r == .object) {
+                try terminal.record(result_arena, r.object);
                 if (r.object.get("usage")) |u| {
                     if (usage) |earlier| try steered_usage.append(earlier);
                     usage = try util.dupeJsonValue(result_arena, u);
@@ -92,6 +94,7 @@ pub fn parseResponses(self: *Agent, body: []const u8) !ResponsesResult {
     if (saw_completed or saw_incomplete or items.items.len > 0) {
         var resp: std.json.ObjectMap = .empty;
         try resp.put(result_arena, "output", .{ .array = items });
+        try terminal.apply(result_arena, &resp);
         if (usage) |u| try resp.put(result_arena, "usage", u);
         if (steered_usage.items.len > 0) try resp.put(result_arena, "steered_usage", .{ .array = steered_usage });
         if (resp_id) |rid| try resp.put(result_arena, "id", .{ .string = rid });
@@ -234,6 +237,25 @@ test "parseResponses: terminal failure beats partial items; incomplete stays mar
             try std.testing.expect(failure.message.len > 0);
         },
         .ok => return error.TestUnexpectedResult,
+    }
+}
+
+test "parseResponses preserves output-limit reasons without continuing filtered responses" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var agent: Agent = undefined;
+    agent.arena = arena_state.allocator();
+    agent.scratch_arena = null;
+    agent.message_mutation_arena = null;
+    for ([_][]const u8{ "max_output_tokens", "content_filter" }) |reason| {
+        const body = try std.fmt.allocPrint(agent.arena, "data: {{\"type\":\"response.incomplete\",\"response\":{{\"incomplete_details\":{{\"reason\":\"{s}\"}},\"usage\":{{\"total_tokens\":42}}}}}}\n", .{reason});
+        switch (try parseResponses(&agent, body)) {
+            .ok => |root| {
+                try std.testing.expect(root.get("incomplete").?.bool);
+                try std.testing.expectEqual(std.mem.eql(u8, reason, "max_output_tokens"), @import("agent_length.zig").limited(.responses, root));
+            },
+            .err => return error.TestUnexpectedResult,
+        }
     }
 }
 

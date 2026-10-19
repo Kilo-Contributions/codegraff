@@ -7,6 +7,7 @@ const root = @import("main.zig");
 const kimi_catalog = @import("kimi_catalog.zig");
 const cache_affinity = @import("cache_affinity.zig"); // ADR 0069: git-root / scratch seed
 const client_tags = @import("client_tags.zig");
+const anthropic_oauth = @import("anthropic_oauth_wire.zig");
 
 var session_id_buf: [36]u8 = undefined;
 var session_id_len: usize = 0;
@@ -14,9 +15,7 @@ var session_id_len: usize = 0;
 /// with, and the critical section is a single one-time 36-byte format.
 var session_id_lock: std.atomic.Value(bool) = .init(false);
 
-/// A UUIDv4 minted once per process. Persisted on the graff session record.
-/// Codex's HTTP `session_id` is the prompt-cache key (openai/codex ModelClient
-/// defaults `prompt_cache_key` to `session_id`), not this value.
+/// Process UUIDv4 persisted with the session; distinct from prompt-cache routing.
 pub fn sessionId(io: Io) []const u8 {
     while (session_id_lock.cmpxchgWeak(false, true, .acquire, .monotonic) != null) std.atomic.spinLoopHint();
     defer session_id_lock.store(false, .release);
@@ -178,6 +177,7 @@ pub fn restoreProjectRootId(id: []const u8) void {
 }
 
 pub fn userAgent(provider: Provider) std.http.Client.Request.Headers.Value {
+    if (anthropic_oauth.active(provider)) return .omit; // explicit header also reaches HTTP/2
     if (std.mem.eql(u8, provider.id, "kimi")) {
         return .{ .override = root.kimi_user_agent };
     }
@@ -191,10 +191,8 @@ pub fn wantsGrokConvId(provider_id: []const u8) bool {
     return std.mem.eql(u8, provider_id, "xai");
 }
 
-/// ChatGPT sign-in Responses routes send `session_id` equal to the body's
-/// `prompt_cache_key` — the endpoint keys prompt caching on it, and a body
-/// key alone returns zero cached tokens. The API-key `openai` route is
-/// untested and stays without it.
+/// ChatGPT/Codex cache routing needs session_id equal to prompt_cache_key;
+/// direct API-key OpenAI requests omit the backend-only header.
 pub fn wantsSessionIdHeader(provider_id: []const u8) bool {
     return std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "chatgpt-new");
 }
@@ -234,11 +232,13 @@ pub fn providerHeadersWithConv(io: Io, provider: Provider, bearer: []const u8, b
         // ADR 0219: the beta that goes with the body's thinking.block_binding,
         // on the Anthropic API and the models that check it (claude_wire).
         const claude = @import("claude_wire.zig");
-        if (claude.isClaudeApi(provider.id, provider.model) and claude.bindsThinking(provider.model)) {
-            buf[count] = .{ .name = "anthropic-beta", .value = claude.binding_beta };
+        const beta: ?[]const u8 = if (anthropic_oauth.active(provider)) anthropic_oauth.beta(provider) else if (claude.isClaudeApi(provider.id, provider.model) and claude.bindsThinking(provider.model)) claude.binding_beta else null;
+        if (beta) |value| {
+            buf[count] = .{ .name = "anthropic-beta", .value = value };
             count += 1;
         }
     }
+    if (anthropic_oauth.active(provider)) count += anthropic_oauth.identityHeaders(buf[count..]);
     if (std.mem.eql(u8, provider.id, "kimi")) {
         const identity = kimi_catalog.identityHeaders(buf[count..]);
         count += identity.len;

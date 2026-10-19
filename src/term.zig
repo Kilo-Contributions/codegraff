@@ -525,8 +525,8 @@ test "#396 firewall: both completion paths release the terminal" {
     // pin follows the emission, and a second pin holds the sink arm that turns
     // it back into a release. Both halves have to exist or the run never gives
     // the terminal back.
-    const oneshot = @embedFile("session_run.zig");
-    const answer_at = std.mem.indexOf(u8, oneshot, "session.saveSession(root, arena, root.session_name)").?;
+    const oneshot = @embedFile("oneshot.zig");
+    const answer_at = std.mem.lastIndexOf(u8, oneshot, "const saved = save(root, arena);").?;
     const release_at = std.mem.indexOf(u8, oneshot, ".emit(io, .run_finished);").?;
     try std.testing.expect(answer_at < release_at);
     const sink = @embedFile("session_render.zig");

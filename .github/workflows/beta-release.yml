@@ -50,17 +50,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-codegraff-zig
+      - uses: ./.github/actions/setup-nanocompile
+        with:
+          target: ${{ matrix.target }}
+          binary-base-url: ${{ secrets.NANOCOMPILE_BINARY_BASE_URL }}
       - name: Cross-compile beta CLI (${{ matrix.target }})
         env:
           BETA_VERSION: ${{ needs.plan.outputs.version }}
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          zig build graff -Doptimize=ReleaseFast -Dtarget="$TARGET" -Dversion="$BETA_VERSION"
+          python3 scripts/build-release.py --target "$TARGET" --version "$BETA_VERSION" --verify-restore --portable-host
           name="graff-$TARGET"
           mkdir "$name"
           case "$TARGET" in *-windows) bin=graff.exe ;; *) bin=graff ;; esac
-          cp "zig-out/bin/$bin" "$name/$bin"
+          cp "zig-out/$TARGET/bin/$bin" "$name/$bin"
           cp README.md LICENSE "$name/"
           tar -czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v7
