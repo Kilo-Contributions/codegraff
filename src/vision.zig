@@ -60,6 +60,7 @@ pub fn visionModel(m_full: []const u8) bool {
         std.mem.startsWith(u8, m, "grok-4") or
         std.mem.startsWith(u8, m, "glm-5v") or // glm-5v-turbo & co: explicit vision variants
         std.mem.startsWith(u8, m, "glm-5.3") or // glm-5.3 / glm-5.3-flash accept images on codegraff
+        std.mem.startsWith(u8, m, "ultramarine") or // codegraff's hosted ultramarine models take images (its catalog says image: true)
         std.mem.startsWith(u8, m, "kimi") or
         (m.len > 1 and m[0] == 'k' and std.ascii.isDigit(m[1])) or // Kimi Code k3+
         std.mem.startsWith(u8, m, "gemini") or
@@ -434,6 +435,8 @@ test "visionModel: vision-capable model families only" {
     try std.testing.expect(visionModel("gpt-4o"));
     try std.testing.expect(visionModel("grok-4.3"));
     try std.testing.expect(visionModel("glm-5.3-flash"));
+    try std.testing.expect(visionModel("ultramarine-1-flash"));
+    try std.testing.expect(visionModel("codegraff/ultramarine-1"));
     try std.testing.expect(visionModel("glm-5v-turbo"));
     try std.testing.expect(visionModel("k3"));
     try std.testing.expect(visionModel("gemini-2.0"));
