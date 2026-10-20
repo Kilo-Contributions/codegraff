@@ -10,6 +10,15 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.47
+
+- When a compaction can't get the context under the compaction point, the next one waits for real growth instead of running on every step (#1686).
+- The shared-tree checkpoint covers every live peer at once and forgets exited ones, so a re-issued call goes through (#1622).
+- `peer_message send` takes `fyi: true`: an informational update stays in the inbox without waking the recipient, and the inbox no longer asks for a reply to everything (#1137).
+- A transient shell-handle reservation failure is retried and names its cause; only storage faults point at HOME's permissions (#1619).
+- `--json` mode pairs every `model_call_started` with a `model_call_finished`; a retried attempt closes with `retried: true` (#1665).
+- Retains all changes from v0.302.46.
+
 ## v0.302.46
 
 - Images attached over ACP now reach the hosted default models; graff dropped them before the model saw them.
