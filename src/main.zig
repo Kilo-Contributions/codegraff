@@ -570,7 +570,7 @@ test { // ── Unit tests (`zig build test`): pull in tests from imported modu
     _ = @import("agent_gateway_retry.zig"); // #1019: flake vs overflow classification must stay reachable
     _ = @import("agent_responses.zig"); // #1019: type:error frame message extraction
     _ = @import("agent_server_compact.zig"); // server-side autocompact (codex Responses)
-    _ = .{ @import("compact_status.zig"), @import("compact_mix.zig") }; // compact status + GRAFF_COMPACT_MIX mixture arm
+    _ = .{ @import("compact_status.zig"), @import("compact_mix.zig"), @import("compact_backoff.zig") }; // compact status + GRAFF_COMPACT_MIX mixture arm + #1686 backoff
     _ = .{ @import("agent_clef_compact.zig"), @import("agent_clef_compact_tests.zig"), @import("agent_clef_archive.zig") }; // gateway /v1/compact client (Clef pruning) + archive mode
     _ = @import("agent_compact_recover.zig"); // compaction last-resort recovery (split for the ceiling)
     _ = @import("agent_request_search_tests.zig");
