@@ -66,7 +66,15 @@ fn spawnFailText(gpa: Allocator, err: anyerror) ![]u8 {
     // #122: backgrounding costs MORE fds (pipes + pump task), so the generic
     // "run it in the foreground" advice is right for every error except the
     // fd-quota ones. #253: SYSTEM-wide exhaustion is not a ulimit problem.
-    if (err == error.ShellIdentityHomeRequired or err == error.ShellIdentityStoreInvalid or err == error.ShellIdentityExhausted or err == error.ShellIdentityUnavailable)
+    if (err == error.ShellIdentityUnavailable) {
+        const shell_identity = @import("shell_identity.zig");
+        const cause = shell_identity.last_cause orelse error.Unexpected;
+        // #1619: name the cause; only a storage fault is a permissions problem.
+        if (!shell_identity.storageFault(cause))
+            return std.fmt.allocPrint(gpa, "could not reserve a durable shell handle (ShellIdentityUnavailable: {t}); no command was started. This was retried and is usually transient: run the command again.", .{cause});
+        return std.fmt.allocPrint(gpa, "could not reserve a durable shell handle (ShellIdentityUnavailable: {t}); no command was started. Check HOME and its .codegraff directory permissions. Preserve existing shell-id files when repairing storage.", .{cause});
+    }
+    if (err == error.ShellIdentityHomeRequired or err == error.ShellIdentityStoreInvalid or err == error.ShellIdentityExhausted)
         return std.fmt.allocPrint(gpa, "could not reserve a durable shell handle ({t}); no command was started. Check HOME and its .codegraff directory permissions. Preserve existing shell-id files when repairing storage.", .{err});
     return if (err == error.ProcessFdQuotaExceeded)
         try gpa.dupe(u8, "could not start background job (ProcessFdQuotaExceeded) — graff hit its open-file limit. Wait for running jobs/tools to finish, then retry with less parallel fan-out; if it recurs, raise the limit (`ulimit -n 4096`) before starting graff.")
@@ -456,4 +464,19 @@ fn execUnchecked(ctx: ToolCtx, call: tools.ToolCall) !ToolOutput {
     defer gpa.free(run.stdout);
     defer gpa.free(run.stderr);
     return formatCapped(gpa, cmd, run);
+}
+
+test "#1619 a shell handle failure names its cause and blames storage only for storage faults" {
+    const shell_identity = @import("shell_identity.zig");
+    defer shell_identity.last_cause = null;
+    shell_identity.last_cause = error.ProcessFdQuotaExceeded;
+    const transient = try spawnFailText(std.testing.allocator, error.ShellIdentityUnavailable);
+    defer std.testing.allocator.free(transient);
+    try std.testing.expect(std.mem.indexOf(u8, transient, "ShellIdentityUnavailable: ProcessFdQuotaExceeded") != null);
+    try std.testing.expect(std.mem.indexOf(u8, transient, "permissions") == null);
+    shell_identity.last_cause = error.AccessDenied;
+    const storage = try spawnFailText(std.testing.allocator, error.ShellIdentityUnavailable);
+    defer std.testing.allocator.free(storage);
+    try std.testing.expect(std.mem.indexOf(u8, storage, "ShellIdentityUnavailable: AccessDenied") != null);
+    try std.testing.expect(std.mem.indexOf(u8, storage, "permissions") != null);
 }
