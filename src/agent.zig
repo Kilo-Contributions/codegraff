@@ -225,6 +225,7 @@ pub const Agent = struct {
     compact_summary_failures: u8 = 0, // #379: consecutive complete-but-unusable (empty/truncated) summaries
     compact_pin_degraded: bool = false, // #581: pinned suffix over budget — skip+say once per unresolved turn
     compact_stall: @import("compact_cut.zig").Stall = .{}, // #706: same-boundary no-progress cuts
+    compact_backoff: @import("compact_backoff.zig").Backoff = .{}, // #1686: compactions that bought no room
     empty_completion_retries: u8 = 0, // degenerate empty completions re-asked this turn (agent_empty_completion.zig)
     length_cutoffs: u8 = 0, // cut-off or runaway replies rewound this turn (agent_length_cutoff.zig)
     named_work_nudges: u8 = 0, // named-file / zero-tool nudge this turn (named_work.zig)

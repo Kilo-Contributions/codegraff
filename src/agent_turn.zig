@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const Agent = @import("agent.zig").Agent;
+const main_mod = @import("main.zig");
 const empty_completion = @import("agent_empty_completion.zig");
 const turn_inbox = @import("turn_inbox.zig");
 
@@ -46,7 +47,9 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
         // meter (last_context_tokens, server-reported) catches up. Estimate the
         // full input locally and compact BEFORE sending so we never ship an
         // over-cap request (codex run_pre_sampling_compact / opencode isOverflow).
-        if (self.inputOverCompactThreshold() and !readBatchFirst(self)) {
+        const over_compact = self.inputOverCompactThreshold();
+        @import("compact_backoff.zig").step(&self.compact_backoff, self.history_rewrites, over_compact);
+        if (over_compact and !readBatchFirst(self) and !compactionHeld(self)) {
             // Bracket the compaction with codex-WS resets, mirroring how every
             // other compactOrRecover call site is bookended by runTurn's
             // closeCodexWs (299 + defer 300). Mid-turn the WS can be live with a
@@ -100,6 +103,22 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
             continue;
         }
         self.empty_completion_retries = 0;
+    }
+}
+
+/// #1686: the previous compaction left the context over the line; wait for
+/// real growth (or the 95% wall) instead of compacting on every step.
+fn compactionHeld(self: *Agent) bool {
+    const context = self.effectiveContextTokens();
+    const backoff = @import("compact_backoff.zig");
+    switch (backoff.gate(&self.compact_backoff, context, self.provider.context, self.provider.nearContextLimit(context))) {
+        .compact => return false,
+        .hold => return true,
+        .hold_started => {
+            if (self.tracer) |tr| tr.note("compact", "held: the last compaction left the context over the line");
+            if (!main_mod.json_mode) self.say("[compaction freed too little room; compacting again once the context grows]\n", .{}) catch {};
+            return true;
+        },
     }
 }
 
