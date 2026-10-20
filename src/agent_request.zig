@@ -415,6 +415,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     if (!self.compaction_request) self.compact_transport_failures = 0;
                     usage_attempts.completed();
                     @import("agent_ws_steer.zig").billEnded(self, obj); // the responses a steer ended, before the last
+                    @import("opaque_state_usage.zig").learn(self, obj); // #1686: before the meter reads the estimate
                     self.recordUsageResponses(obj, body.len);
                     @import("usage_trace.zig").noteReasoning(obj);
                     try @import("agent_async_tools.zig").join(self);
