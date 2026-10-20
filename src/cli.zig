@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.47
+    \\  • compaction waits instead of repeating when it can't make room
+    \\  • the shared-tree checkpoint lets a re-issued call through
+    \\  • fyi peer mail stays in the inbox without starting a turn
+    \\
     \\0.302.46
     \\  • images over ACP reach the hosted default models
     \\  • a worker keeps its report when its state can't be saved
