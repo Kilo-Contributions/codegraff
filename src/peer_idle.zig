@@ -107,6 +107,8 @@ pub fn takeIdleWake(io: Io, buf: []u8) ?[]const u8 {
     if (suppress_idle_wake) return null;
     const n = peer_inbox.unread();
     if (n == 0 or n <= last_woken_unread) return null;
+    // #1137: fyi-only news stays parked for the next turn; it starts none.
+    if (!peer_inbox.anyNeedsTurnFrom(last_woken_unread)) return null;
     last_woken_unread = n;
     const wake = peer_inbox.formatWake(arena);
     if (wake.len == 0) return null;
@@ -238,6 +240,32 @@ test "#1001 more mail after a wake can fire again" {
     _ = peer_inbox.parkHeard(&.{b}, &.{});
     const again = takeIdleWake(io, &buf) orelse return error.ExpectedSecond;
     try std.testing.expect(std.mem.indexOf(u8, again, "[peer]") != null);
+}
+
+test "#1137 fyi mail stays parked without a turn; a request after it wakes" {
+    peer_inbox.resetForTest();
+    resetForTest();
+    defer {
+        peer_inbox.resetForTest();
+        resetForTest();
+    }
+    const io = std.testing.io;
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var buf: [256]u8 = undefined;
+    const fyi: presence_chan.Message = .{ .from_pid = 2, .from_start = 1, .from_session = "s-a", .text = "[fyi] I only touch gui/src" };
+    const fyi2: presence_chan.Message = .{ .from_pid = 3, .from_start = 1, .from_session = "s-b", .text = "  [fyi] docs done" };
+    _ = peer_inbox.parkHeard(&.{ fyi, fyi2 }, &.{});
+    try std.testing.expect(takeIdleWake(io, &buf) == null);
+    try std.testing.expectEqual(@as(usize, 2), peer_inbox.unread()); // still readable
+    const ask: presence_chan.Message = .{ .from_pid = 2, .from_start = 1, .from_session = "s-a", .text = "can you rerun the tests?" };
+    _ = peer_inbox.parkHeard(&.{ask}, &.{});
+    try std.testing.expect(takeIdleWake(io, &buf) != null);
+    // An fyi after the woken batch does not wake again.
+    _ = peer_inbox.parkHeard(&.{fyi}, &.{});
+    try std.testing.expect(takeIdleWake(io, &buf) == null);
+    const read = try peer_inbox.takeAll(arena_state.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, read, "[fyi] updates need no reply") != null);
 }
 
 test "daddy idle wake fires after attempt_completion" {
