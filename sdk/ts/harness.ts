@@ -29,7 +29,7 @@ export type Event =
   | { seq: number; type: "reasoning"; text: string }
   | { seq: number; type: "started"; provider: string; model: string }
   | { seq: number; type: "model_call_started"; provider: string; model: string }
-  | { seq: number; type: "model_call_finished"; provider: string; model: string; ok: boolean; ms: number }
+  | { seq: number; type: "model_call_finished"; provider: string; model: string; ok: boolean; ms: number; retried?: boolean }
   | { seq: number; type: "tool_call"; name: string; input: Record<string, unknown> }
   | { seq: number; type: "tool_call_started"; name: string; input: Record<string, unknown> }
   | { seq: number; type: "tool_rejected"; name: string; reason: "budget" | "duplicate" | string; input: Record<string, unknown>; message: string }

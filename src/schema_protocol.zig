@@ -45,7 +45,7 @@ pub const json =
     \\    {"type": "reasoning", "text": "reasoning/thinking delta (GUI shows a collapsible Thinking block)"},
     \\    {"type": "started", "provider": "provider", "model": "model"},
     \\    {"type": "model_call_started", "provider": "provider", "model": "model"},
-    \\    {"type": "model_call_finished", "provider": "provider", "model": "model", "ok": true, "ms": 0},
+    \\    {"type": "model_call_finished", "provider": "provider", "model": "model", "ok": true, "ms": 0, "retried": "present only when ok is false: true when the request goes out again as a new attempt (pairs every model_call_started)"},
     \\    {"type": "tool_call", "name": "tool", "input": {}, "id": "sa-… when a correlated tool call is available; pairs with tool_result/agent_usage"},
     \\    {"type": "tool_call_started", "name": "tool", "input": {}},
     \\    {"type": "tool_rejected", "name": "tool", "reason": "budget|duplicate", "input": {}, "message": "..."},

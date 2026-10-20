@@ -216,6 +216,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
     const max_openai404_retries: usize = 2;
     var gw_retry = policy.GatewayRetryState{}; // #gateway-artifact state (agent_gateway_retry.zig)
     @import("cache_ttl.zig").begin(self); // #1320: before request_started moves
+    var call: @import("model_call.zig").Call = .{}; // #1665: pairs every started attempt
+    errdefer call.fail(self, false);
     rebuild: while (true) {
         if (@import("agent_async_tools.zig").started(self)) return error.AsyncToolStreamFailed;
         const live = self.usesLiveTransport();
@@ -241,7 +243,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
         const t0: Io.Timestamp = .now(self.io, .awake);
         self.request_started = t0;
         self.first_token_traced = false;
-        if (main_mod.json_mode and !self.sub) self.emit(.{ .type = "model_call_started", .provider = self.provider.id, .model = self.provider.model });
+        call.start(self);
         // HTTP calls are flaky: a kept-alive connection the server closed
         // (HttpConnectionClosing), a reset, a truncated TLS read. Retry a
         // few times with a fresh connection; on persistent failure surface
@@ -424,7 +426,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                         continue :rebuild;
                     }
                     if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, ms, body.len, resp_body.len, self.last_context_tokens, self.last_cache_read, false);
-                    if (main_mod.json_mode and !self.sub) self.emit(.{ .type = "model_call_finished", .provider = self.provider.id, .model = self.provider.model, .ok = true, .ms = ms });
+                    call.finish(self, ms);
                     try @import("agent_model_loop.zig").checkResponse(self, obj);
                     return obj;
                 },
@@ -513,7 +515,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                 if (recoverBehavioralOverflow(self, root, &context_retried)) continue; // #414: silent overflow / upstream truncation → trim + retry
                 if (!self.compaction_request) self.compact_transport_failures = 0;
                 if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, ms, body.len, resp_body.len, self.last_context_tokens, self.last_cache_read, false);
-                if (main_mod.json_mode and !self.sub) self.emit(.{ .type = "model_call_finished", .provider = self.provider.id, .model = self.provider.model, .ok = true, .ms = ms });
+                call.finish(self, ms);
                 try @import("agent_model_loop.zig").checkResponse(self, root);
                 return root;
             }
@@ -587,7 +589,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
         if (recoverBehavioralOverflow(self, root, &context_retried)) continue; // #414: same, on the non-streamed body
         if (!self.compaction_request) self.compact_transport_failures = 0;
         if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, ms, body.len, resp_body.len, self.last_context_tokens, self.last_cache_read, false);
-        if (main_mod.json_mode and !self.sub) self.emit(.{ .type = "model_call_finished", .provider = self.provider.id, .model = self.provider.model, .ok = true, .ms = ms });
+        call.finish(self, ms);
         try @import("agent_model_loop.zig").checkResponse(self, root);
         return root;
     }
