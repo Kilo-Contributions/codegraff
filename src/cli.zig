@@ -24,6 +24,11 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.48
+    \\  • oMLX is a built-in local provider: --model omlx
+    \\  • compaction counts opaque state by the provider's own measure
+    \\  • a stopped local server is named in the failed turn
+    \\
     \\0.302.47
     \\  • compaction waits instead of repeating when it can't make room
     \\  • the shared-tree checkpoint lets a re-issued call through
