@@ -10,11 +10,13 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
-## Unreleased
+## v0.302.48
 
-- oMLX is a built-in local provider (`omlx`, `127.0.0.1:8000`). Set its key with `graff key set omlx <key>` or `OMLX_API_KEY`. `graff models` lists the models it serves, `--model omlx` starts on the first one, `/effort` is sent as `reasoning_effort`, and it is billed as local.
+- oMLX is a built-in local provider (`omlx`, `127.0.0.1:8000`). Set its key with `graff key set omlx <key>` or `OMLX_API_KEY`. `graff models` lists the models it serves, `--model omlx` starts on the first one, `/effort` is sent as `reasoning_effort`, and it is billed as local (#1695).
 - Live model catalogs read a `max_model_len` context window, which oMLX and vLLM-style servers report.
 - When a local server refuses the connection, the failed turn names its URL, so a stopped server is easy to spot.
+- Compaction state is counted by the provider's own measure after the first full request that carries it, so a large state blob no longer reads as far over the compaction point and compacts every turn (#1686).
+- Retains all changes from v0.302.47.
 
 ## v0.302.47
 
