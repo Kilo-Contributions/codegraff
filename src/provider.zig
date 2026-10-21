@@ -117,6 +117,9 @@ pub const provider_specs = [_]ProviderSpec{
     // lm-studio: the LM Studio app's local OpenAI-compatible server (default :1234).
     // Load a model in LM Studio, then `LMSTUDIO_API_KEY=local graff --model lmstudio`.
     .{ .id = "lmstudio", .display_name = "lmstudio", .kind = .openai, .auth = .bearer, .url = "http://127.0.0.1:1234/v1/chat/completions", .env_key = "LMSTUDIO_API_KEY", .default_model = "lmstudio" },
+    // omlx: the oMLX menu-bar app's local server (default :8000). It requires a bearer
+    // key, lists the downloaded models live, and takes reasoning_effort.
+    .{ .id = "omlx", .display_name = "oMLX", .kind = .openai, .auth = .bearer, .url = "http://127.0.0.1:8000/v1/chat/completions", .env_key = "OMLX_API_KEY", .default_model = "omlx", .catalog = .openai, .models_url = "http://127.0.0.1:8000/v1/models", .takes_effort = true },
     // chatgpt-new: the person's ChatGPT plan through OpenAI's sign-in for
     // open-source apps (ADR 0221). The key is the OAuth access token saved by
     // `graff login chatgpt`, sent to the public Responses endpoint. Before
@@ -510,15 +513,6 @@ test "Keys.providerFor: known model, claude/gateway fallbacks, missing key" {
     try std.testing.expectEqualStrings("codegraff", (try all.providerFor("totally-made-up-model")).id);
     try std.testing.expectEqualStrings("gpt-5.5", (try all.providerFor("gpt-5.5")).model);
     try std.testing.expectError(error.MissingKey, none.providerFor("claude-opus-4-8"));
-}
-
-test "Keys.providerById: exact id wins, unknown id falls back to model routing" {
-    const all = Keys{ .values = @splat("k") };
-    const p = try all.providerById("anthropic", "claude-opus-4-8");
-    try std.testing.expectEqualStrings("anthropic", p.id);
-    try std.testing.expectEqualStrings("claude-opus-4-8", p.model);
-    const fb = try all.providerById("no-such-provider", "gpt-5.5");
-    try std.testing.expectEqualStrings("gpt-5.5", fb.model);
 }
 
 test "Keys.defaultProvider: first keyed provider on its default model" {

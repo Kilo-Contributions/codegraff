@@ -238,14 +238,14 @@ fn pureKimiGeneration(name: []const u8) ?u32 {
     return std.fmt.parseInt(u32, name[1..], 10) catch null;
 }
 
-/// Codex's first visible account model is its dynamic default. Kimi prefers
-/// the newest explicit pure generation (`k3`, then future `k4`, etc.) over
-/// compatibility aliases and K2 point-release ids.
+/// Codex's first visible account model is its dynamic default, and so is the
+/// first model oMLX lists. Kimi prefers the newest explicit pure generation
+/// (`k3`, then future `k4`, etc.) over compatibility aliases and K2 point-release ids.
 pub fn providerDefaultModel(provider_id: []const u8, fallback: []const u8) []const u8 {
     for (models()) |model| if (std.mem.eql(u8, model.provider, provider_id) and
         std.mem.eql(u8, model.name, "mimo-v2.6-pro")) return model.name;
-    if (std.mem.eql(u8, provider_id, "codex")) {
-        for (models()) |model| if (std.mem.eql(u8, model.provider, "codex")) return model.name;
+    if (std.mem.eql(u8, provider_id, "codex") or std.mem.eql(u8, provider_id, "omlx")) {
+        for (models()) |model| if (std.mem.eql(u8, model.provider, provider_id)) return model.name;
         return fallback;
     }
     if (!std.mem.eql(u8, provider_id, "kimi")) return fallback;

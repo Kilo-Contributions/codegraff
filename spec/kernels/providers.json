@@ -201,6 +201,15 @@
       "takes_effort": false
     },
     {
+      "id": "omlx",
+      "kind": "openai",
+      "auth": "bearer",
+      "login": "api_key",
+      "catalog": "openai",
+      "sub_login": false,
+      "takes_effort": true
+    },
+    {
       "id": "chatgpt-new",
       "kind": "responses",
       "auth": "bearer",

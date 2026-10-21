@@ -385,10 +385,12 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                         }
                         continue;
                     }
-                    try self.say("[request failed: {t} — giving up this turn]\n", .{err});
+                    // A refused loopback connection means the local server (oMLX, LM Studio, mlx-lm) is not running: name it.
+                    const down: []const u8 = if (err == error.ConnectionRefused and @import("keys_cli.zig").isLocalUrl(self.provider.url)) self.provider.url else "";
+                    try self.say("[request failed: {t}{s}{s} — giving up this turn]\n", .{ err, if (down.len > 0) " at " else "", down });
                     // Preserve whether this was provider throttling or a transport failure in the failed turn's JSON/trajectory (#86).
                     const failure_kind = if (err == error.RateLimited) "rate limited (429)" else if (err == error.ServerError) "server error (5xx)" else "network error";
-                    self.last_api_error = std.fmt.allocPrint(self.arena, "{s}: {s} (gave up after {d} attempts)", .{ failure_kind, @errorName(err), max_attempts }) catch null;
+                    self.last_api_error = std.fmt.allocPrint(self.arena, "{s}: {s}{s}{s} (gave up after {d} attempts)", .{ failure_kind, @errorName(err), if (down.len > 0) " at " else "", down, max_attempts }) catch null;
                     self.last_request_write_failed = std.mem.eql(u8, @errorName(err), "WriteFailed");
                     if (telemetry.g_telem) |t| t.errorEvent("net", @errorName(err));
                     if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, 0, body.len, 0, 0, 0, true);

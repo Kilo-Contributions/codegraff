@@ -220,6 +220,13 @@ Vercel, OpenRouter, MiniMax, Xiaomi, Groq, Cerebras, Mistral, plus one
 workspace router in `.graff/.config.router`. `graff models refresh` pulls the
 catalogs. Claude-subscription OAuth is deliberately not supported.
 
+Local servers: `omlx` (the oMLX app on `127.0.0.1:8000`), `lmstudio`
+(`:1234`), and `mlx` (`mlx_lm.server` on `:8080`). They are billed as local.
+oMLX requires its API key: `graff key set omlx <key>` or `OMLX_API_KEY`.
+`graff models` lists the models oMLX serves, `graff --model omlx` starts on
+the first one, and `graff --model omlx/<model>` picks one. `/effort` is sent
+as `reasoning_effort`.
+
 </details>
 
 ## Evaluation results
