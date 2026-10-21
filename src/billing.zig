@@ -205,6 +205,7 @@ test "costFor: the picker's badge follows the credential, then the provider" {
     // localhost is nobody's bill.
     try std.testing.expectEqual(CostClass.local, costFor("lmstudio", .environment));
     try std.testing.expectEqual(CostClass.local, costFor("mlx", .none));
+    try std.testing.expectEqual(CostClass.local, costFor("omlx", .stored));
 
     // No credential: the row still says what signing in would buy.
     try std.testing.expectEqual(CostClass.plan, costFor("codex", .none));

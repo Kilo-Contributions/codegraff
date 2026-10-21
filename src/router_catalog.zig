@@ -191,10 +191,10 @@ pub fn parseModels(arena: Allocator, provider_id: []const u8, data: []const u8) 
         if (duplicate) continue;
         var context = positiveInt(item.object, "context_length");
         if (context == 0) context = positiveInt(item.object, "context");
-        // Fireworks declares the window in camelCase (AIP gateway shape).
-        if (context == 0) context = positiveInt(item.object, "contextLength");
+        if (context == 0) context = positiveInt(item.object, "contextLength"); // Fireworks (AIP gateway shape)
         // Vercel AI Gateway (and some OpenAI-compat hosts) use context_window.
         if (context == 0) context = positiveInt(item.object, "context_window");
+        if (context == 0) context = positiveInt(item.object, "max_model_len"); // oMLX and vLLM-style local servers
         // Anthropic's input window is max_input_tokens; its sibling max_tokens is the
         // OUTPUT cap (128k on Opus 5), never a window, or 1M would compact at ~102k.
         if (context == 0) context = positiveInt(item.object, "max_input_tokens");

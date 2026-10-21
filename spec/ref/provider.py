@@ -53,6 +53,7 @@ SPECS: list[dict] = [
     row("fireworks", "openai", "bearer", catalog="openai"),
     row("mlx", "openai", "bearer"),
     row("lmstudio", "openai", "bearer"),
+    row("omlx", "openai", "bearer", catalog="openai", takes_effort=True),
     row("chatgpt-new", "responses", "bearer", login="chatgpt_browser", catalog="openai", sub_login=True),
     row("codex", "responses", "bearer", login="codex_device", catalog="codex", sub_login=True),
 ]

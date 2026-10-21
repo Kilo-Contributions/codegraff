@@ -8,6 +8,15 @@ const Keys = provider_mod.Keys;
 const Provider = provider_mod.Provider;
 const provider_specs = provider_mod.provider_specs;
 
+test "Keys.providerById: exact id wins, unknown id falls back to model routing" {
+    const all = Keys{ .values = @splat("k") };
+    const p = try all.providerById("anthropic", "claude-opus-4-8");
+    try std.testing.expectEqualStrings("anthropic", p.id);
+    try std.testing.expectEqualStrings("claude-opus-4-8", p.model);
+    const fb = try all.providerById("no-such-provider", "gpt-5.5");
+    try std.testing.expectEqualStrings("gpt-5.5", fb.model);
+}
+
 test "Keys.build: g_codex_url_override rewires only the codex endpoint" {
     const all = Keys{ .values = @splat("k") };
     provider_mod.g_codex_url_override = "http://127.0.0.1:8765/responses";

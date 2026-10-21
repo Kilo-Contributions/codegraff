@@ -145,6 +145,36 @@ test "parseModels is reusable for a newly configured router" {
     try std.testing.expectEqual(pricing.default_context, snapshot.models[2].context);
 }
 
+test "oMLX is a local live-catalog seat whose first listed model is the default" {
+    const spec = provider.specFor("omlx") orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(provider.Provider.Kind.openai, spec.kind);
+    try std.testing.expectEqual(provider.Provider.Auth.bearer, spec.auth);
+    try std.testing.expectEqualStrings("http://127.0.0.1:8000/v1/chat/completions", spec.url);
+    try std.testing.expectEqualStrings("OMLX_API_KEY", spec.env_key);
+    try std.testing.expectEqual(provider.ProviderSpec.CatalogKind.openai, spec.catalog);
+    try std.testing.expectEqualStrings("http://127.0.0.1:8000/v1/models", modelsUrl(spec));
+    try std.testing.expect(spec.takes_effort);
+    // Offline (no catalog yet) the default is the baked alias.
+    try std.testing.expectEqualStrings("omlx", pricing.providerDefaultModel("omlx", spec.default_model));
+
+    var state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer state.deinit();
+    const snapshot = parseModels(state.allocator(), "omlx",
+        \\{"object":"list","data":[
+        \\ {"id":"Local-27B-4bit","object":"model","owned_by":"omlx","max_model_len":262144},
+        \\ {"id":"Local-8B-4bit","object":"model","owned_by":"omlx"}
+        \\]}
+    ) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(u64, 262_144), snapshot.models[0].context); // max_model_len read
+    try std.testing.expectEqual(pricing.default_context, snapshot.models[1].context);
+
+    const saved = pricing.active_model_table;
+    defer pricing.active_model_table = saved;
+    try std.testing.expect(activate(state.allocator(), spec, snapshot.models));
+    try std.testing.expectEqualStrings("Local-27B-4bit", pricing.providerDefaultModel("omlx", spec.default_model));
+    try std.testing.expect(!pricing.providerModelInTable("omlx", "omlx")); // the live list replaced the alias
+}
+
 test "fireworks catalog is live and parses the AIP gateway shape" {
     const spec = provider.specFor("fireworks") orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(provider.ProviderSpec.CatalogKind.openai, spec.catalog);

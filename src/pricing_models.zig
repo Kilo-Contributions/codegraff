@@ -11,6 +11,9 @@ pub const rows = [_]ModelInfo{
     // LM Studio serves whatever model is loaded; "lmstudio" is a routing alias —
     // swap for your loaded model id if LM Studio requires an exact match (GET :1234/v1/models).
     .{ .provider = "lmstudio", .name = "lmstudio", .context = 200_000 },
+    // oMLX needs an exact id. Its live /v1/models list replaces this offline alias
+    // and its first row becomes the default (pricing.providerDefaultModel).
+    .{ .provider = "omlx", .name = "omlx", .context = 200_000 },
     // Anthropic: no-key/offline FALLBACK ONLY; with a key, router_catalog swaps
     // in the live /v1/models list. Rows exist so boot, --schema and routing
     // (the default, ladder and vision picks) resolve before that fetch.

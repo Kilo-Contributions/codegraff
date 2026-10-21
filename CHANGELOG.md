@@ -10,6 +10,12 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## Unreleased
+
+- oMLX is a built-in local provider (`omlx`, `127.0.0.1:8000`). Set its key with `graff key set omlx <key>` or `OMLX_API_KEY`. `graff models` lists the models it serves, `--model omlx` starts on the first one, `/effort` is sent as `reasoning_effort`, and it is billed as local.
+- Live model catalogs read a `max_model_len` context window, which oMLX and vLLM-style servers report.
+- When a local server refuses the connection, the failed turn names its URL, so a stopped server is easy to spot.
+
 ## v0.302.47
 
 - When a compaction can't get the context under the compaction point, the next one waits for real growth instead of running on every step (#1686).
