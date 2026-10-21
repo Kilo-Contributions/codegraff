@@ -224,6 +224,9 @@ pub fn build(b: *std.Build) void {
     const acp_stream_drop_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-stream-drop.py" });
     acp_stream_drop_test.addArtifactArg(exe);
     test_step.dependOn(&acp_stream_drop_test.step);
+    const retry_cancellation_test = b.addSystemCommand(&.{ "python3", "scripts/test-retry-cancellation.py" });
+    retry_cancellation_test.addArtifactArg(exe);
+    test_step.dependOn(&retry_cancellation_test.step);
     const run_tool_budget_test = b.addSystemCommand(&.{ "python3", "scripts/test-run-tool-budget.py" });
     run_tool_budget_test.addArtifactArg(exe);
     test_step.dependOn(&run_tool_budget_test.step);
