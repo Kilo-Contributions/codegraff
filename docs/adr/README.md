@@ -315,6 +315,7 @@ record only when you need the evidence or the edge cases.
 | [0295](0295-worker-native-turns-share-the-chat-step.md) | Experimental Worker-native turns share the native chat step; JSPI supplies bounded host I/O, not a proxy or a second agent loop. |
 | [0296](0296-worker-tasks-own-remote-sandbox-cleanup.md) | Worker/DO tasks retain the agent loop and delegate Linux execution to remote sandboxes with explicit ownership, deletion and bounded leases. |
 | [0297](0297-sdk-managed-replay-reuses-the-relay.md) | The fetch-only managed SDK reuses account relay/device tapes; prompt retries are explicit, durability limits are stated, and content-free OTLP export remains opt-in and observational. |
+| [0299](0299-tool-commands-launch-apps-in-the-background.md) | On macOS tool commands' `open` launches apps without activating them (a `-g` shim first on the tool PATH); `GRAFF_GUI_FOREGROUND=1` on a command is the explicit foreground opt-in. |
 
 ## When to write one
 
