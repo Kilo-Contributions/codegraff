@@ -185,7 +185,13 @@ test { // a new module's tests run only when something references it (see main.z
 /// is an isolated subagent; "{{prev}}" in a task prompt is replaced with
 /// the labeled results of the previous phase (appended when omitted).
 /// Returns the final phase's results.
-pub fn execWorkflow(ctx: ToolCtx, input: Value) !ToolOutput {
+pub fn execWorkflow(parent: ToolCtx, input: Value) !ToolOutput {
+    if (input != .object or parent.from_sub) return execWorkflowShared(parent, input);
+    var arena = std.heap.ArenaAllocator.init(parent.gpa);
+    defer arena.deinit();
+    var ctx = parent;
+    ctx.fork_source = @import("subagent_history.zig").fromInput(ctx, input, arena.allocator()) catch |err| return tools.failure(ctx.gpa, err);
+    ctx.retain_children = tools.json_args.flag(input, "retained");
     if (ctx.from_sub or tools.strField(input, "isolation") == null or !std.mem.eql(u8, tools.strField(input, "isolation").?, "worktree")) return execWorkflowShared(ctx, input);
     // Pipeline owns one scope per item, never one tree shared by parallel items.
     if (tools.json_args.object(input)) |obj| if (obj.contains("pipeline")) return .{ .text = try ctx.gpa.dupe(u8, "Set isolation:worktree on pipeline, not on its outer workflow object."), .is_error = true };

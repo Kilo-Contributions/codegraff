@@ -146,6 +146,8 @@ pub const ToolCtx = struct {
     parent_effort: ?main_mod.ReasoningEffort = null, // ADR 0232: the caller's live effort (/effort or Jev); an unpinned child runs at it
     parent_messages: []const std.json.Value = &.{}, // ADR 0232: the caller's history, read only while its tool batch runs
     parent_task: []const u8 = "", // ADR 0232: the user's prompts a spawned child sees as context
+    fork_source: ?@import("subagent_history.zig").Snapshot = null,
+    retain_children: bool = false, // explicit workflow retention, not inherited by judges
     read_only_shell: bool = false, // ADR 0232: a read-only child's foreground shell runs under the seatbelt sandbox
 };
 

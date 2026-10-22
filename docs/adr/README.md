@@ -317,6 +317,8 @@ record only when you need the evidence or the edge cases.
 | [0297](0297-sdk-managed-replay-reuses-the-relay.md) | The fetch-only managed SDK reuses account relay/device tapes; prompt retries are explicit, durability limits are stated, and content-free OTLP export remains opt-in and observational. |
 | [0298](0298-peer-send-wakes-are-bounded.md) | A `graff peer send` live wake is concurrent and bounded by one shared deadline; misses are reported and the durable room post still succeeds. |
 
+| [0299](0299-conversation-history-forks-are-explicit.md) | `fork_from` explicitly snapshots current, project-local saved, or family-owned worker history into independent children; lightweight delegation stays the default and `retained` remains opt-in across subagents and workflows. |
+
 ## When to write one
 
 Write an ADR when a decision is load-bearing and non-obvious: it was reached

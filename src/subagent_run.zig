@@ -392,10 +392,18 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
     const tasked = try @import("subagent_brief.zig").prepare(arena, ctx.io, kind, prompt, ctx.agent_cwd, main_mod.g_hooks.pre_tool);
     const task_prompt = playbook.rideBrief(ctx.io, arena, try goal_pacing.childTaskPrompt(arena, tasked, ctx.loop_deadline_ms, util.unixMs(ctx.io)));
     try @import("subagent_retained.zig").restore(&agent, ctx);
+    if (!std.mem.eql(u8, kind, "judge_task") and agent.messages.items.len == 0) {
+        if (ctx.fork_source) |snapshot| try snapshot.seed(&agent);
+    }
     @import("worker_mcp.zig").inherit(&agent); // ADR 0227
     @import("worker_jev.zig").offer(&agent); // ADR 0232: a child asks Jev for its own effort mid-run
     // ADR 0232: a fresh child starts from the user's request; a resumed one already has it.
-    const first = if (agent.messages.items.len == 0) try @import("subagent_fork.zig").firstMessage(arena, ctx.parent_task, task_prompt) else task_prompt;
+    const first = if (ctx.fork_source != null and !std.mem.eql(u8, kind, "judge_task"))
+        try std.fmt.allocPrint(arena, "The preceding conversation is forked context, not a request to repeat earlier work. Do only this new task:\n\n{s}", .{task_prompt})
+    else if (agent.messages.items.len == 0)
+        try @import("subagent_fork.zig").firstMessage(arena, ctx.parent_task, task_prompt)
+    else
+        task_prompt;
     @import("named_work.zig").rememberOn(&agent, prompt);
     try agent.messages.append(try textMessage(arena, "user", first));
     defer agent.tools_used.deinit(gpa);
