@@ -374,9 +374,8 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                             // Transport flakes back off; rapid retries against a
                             // just-closed keep-alive re-fail (#86). Cap: 4s/6 tries.
                             const delay_ms = jitter.ms(self.io, RetryPlan.delayMs(throttled, attempt));
-                            @import("turn_chrome.zig").emitRetryNotice(self.io, @errorName(err), attempt + 1, max_attempts);
                             if (scratch.showRecoveredTransportRetry(self.call_kind))
-                                try scratch.announceNetworkRetry(self, err, delay_ms, attempt + 1, max_attempts);
+                                @import("turn_chrome.zig").emitRetryNotice(self.io, @errorName(err), attempt + 1, max_attempts);
                             // Same trace breadcrumb the 429/5xx branch leaves: a
                             // transport-flake retry is otherwise invisible in the
                             // session trace, hiding how flaky a provider really is.
