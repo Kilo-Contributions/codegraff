@@ -206,6 +206,10 @@ const InitializeResult = struct {
         try s.endObject();
         try s.objectField("mcp");
         try s.write(.{ .stdio = Empty{}, .http = Empty{} });
+        if (self.can_load) {
+            try s.objectField("fork");
+            try s.write(Empty{});
+        }
         try s.endObject();
         try s.objectField("_meta");
         try s.write(.{ .@"codegraff/usage" = self.can_load, .@"graff/backgroundSubagents" = true });

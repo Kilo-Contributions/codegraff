@@ -265,6 +265,7 @@ fn respondInitialize(w: *Io.Writer, req: proto.Request, can_load: bool) !void {
         .protocolVersion = negotiateVersion(req.params),
         .agentCapabilities = .{
             .loadSession = can_load,
+            .sessionCapabilities = proto.SessionCapabilities{ .fork = can_load },
             ._meta = .{ .@"codegraff/usage" = can_load, .@"graff/backgroundSubagents" = true },
             .promptCapabilities = proto.PromptCapabilities{ .image = can_load },
             // session/new and session/load connect a client's MCP servers
@@ -339,8 +340,7 @@ pub fn handleLine(d: *Dispatch, arena: Allocator, w: *Io.Writer, line: []const u
         cancel_flag.store(true, .release);
         @import("cancel_source.zig").noteAcp(req.params);
         if (on_cancel) |hook| hook();
-        if (req.id != null) return respond(w, req, struct {}{});
-        return;
+        return respond(w, req, struct {}{});
     }
     if (v2.on() and std.mem.eql(u8, req.method, "session/close")) return respond(w, req, struct {}{});
     if (std.mem.eql(u8, req.method, if (v2.on()) "session/resume" else "session/load")) {
