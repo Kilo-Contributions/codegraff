@@ -421,6 +421,7 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
             if (subagent_retry.pastDeadline(util.unixMs(ctx.io), ctx.loop_deadline_ms)) break :ask r;
             subagent_retry.traceAttempt(ctx.tracer, sub_id, attempts, fail_kind, agent.last_api_error);
             agent.sleepInterruptible(@import("retry_jitter.zig").ms(agent.io, subagent_retry.backoffMs(fail_kind, attempts))) catch break :ask r; // #1274
+            agent.tool_repeat.carryOver(); // #1706: the re-ask resumes this history, so a looping worker keeps its count
         }
     };
     // A worker that ran keeps its report and usage when its state can't be
