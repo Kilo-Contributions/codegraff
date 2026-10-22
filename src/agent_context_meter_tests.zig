@@ -6,6 +6,17 @@ const Agent = @import("agent.zig").Agent;
 const messages_mod = @import("messages.zig");
 const agent_context = @import("agent_context.zig");
 
+// Static, not `&util.repeatBytes(...)` inside anthropicAgent: that would point
+// the returned Agent at the helper's dead stack frame.
+const sys_filler = blk: {
+    @setEvalBranchQuota(20_000);
+    break :blk util.repeatBytes("s", 6_000);
+};
+const tools_filler = blk: {
+    @setEvalBranchQuota(20_000);
+    break :blk util.repeatBytes("t", 7_000);
+};
+
 /// What a real provider reports: more than bytes/4, since code and JSON
 /// tokenize at fewer than four bytes a token.
 fn providerCount(agent: *Agent) u64 {
@@ -29,9 +40,9 @@ fn anthropicAgent(a: std.mem.Allocator) Agent {
     agent.sys_override = null;
     agent.ultracode_mode = false;
     agent.reasoning = .medium;
-    agent.sys_normal = &util.repeatBytes("s", 6_000);
+    agent.sys_normal = &sys_filler;
     agent.sys_strict = "";
-    agent.tools_anthropic = &util.repeatBytes("t", 7_000);
+    agent.tools_anthropic = &tools_filler;
     return agent;
 }
 
