@@ -23,6 +23,12 @@ fn anthropicAgent(a: std.mem.Allocator) Agent {
     agent.provider = .{ .id = "anthropic", .kind = .anthropic, .auth = .x_api_key, .url = "", .api_key = "", .model = "claude", .context = 200_000 };
     agent.sub = false;
     agent.strict = false;
+    // Every field systemPrompt() reads: left undefined, review_mode can pick
+    // another prompt and the estimate stops being deterministic.
+    agent.review_mode = false;
+    agent.sys_override = null;
+    agent.ultracode_mode = false;
+    agent.reasoning = .medium;
     agent.sys_normal = &util.repeatBytes("s", 6_000);
     agent.sys_strict = "";
     agent.tools_anthropic = &util.repeatBytes("t", 7_000);
