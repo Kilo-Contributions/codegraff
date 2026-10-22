@@ -87,7 +87,8 @@ pub fn install(io: Io, home: []const u8, target: []const u8) void {
     var tmp_buf: [32]u8 = undefined;
     const tmp = std.fmt.bufPrint(&tmp_buf, "open.{d}.tmp", .{@import("proc_identity.zig").selfPid()}) catch return;
     shim_dir.writeFile(io, .{ .sub_path = tmp, .data = text }) catch return;
-    shim_dir.setFilePermissions(io, tmp, .fromMode(0o755), .{}) catch {};
+    // File modes are POSIX's: Windows has none (and no shim, `dir` above).
+    if (builtin.os.tag != .windows) shim_dir.setFilePermissions(io, tmp, .fromMode(0o755), .{}) catch {};
     shim_dir.rename(tmp, shim_dir, "open", io) catch shim_dir.deleteFile(io, tmp) catch {};
 }
 
