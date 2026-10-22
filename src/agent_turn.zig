@@ -23,6 +23,7 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
     self.completed = null;
     self.yielded = null;
     self.read_miss.reset();
+    self.tool_repeat.reset();
     self.mcp_context.begin(self.io);
     @import("named_work.zig").beginTurn(self);
     try self.ensureRootTools(self.provider.kind);
@@ -90,6 +91,12 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
         const reply_start = self.messages.items.len;
         defer @import("agent_length_cutoff.zig").discardEmptyReply(self, root, reply_start);
         const done = try length.step(self, root);
+        if (done == null and self.tool_repeat.stopped()) { // #1706: every wire's tool batch lands here
+            const stop = @import("tool_repeat.zig").stop_text;
+            try self.say("{s}\n", .{stop});
+            _ = @import("tool_call_repair.zig").endsTurn(self, stop);
+            return review_deadline.finish(stop);
+        }
         if (done) |final_text| {
             if (self.yielded != null) return review_deadline.finish(final_text);
             if (@import("tool_call_repair.zig").endsTurn(self, final_text)) return review_deadline.finish(final_text); // final: no retry/nudge

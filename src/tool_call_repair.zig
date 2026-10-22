@@ -25,7 +25,7 @@ pub const loop_stop_text = "Stopped: the model sent tool calls with unusable arg
 
 /// The turn loop ends on this text outright: no retry, nudge, or open-work pass.
 pub fn isLoopStop(text: []const u8) bool {
-    return text.ptr == loop_stop_text.ptr;
+    return text.ptr == loop_stop_text.ptr or text.ptr == @import("tool_repeat.zig").stop_text.ptr;
 }
 
 /// runTurn's check for that stop; a child also closes its feedback inbox.
@@ -507,5 +507,5 @@ pub fn brokenCallLoop(messages: []const Value) bool {
 }
 
 test {
-    _ = @import("tool_call_repair_tests.zig");
+    _ = .{ @import("tool_call_repair_tests.zig"), @import("tool_repeat.zig") };
 }

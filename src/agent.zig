@@ -130,6 +130,7 @@ pub const Agent = struct {
     tools_used: trace.ToolSink = .{}, // external tool calls this agent made (per turn for the root)
     tool_calls_this_turn: u64 = 0,
     read_miss: @import("read_miss.zig").Tracker = .{}, // #1116: same-prefix / incrementing read_file misses
+    tool_repeat: @import("tool_repeat.zig").Tracker = .{}, // #1706: identical batches in a row end the turn
     model_calls_this_turn: u64 = 0,
     handle_note_shown: bool = false, // #541: the handle-protocol lesson rides this agent's FIRST handle, once
     seen_tool_keys: std.ArrayList([]const u8) = .empty, // root-only per-turn dedupe keys

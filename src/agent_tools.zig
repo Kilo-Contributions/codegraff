@@ -176,6 +176,7 @@ pub fn runTools(self: *Agent, calls: []const ToolCall) ![]ExecResult {
     };
     // Show a compact ✓/✗ + preview for each non-meta call (no-op for subs).
     for (calls, results) |call, r| self.sayToolResult(call, r);
+    try @import("tool_repeat.zig").observe(self, calls, results); // #1706, after display: the notice is for the model
     return results;
 }
 
