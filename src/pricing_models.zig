@@ -8,6 +8,8 @@ const ModelInfo = @import("pricing.zig").ModelInfo;
 pub const rows = [_]ModelInfo{
     // Local Apple-Silicon model served by mlx-lm (mlx_lm.server, OpenAI-compatible).
     .{ .provider = "mlx", .name = "mlx-community/Qwen3.6-27B-OptiQ-4bit", .context = 262_144 },
+    // Recursive Flint INT4 through `rec serve --port 8080`, which serves it as "flint".
+    .{ .provider = "mlx", .name = "flint", .context = 262_144 },
     // LM Studio serves whatever model is loaded; "lmstudio" is a routing alias —
     // swap for your loaded model id if LM Studio requires an exact match (GET :1234/v1/models).
     .{ .provider = "lmstudio", .name = "lmstudio", .context = 200_000 },
