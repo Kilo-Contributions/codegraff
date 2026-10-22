@@ -6,8 +6,10 @@
 //! dedupe gate in `agent_tools.rejectToolCall` is opt-in. Each executed batch
 //! folds into a fingerprint of its normalized calls and their results; the
 //! `nudge_at`-th identical batch in a row tells the model so, and the
-//! `stop_at`-th ends the turn. A batch still waiting on work is never counted.
-//! Reset at `runTurn`.
+//! `stop_at`-th ends the turn. A batch still waiting on work is never counted:
+//! a pending or cancelled result, or a shell job poll that reports the job is
+//! still running (`[job N: running…]`), which is how a model waits on CI or a
+//! build. Reset at `runTurn`.
 
 const std = @import("std");
 const tools = @import("tools.zig");
@@ -48,11 +50,18 @@ pub const Tracker = struct {
     }
 };
 
-/// Null when any result is pending or cancelled: waiting is not repeating.
+/// A shell job poll whose job has not exited yet (jobs.zig/job_notify.zig).
+fn jobRunning(text: []const u8) bool {
+    if (!std.mem.startsWith(u8, text, "[job ")) return false;
+    const head = text[0 .. std.mem.indexOfScalar(u8, text, ']') orelse text.len];
+    return std.mem.indexOf(u8, head, ": running") != null;
+}
+
+/// Null when any result is still waiting: waiting is not repeating.
 pub fn fingerprint(keys: []const []const u8, results: []const tools.ExecResult) ?u64 {
     var h = std.hash.Wyhash.init(0x1706);
     for (keys, results) |key, r| {
-        if (r.pending or r.cancelled) return null;
+        if (r.pending or r.cancelled or jobRunning(r.text)) return null;
         h.update(key);
         h.update(&.{ 0, @intFromBool(r.is_error) });
         h.update(r.text);
@@ -112,6 +121,30 @@ test "a pending or cancelled result never counts and breaks the run" {
     try std.testing.expectEqual(@as(u8, 0), t.note(fingerprint(&keys, &waiting)));
     try std.testing.expectEqual(@as(u8, 1), t.note(fingerprint(&keys, &done)));
     try std.testing.expectEqual(@as(u8, 0), t.note(fingerprint(&keys, &cancelled)));
+}
+
+test "polling a job that is still running never counts, a finished job's output does" {
+    var t: Tracker = .{};
+    const keys = [_][]const u8{"bash_output\n{\"id\":34,\"wait_ms\":30000}"};
+    const running = [_]tools.ExecResult{.{ .text = "[job 34: running] Refreshing run status", .is_error = false }};
+    const parked = [_]tools.ExecResult{.{ .text = "[job 9: running — persistent server; parked in the background. You are notified on exit; do not poll]", .is_error = false }};
+    const exited = [_]tools.ExecResult{.{ .text = "[job 34: exited with code 0]\nok", .is_error = false }};
+    var i: u8 = 0;
+    while (i < 12) : (i += 1) try std.testing.expectEqual(@as(u8, 0), t.note(fingerprint(&keys, &running)));
+    while (i < 24) : (i += 1) try std.testing.expectEqual(@as(u8, 0), t.note(fingerprint(&keys, &parked)));
+    try std.testing.expect(!t.stopped());
+    i = 1;
+    while (i <= stop_at) : (i += 1) _ = t.note(fingerprint(&keys, &exited));
+    try std.testing.expect(t.stopped());
+}
+
+test "an empty-argument error loop still stops" {
+    var t: Tracker = .{};
+    const keys = [_][]const u8{"read_file\n{}"};
+    const err = [_]tools.ExecResult{.{ .text = "[error] tool call arguments were truncated", .is_error = true }};
+    var i: u8 = 0;
+    while (i < stop_at) : (i += 1) _ = t.note(fingerprint(&keys, &err));
+    try std.testing.expect(t.stopped());
 }
 
 test "observe appends the notice on the nudge batch only" {
