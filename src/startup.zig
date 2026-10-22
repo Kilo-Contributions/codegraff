@@ -285,6 +285,7 @@ pub fn runSubcommand(io: Io, gpa: Allocator, arena: Allocator, init: std.process
     // After router_config.load (its key is one of them), before `serve` and
     // the other subcommands below can spawn a tool.
     @import("tool_env.zig").init(arena, init.environ_map);
+    @import("gui_background.zig").install(io, keys_cli.homeEnv(init.environ_map) orelse "", @import("gui_background.zig").real_open); // #832
     // #557: same pin for GRAFF_PRICES_PATH, before `graff models` is dispatched
     // below — the hydration points (router_catalog, models_cache) all sit well
     // under the last call that still holds the environment.
