@@ -9,7 +9,9 @@
 //! `stop_at`-th ends the turn. A batch still waiting on work is never counted:
 //! a pending or cancelled result, or a shell job poll that reports the job is
 //! still running (`[job N: running…]`), which is how a model waits on CI or a
-//! build. Reset at `runTurn`.
+//! build. Reset at `runTurn`, except when a worker's transient-failure re-ask
+//! resumes the same history (`carryOver`): a fresh count there would let a
+//! looping worker repeat up to `stop_at - 1` more batches per ask.
 
 const std = @import("std");
 const tools = @import("tools.zig");
@@ -25,9 +27,20 @@ pub const stop_text = std.fmt.comptimePrint("Stopped: the model repeated the sam
 pub const Tracker = struct {
     last: u64 = 0,
     run: u8 = 0,
+    carry: bool = false,
 
     pub fn reset(self: *Tracker) void {
+        if (self.carry) {
+            self.carry = false;
+            return;
+        }
         self.* = .{};
+    }
+
+    /// The next `reset` keeps the run: the coming `runTurn` resumes this
+    /// turn's history rather than starting a new one.
+    pub fn carryOver(self: *Tracker) void {
+        self.carry = true;
     }
 
     /// Folds one batch; a null fingerprint (work still pending) breaks the run.
@@ -94,6 +107,21 @@ test "identical batches build a run that stops at stop_at" {
     try std.testing.expect(t.stopped());
     t.reset();
     try std.testing.expect(!t.stopped());
+}
+
+test "a carried run survives one reset, then resets clear it again" {
+    var t: Tracker = .{};
+    const keys = [_][]const u8{"shell\n{\"command\":\"echo ok\"}"};
+    const ok = [_]tools.ExecResult{.{ .text = "ok\n", .is_error = false }};
+    var i: u8 = 1;
+    while (i < stop_at) : (i += 1) _ = t.note(fingerprint(&keys, &ok));
+    t.carryOver();
+    t.reset();
+    try std.testing.expectEqual(stop_at, t.note(fingerprint(&keys, &ok)));
+    try std.testing.expect(t.stopped());
+    t.reset();
+    try std.testing.expect(!t.stopped());
+    try std.testing.expectEqual(@as(u8, 1), t.note(fingerprint(&keys, &ok)));
 }
 
 test "a different input, result, or error flag starts a new run" {
