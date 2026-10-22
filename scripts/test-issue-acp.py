@@ -82,13 +82,19 @@ def last_user(request: dict) -> str:
 def terminate(process: subprocess.Popen) -> None:
     if process.poll() is None:
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            if os.name == "nt":
+                process.terminate()
+            else:
+                os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
+        if os.name == "nt":
+            process.kill()
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
         process.wait(timeout=5)
     for pipe in (process.stdin, process.stdout):
         if pipe:
