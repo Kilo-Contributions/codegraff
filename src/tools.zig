@@ -252,9 +252,9 @@ pub fn codedbGuard(ctx: ToolCtx, call: ToolCall) ?ToolOutput {
         is_scanner = true;
     };
     if (!is_scanner) return null;
-    // ADR 0234: an in-place edit and a whole read of small files cost a round trip to refuse and save nothing.
+    // ADR 0234: an in-place edit, a write-only cat (#1709) and a whole read of small files cost a round trip to refuse and save nothing.
     const scope = @import("codedb_guard_scope.zig");
-    if (scope.inPlaceEdit(tool, trimmed) or scope.smallReadIn(ctx.io, ctx.agent_cwd, tool, trimmed)) return null;
+    if (scope.exempt(ctx.io, ctx.agent_cwd, tool, trimmed)) return null;
 
     // …aimed at a concrete source file (not a glob — codedb glob/tree cover that).
     const src_path = extractSourceFilePath(cmd) orelse return null;
