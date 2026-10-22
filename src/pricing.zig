@@ -40,11 +40,12 @@ pub fn priceForProvider(provider: []const u8, model: []const u8) ?ModelPrice {
 }
 
 /// Billing class of one API call: a flat-rate subscription login bills nothing
-/// per token, price_table rows bill per token, anything without a reliable
-/// settled charge is unpriced for the session tally.
+/// per token, a server on this machine bills nothing at all, price_table rows
+/// bill per token, anything without a reliable settled charge is unpriced for
+/// the session tally.
 /// Classifying a SEAT is billing.zig's job — it needs the provider spec and the
 /// credential source, neither of which belongs in a price sheet.
-pub const Billing = enum { sub, priced, unpriced };
+pub const Billing = enum { sub, local, priced, unpriced };
 
 pub const usdForUsage = @import("pricing_cache.zig").usdForUsage;
 
@@ -87,6 +88,7 @@ pub const CostTally = struct {
         self.out_tokens +|= @intCast(@max(out, 0));
         switch (billing) {
             .sub => self.sub_calls +|= 1,
+            .local => {}, // a known $0, so the total stays complete
             .unpriced => self.unpriced_calls +|= 1,
             // No `.?`: the class comes from the caller; a dropped row falls back.
             .priced => {

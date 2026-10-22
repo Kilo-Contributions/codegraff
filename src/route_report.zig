@@ -130,6 +130,7 @@ fn dash(s: []const u8) []const u8 {
 fn billingWord(b: pricing.Billing) []const u8 {
     return switch (b) {
         .sub => "subscription",
+        .local => "local",
         .priced => "metered",
         .unpriced => "unpriced",
     };
