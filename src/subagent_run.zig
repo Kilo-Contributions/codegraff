@@ -53,6 +53,8 @@ pub const FailKind = enum {
     /// waiting or retrying changes it — the next attempt is refused before it
     /// reaches the network, and is still charged for trying.
     budget_exhausted,
+    cancelled,
+    synthesis_limit,
     unknown,
 
     pub fn label(self: FailKind) []const u8 {
@@ -63,6 +65,8 @@ pub const FailKind = enum {
             .invalid => "invalid-arguments",
             .auth => "auth",
             .budget_exhausted => "model-call-budget",
+            .cancelled => "cancelled",
+            .synthesis_limit => "synthesis-limit",
             .unknown => "unknown",
         };
     }
@@ -70,7 +74,7 @@ pub const FailKind = enum {
     pub fn retrySafe(self: FailKind) bool {
         return switch (self) {
             .quota, .transport, .unknown => true,
-            .model, .invalid, .auth, .budget_exhausted => false,
+            .model, .invalid, .auth, .budget_exhausted, .cancelled, .synthesis_limit => false,
         };
     }
 };
@@ -94,6 +98,8 @@ fn containsAnyCI(hay: []const u8, needles: []const []const u8) bool {
 
 pub fn classifyFailure(err: anyerror, detail: ?[]const u8) FailKind {
     switch (err) {
+        error.Interrupted, error.Canceled => return .cancelled,
+        error.WorkflowSynthesisLimit => return .synthesis_limit,
         error.StreamStalled, error.StreamDropped => return .transport,
         else => {},
     }
@@ -144,14 +150,17 @@ pub const retry_unsafe_note = "retry is NOT safe as-is — fix the cause first (
 /// them; this ordering keeps the count and the prefix.
 pub fn subagentFailure(gpa: Allocator, sub_id: []const u8, err: anyerror, detail: ?[]const u8, attempts: u8) ToolOutput {
     const kind = classifyFailure(err, detail);
-    const cause = detail orelse @errorName(err);
-    const retry = if (kind.retrySafe()) retry_ok_note else retry_unsafe_note;
+    const cause = if (kind == .cancelled or kind == .synthesis_limit) @errorName(err) else detail orelse @errorName(err);
+    const retry = switch (kind) {
+        .cancelled, .synthesis_limit => "retry is NOT safe as-is — the worker stopped; use the completed evidence without restarting it",
+        else => if (kind.retrySafe()) retry_ok_note else retry_unsafe_note,
+    };
     const text = std.fmt.allocPrint(
         gpa,
         "subagent {s} failed before producing a report: {s} [{s} failure, {d} {s}]. {s}",
         .{ sub_id, cause, kind.label(), attempts, subagent_retry.attemptsWord(attempts), retry },
     ) catch return .{ .is_error = true };
-    return .{ .text = text, .is_error = true };
+    return .{ .text = text, .is_error = true, .cancelled = kind == .cancelled };
 }
 
 /// Whether a workflow retry site should re-run a failed task. Failures that
@@ -163,7 +172,7 @@ pub fn subagentFailure(gpa: Allocator, sub_id: []const u8, err: anyerror, detail
 /// isolation-setup failure) carries no marker and keeps retrying, since those
 /// are exactly the transient cases retry exists for.
 pub fn failureAllowsRetry(text: []const u8) bool {
-    return std.mem.indexOf(u8, text, retry_unsafe_note) == null;
+    return std.mem.indexOf(u8, text, "retry is NOT safe as-is") == null;
 }
 
 pub fn childProvider(root: Provider, pinned: ?Provider, allow_cross_provider: bool) Provider {
@@ -297,6 +306,7 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
         // only buys it the chance to go re-read the repo — which is where its
         // ~3 calls per score went. One judge, one call.
         .text_only = std.mem.eql(u8, kind, "judge_task"),
+        .synthesis = .{ .enabled = ctx.synthesis and !std.mem.eql(u8, kind, "judge_task") },
         // #1360: an informational child still needs its read tools; it is
         // read-only, not tool-less.
         .read_only = @import("task_intent.zig").classify(prompt) == .informational,
@@ -329,7 +339,7 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
         recorder.setModel(agent.provider.id, agent.provider.model);
         if (@import("subagent_activity.zig").interruptRequested(ctx.io, recorder.dir, sub_id)) {
             recorder.finish(false, "Interrupted.");
-            return .{ .output = .{ .text = try gpa.dupe(u8, "Interrupted."), .is_error = true }, .usage = .{} };
+            return .{ .output = subagentFailure(gpa, sub_id, error.Interrupted, null, 0), .usage = .{} };
         }
         agent.sink = recorder.engineSink();
     }
@@ -423,6 +433,7 @@ pub fn runSub(ctx: ToolCtx, kind: []const u8, label: []const u8, prompt: []const
             agent.sleepInterruptible(@import("retry_jitter.zig").ms(agent.io, subagent_retry.backoffMs(fail_kind, attempts))) catch break :ask r; // #1274
         }
     };
+    agent.synthesis.finish(&agent);
     // A worker that ran keeps its report and usage when its state can't be
     // saved for follow-ups; the save error used to replace both (#1671).
     const retained_failure: ?anyerror = if (@import("subagent_retained.zig").checkpoint(&agent, ctx)) |_| null else |e| e;

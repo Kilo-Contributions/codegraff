@@ -106,6 +106,7 @@ pub const Agent = struct {
     /// score re-reading files it had already been given. With no tools it must
     /// answer from the excerpt in one call, which is what it was designed for.
     text_only: bool = false,
+    synthesis: @import("workflow_synthesis.zig").State = .{},
     read_only: bool = false, // informational child: reads kept, writes refused (#1360, agent_tool_gate)
     label: []const u8,
     out: ?*Io.Writer,

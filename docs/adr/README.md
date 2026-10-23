@@ -319,6 +319,8 @@ record only when you need the evidence or the edge cases.
 
 | [0299](0299-conversation-history-forks-are-explicit.md) | `fork_from` explicitly snapshots current, project-local saved, or family-owned worker history into independent children; lightweight delegation stays the default and `retained` remains opt-in across subagents and workflows. |
 
+| [0300](0300-workflow-synthesis-has-a-report-boundary.md) | Synthesis gets bounded evidence requests and a final report-only request; cancelled or exhausted workers are not restarted and failed stages retain prior evidence. |
+
 ## When to write one
 
 Write an ADR when a decision is load-bearing and non-obvious: it was reached

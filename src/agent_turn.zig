@@ -80,6 +80,7 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
                 try self.ensureRootTools(self.provider.kind);
             }
         }
+        if (self.sub) try self.synthesis.beforeRequest(self);
         const hist_len = self.messages.items.len;
         const root = self.request(if (self.text_only) null else self.toolsJson()) catch |err| {
             if (try @import("agent_length_cutoff.zig").recoverRunaway(self, err, hist_len)) continue;

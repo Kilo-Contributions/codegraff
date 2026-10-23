@@ -148,6 +148,7 @@ pub const ToolCtx = struct {
     parent_task: []const u8 = "", // ADR 0232: the user's prompts a spawned child sees as context
     fork_source: ?@import("subagent_history.zig").Snapshot = null,
     retain_children: bool = false, // explicit workflow retention, not inherited by judges
+    synthesis: bool = false, // canonical workflow synthesis, not ordinary delegated work
     read_only_shell: bool = false, // ADR 0232: a read-only child's foreground shell runs under the seatbelt sandbox
 };
 

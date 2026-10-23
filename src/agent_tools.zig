@@ -194,6 +194,11 @@ fn refuseRead(self: *Agent, call: ToolCall) !ExecResult {
 }
 
 pub fn rejectToolCall(self: *Agent, call: ToolCall) !?ExecResult {
+    if (self.sub and self.synthesis.reporting()) {
+        const message = @import("workflow_synthesis.zig").tool_refusal;
+        self.emitToolRejected(call, "workflow_synthesis", message);
+        return .{ .text = message, .is_error = true };
+    }
     if (!call.args_ok) {
         const message = if (call.cut) tool_call_args.cut_exec_message else tool_call_args.invalid_exec_message;
         self.emitToolRejected(call, "invalid_arguments", message);

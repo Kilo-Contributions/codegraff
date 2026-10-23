@@ -396,11 +396,12 @@ fn execWorkflowShared(ctx: ToolCtx, input: Value) !ToolOutput {
         // #380: …then asked whether any task in it names an image the seat
         // cannot see. A re-seat stays phase-UNIFORM, so #290 is untouched.
         const seat = vision_ask.phaseSeat(route_phase.forPhase(subagent_run.childProvider(ctx.provider, ctx.subagent_provider, ctx.subagent_cross_provider), shape, title, niches, ctx.subagent_provider != null), prompts, ctx.subagent_provider != null);
+        const phase_ctx = @import("workflow_synthesis.zig").context(ctx, title);
         for (labels, prompts, overrides, niches, isolations, isolation_fallbacks, futures, 0..) |label, prompt, override, niche, isolation, isolation_fallback, *fut, i| {
             if (dup.rep[i] != i) continue; // §2b: a collapsed duplicate spawns nothing
             wfp.task(ctx.io, arena, run_id, phase_no, i + 1, tasks.len, label, "running"); // #63
             route_trace.emitSpawnProvider(ctx.io, ctx.tracer, label, seat.provider, seat.cellOf(niche), seat.sourceFor(override != null), override, niche);
-            fut.* = ctx.io.async(workflowTask, .{ ctx, label, prompt, override, niche, isolation, isolation_fallback, seat.pin });
+            fut.* = ctx.io.async(workflowTask, .{ phase_ctx, label, prompt, override, niche, isolation, isolation_fallback, seat.pin });
         }
         for (futures, outputs, labels, prompts, raws, 0..) |*fut, *out, label, prompt, raw, i| {
             if (dup.rep[i] != i) continue;
@@ -451,7 +452,7 @@ fn execWorkflowShared(ctx: ToolCtx, input: Value) !ToolOutput {
             const refut = try arena.alloc(Io.Future(ToolOutput), nf);
             for (refut, 0..) |*rf, k| {
                 const i = fidx[k];
-                rf.* = ctx.io.async(workflowRetryTask, .{ ctx, labels[i], prompts[i], overrides[i], niches[i], isolations[i], isolation_fallbacks[i], seat.pin });
+                rf.* = ctx.io.async(workflowRetryTask, .{ phase_ctx, labels[i], prompts[i], overrides[i], niches[i], isolations[i], isolation_fallbacks[i], seat.pin });
             }
             for (refut, 0..) |*rf, k| {
                 const i = fidx[k];
@@ -488,7 +489,7 @@ fn execWorkflowShared(ctx: ToolCtx, input: Value) !ToolOutput {
             // The all-failed abort is the harness's own observation of a
             // failed attempt — parked as evidence for the next escalation.
             escalation.failure_evidence.note(shapes.classOf(shapes.rawAsk()), abort_text);
-            return .{ .text = try gpa.dupe(u8, abort_text), .is_error = true };
+            return .{ .text = try gpa.dupe(u8, try @import("workflow_synthesis.zig").withEvidence(arena, abort_text, prev_results)), .is_error = true };
         }
 
         // #1 — Ultracode → DGM engine: when ≥2 persona variants competed this
