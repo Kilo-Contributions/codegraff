@@ -106,6 +106,7 @@ pub const Agent = struct {
     /// score re-reading files it had already been given. With no tools it must
     /// answer from the excerpt in one call, which is what it was designed for.
     text_only: bool = false,
+    synthesis: @import("workflow_synthesis.zig").State = .{},
     read_only: bool = false, // informational child: reads kept, writes refused (#1360, agent_tool_gate)
     label: []const u8,
     out: ?*Io.Writer,
@@ -130,6 +131,7 @@ pub const Agent = struct {
     tools_used: trace.ToolSink = .{}, // external tool calls this agent made (per turn for the root)
     tool_calls_this_turn: u64 = 0,
     read_miss: @import("read_miss.zig").Tracker = .{}, // #1116: same-prefix / incrementing read_file misses
+    tool_repeat: @import("tool_repeat.zig").Tracker = .{}, // #1706: identical batches in a row end the turn
     model_calls_this_turn: u64 = 0,
     handle_note_shown: bool = false, // #541: the handle-protocol lesson rides this agent's FIRST handle, once
     seen_tool_keys: std.ArrayList([]const u8) = .empty, // root-only per-turn dedupe keys

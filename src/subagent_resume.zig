@@ -8,11 +8,15 @@ const Isolation = @import("fleet.zig").Isolation;
 const Effort = @import("main.zig").ReasoningEffort;
 
 pub fn foreground(ctx: tools.ToolCtx, label: []const u8, prompt: []const u8, system: ?[]const u8, niche: []const u8, isolation: Isolation, fallback: bool, pin: ?Provider, effort: ?Effort) !subagent.SubRun {
+    return foregroundKind(ctx, "subagent", label, prompt, system, niche, isolation, fallback, pin, effort);
+}
+
+pub fn foregroundKind(ctx: tools.ToolCtx, kind: []const u8, label: []const u8, prompt: []const u8, system: ?[]const u8, niche: []const u8, isolation: Isolation, fallback: bool, pin: ?Provider, effort: ?Effort) !subagent.SubRun {
     const state = try retained.create(ctx, label);
     defer state.deinit(ctx.gpa, ctx.io);
     var child = ctx;
     child.retained_worker = state;
-    var run = try subagent.runSub(child, "subagent", label, prompt, system, niche, isolation, fallback, pin, effort);
+    var run = try subagent.runSub(child, kind, label, prompt, system, niche, isolation, fallback, pin, effort);
     errdefer ctx.gpa.free(run.output.text);
     const text = try std.fmt.allocPrint(ctx.gpa, "{s}\n\n[task_id {s}: retained worker; agent_message queues, subagent_resume continues]", .{ run.output.text, state.record.id });
     ctx.gpa.free(run.output.text);
