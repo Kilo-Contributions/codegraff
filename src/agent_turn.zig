@@ -105,12 +105,21 @@ pub fn run(self: *Agent, root_turn_prepared: *std.atomic.Value(bool)) anyerror![
             if (try @import("named_work.zig").handle(self, final_text)) continue;
             if (try pending_work.finish(self, bounced_answer.finish(self, final_text))) |text| {
                 if (self.feedback) |inbox| if (!inbox.tryFinish(self.io)) continue;
+                settleFinal(self);
                 return review_deadline.finish(text);
             }
             continue;
         }
         self.empty_completion_retries = 0;
     }
+}
+
+/// A root turn that ends with its answer settles the human task (#1137):
+/// ambient peer mail then waits for the next human prompt instead of
+/// reopening it. A yielded turn is a handoff, already latched harder; a
+/// stopped tool loop did not finish the task and settles nothing.
+fn settleFinal(self: *Agent) void {
+    if (!self.sub) @import("peer_idle.zig").noteFinalAnswer();
 }
 
 /// #1686: the previous compaction left the context over the line; wait for

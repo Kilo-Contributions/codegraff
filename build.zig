@@ -137,6 +137,9 @@ pub fn build(b: *std.Build) void {
     const acp_preauth_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-preauth.py" });
     acp_preauth_test.addArtifactArg(exe);
     test_step.dependOn(&acp_preauth_test.step);
+    const issue_acp_test = b.addSystemCommand(&.{ "python3", "scripts/test-issue-acp.py" });
+    issue_acp_test.addArtifactArg(exe);
+    test_step.dependOn(&issue_acp_test.step);
     const acp_goal_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-goal.py" });
     acp_goal_test.addArtifactArg(exe);
     test_step.dependOn(&acp_goal_test.step);
@@ -224,6 +227,9 @@ pub fn build(b: *std.Build) void {
     const acp_stream_drop_test = b.addSystemCommand(&.{ "python3", "scripts/test-acp-stream-drop.py" });
     acp_stream_drop_test.addArtifactArg(exe);
     test_step.dependOn(&acp_stream_drop_test.step);
+    const retry_cancellation_test = b.addSystemCommand(&.{ "python3", "scripts/test-retry-cancellation.py" });
+    retry_cancellation_test.addArtifactArg(exe);
+    test_step.dependOn(&retry_cancellation_test.step);
     const run_tool_budget_test = b.addSystemCommand(&.{ "python3", "scripts/test-run-tool-budget.py" });
     run_tool_budget_test.addArtifactArg(exe);
     test_step.dependOn(&run_tool_budget_test.step);

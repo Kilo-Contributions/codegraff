@@ -320,6 +320,9 @@ record only when you need the evidence or the edge cases.
 | [0299](0299-conversation-history-forks-are-explicit.md) | `fork_from` explicitly snapshots current, project-local saved, or family-owned worker history into independent children; lightweight delegation stays the default and `retained` remains opt-in across subagents and workflows. |
 
 | [0300](0300-workflow-synthesis-has-a-report-boundary.md) | Synthesis gets bounded evidence requests and a final report-only request; cancelled or exhausted workers are not restarted and failed stages retain prior evidence. |
+| [0298](0298-recurrence-reports-update-issue-state.md) | A current unresolved recurrence reopens the canonical resolved issue; comments alone do not complete reporting, intentional closures remain respected, and final state is verified. |
+| [0299](0299-tool-commands-launch-apps-in-the-background.md) | On macOS tool commands' `open` launches apps without activating them (a `-g` shim first on the tool PATH); `GRAFF_GUI_FOREGROUND=1` on a command is the explicit foreground opt-in. |
+| [0300](0300-a-session-shuts-down-the-simulators-it-booted.md) | Shell commands that look like simulator work are bracketed by booted-device snapshots; devices a session booted are leased under `~/.codegraff/simulators/` and shut down when the last live leaseholder ends, never devices booted before. `GRAFF_KEEP_SIMULATORS=1` opts out. |
 
 ## When to write one
 
