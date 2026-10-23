@@ -10,6 +10,13 @@ The release workflow uses a tag's section here as its release notes (a
 hand-written `docs/releases/<tag>.md` wins if present), so keeping this file
 current is part of cutting a release.
 
+## v0.302.51
+
+- Retrying the same prompt after a connection failure works again, including after loading the failed conversation. Earlier work stays in history; reconnecting does not require a new chat.
+- Includes independent conversation forks for subagents and workflow fan-out (`fork_from`), with optional retained workers for later continuation.
+- Includes bounded workflow synthesis that returns earlier findings when the final report cannot complete.
+- Retains all changes from v0.302.50.
+
 ## v0.302.48
 
 - oMLX is a built-in local provider (`omlx`, `127.0.0.1:8000`). Set its key with `graff key set omlx <key>` or `OMLX_API_KEY`. `graff models` lists the models it serves, `--model omlx` starts on the first one, `/effort` is sent as `reasoning_effort`, and it is billed as local (#1695).

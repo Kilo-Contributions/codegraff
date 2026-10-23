@@ -230,6 +230,9 @@ pub fn build(b: *std.Build) void {
     const retry_cancellation_test = b.addSystemCommand(&.{ "python3", "scripts/test-retry-cancellation.py" });
     retry_cancellation_test.addArtifactArg(exe);
     test_step.dependOn(&retry_cancellation_test.step);
+    const offline_recovery_test = b.addSystemCommand(&.{ "python3", "scripts/test-offline-recovery.py" });
+    offline_recovery_test.addArtifactArg(exe);
+    test_step.dependOn(&offline_recovery_test.step);
     const run_tool_budget_test = b.addSystemCommand(&.{ "python3", "scripts/test-run-tool-budget.py" });
     run_tool_budget_test.addArtifactArg(exe);
     test_step.dependOn(&run_tool_budget_test.step);

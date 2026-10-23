@@ -324,6 +324,8 @@ record only when you need the evidence or the edge cases.
 | [0299](0299-tool-commands-launch-apps-in-the-background.md) | On macOS tool commands' `open` launches apps without activating them (a `-g` shim first on the tool PATH); `GRAFF_GUI_FOREGROUND=1` on a command is the explicit foreground opt-in. |
 | [0300](0300-a-session-shuts-down-the-simulators-it-booted.md) | Shell commands that look like simulator work are bracketed by booted-device snapshots; devices a session booted are leased under `~/.codegraff/simulators/` and shut down when the last live leaseholder ends, never devices booted before. `GRAFF_KEEP_SIMULATORS=1` opts out. |
 
+| [0301](0301-failed-requests-settle-the-pending-turn.md) | Exhausted request retries leave a truthful failure boundary in history so an identical prompt can run after reconnecting, including after save/load; duplicate-host protection and bounded retries stay unchanged. |
+
 ## When to write one
 
 Write an ADR when a decision is load-bearing and non-obvious: it was reached

@@ -391,6 +391,7 @@ pub fn request(self: *Agent, tools_in: ?[]const u8) !std.json.ObjectMap {
                     const failure_kind = if (err == error.RateLimited) "rate limited (429)" else if (err == error.ServerError) "server error (5xx)" else "network error";
                     self.last_api_error = std.fmt.allocPrint(self.arena, "{s}: {s}{s}{s} (gave up after {d} attempts)", .{ failure_kind, @errorName(err), if (down.len > 0) " at " else "", down, max_attempts }) catch null;
                     self.last_request_write_failed = std.mem.eql(u8, @errorName(err), "WriteFailed");
+                    try scratch.preserveFailedRequest(self);
                     if (telemetry.g_telem) |t| t.errorEvent("net", @errorName(err));
                     if (self.tracer) |tr| tr.api(self.label, self.sub, self.provider.model, 0, body.len, 0, 0, 0, true);
                     return error.ApiError;
