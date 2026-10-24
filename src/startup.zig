@@ -481,7 +481,7 @@ pub fn runSubcommand(io: Io, gpa: Allocator, arena: Allocator, init: std.process
             true,
         );
         const kimi_token = init.environ_map.get("KIMI_API_KEY") orelse oauth.loadKimiOAuth(io, gpa, arena, home, false, null) orelse "";
-        _ = kimi_catalog.load(io, gpa, arena, home, kimi_token);
+        _ = kimi_catalog.load(io, gpa, arena, kimi_token);
         var router_keys: provider_mod.Keys = .{ .values = @splat(null) };
         for (provider_mod.provider_specs, &router_keys.values, &router_keys.sources) |spec, *value, *source| {
             if (!router_catalog.dynamic(spec)) continue;

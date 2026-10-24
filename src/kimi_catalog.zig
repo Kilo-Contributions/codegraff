@@ -15,7 +15,6 @@ pub const models_url = "https://api.kimi.com/coding/v1/models";
 pub const user_agent = identity.user_agent;
 pub const platform = identity.platform;
 pub const version = identity.version;
-pub const initIdentity = identity.initIdentity;
 pub const identityHeaders = identity.identityHeaders;
 pub var catalog_source: []const u8 = "baked offline fallback";
 var catalog_attempted = false;
@@ -113,8 +112,7 @@ pub const Fetch = struct {
     source: []const u8 = "baked fallback — live refresh unavailable",
 };
 
-pub fn fetch(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, access: []const u8) Fetch {
-    initIdentity(io, arena, home);
+pub fn fetch(io: Io, gpa: Allocator, arena: Allocator, access: []const u8) Fetch {
     if (access.len == 0) return .{ .source = "baked fallback — no Kimi login" };
     var client: std.http.Client = .{ .allocator = gpa, .io = io };
     defer client.deinit();
@@ -123,13 +121,13 @@ pub fn fetch(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, access:
     var extra: [8]std.http.Header = undefined;
     extra[0] = .{ .name = "Authorization", .value = bearer };
     extra[1] = .{ .name = "Accept", .value = "application/json" };
-    _ = identityHeaders(extra[2..]);
+    const sent = 2 + identityHeaders(extra[2..]).len;
     const response = client.fetch(.{
         .location = .{ .url = models_url },
         .method = .GET,
         .response_writer = &aw.writer,
         .headers = .{ .user_agent = .{ .override = user_agent } },
-        .extra_headers = &extra,
+        .extra_headers = extra[0..sent],
     }) catch return .{};
     if (@backingInt(response.status) != 200) return .{};
     const rows = parseModels(arena, aw.writer.buffered()) orelse
@@ -178,14 +176,13 @@ pub fn claimAttempt() bool {
 
 /// Fetch and activate the authenticated catalog. Any failure leaves the baked
 /// K3 rows intact, so offline runs and temporary Kimi outages still start.
-pub fn load(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, access: []const u8) bool {
-    initIdentity(io, arena, home);
+pub fn load(io: Io, gpa: Allocator, arena: Allocator, access: []const u8) bool {
     if (access.len == 0) {
         catalog_source = "baked fallback — no Kimi login";
         return false;
     }
     catalog_attempted = true;
-    const got = fetch(io, gpa, arena, home, access);
+    const got = fetch(io, gpa, arena, access);
     if (got.rows.len == 0) {
         catalog_source = got.source;
         return false;
@@ -198,9 +195,9 @@ pub fn load(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, access: 
 /// Demand-load the account catalog at most once per process. Startup fans
 /// the GET out via `claimAttempt` + `fetch`; `/model` and `/models` call
 /// this when their catalog surfaces become visible.
-pub fn ensure(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, access: []const u8) void {
+pub fn ensure(io: Io, gpa: Allocator, arena: Allocator, access: []const u8) void {
     if (catalog_attempted) return;
-    _ = load(io, gpa, arena, home, access);
+    _ = load(io, gpa, arena, access);
 }
 
 test "parseModels accepts Kimi aliases and K3 context windows" {
