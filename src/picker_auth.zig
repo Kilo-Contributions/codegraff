@@ -368,7 +368,7 @@ pub fn offerProviderAuth(
         const dup = arena.dupe(u8, key) catch key;
         const saved = storeKey(root.io, root.gpa, arena, root.home, pid, dup);
         _ = keys.set(pid, dup, if (saved) .stored else .session);
-        if (std.mem.eql(u8, pid, "kimi")) _ = kimi_catalog.load(root.io, root.gpa, arena, root.home, dup);
+        if (std.mem.eql(u8, pid, "kimi")) _ = kimi_catalog.load(root.io, root.gpa, arena, dup);
         try out.print("\xe2\x9c\x93 {s} key set (live{s})\n", .{ pid, if (saved) " + Keychain" else "" });
     }
 

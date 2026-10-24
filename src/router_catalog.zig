@@ -456,15 +456,15 @@ const KimiOutcome = struct {
     arena_state: ?std.heap.ArenaAllocator = null,
 };
 
-fn kimiFetchTask(io: Io, gpa: Allocator, home: []const u8, access: []const u8) KimiOutcome {
+fn kimiFetchTask(io: Io, gpa: Allocator, access: []const u8) KimiOutcome {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     return .{
-        .fetch = kimi_catalog.fetch(io, gpa, arena_state.allocator(), home, access),
+        .fetch = kimi_catalog.fetch(io, gpa, arena_state.allocator(), access),
         .arena_state = arena_state,
     };
 }
 
-fn spawnKimi(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, keys: provider.Keys, model_flag: ?[]const u8, saved: ?serde.SavedModel) ?Io.Future(KimiOutcome) {
+fn spawnKimi(io: Io, gpa: Allocator, arena: Allocator, keys: provider.Keys, model_flag: ?[]const u8, saved: ?serde.SavedModel) ?Io.Future(KimiOutcome) {
     if (!catalog_selection.startupMayUse(keys, "kimi", model_flag, saved)) return null;
     if (!kimi_catalog.claimAttempt()) return null;
     const access = keys.get("kimi") orelse "";
@@ -472,7 +472,7 @@ fn spawnKimi(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, keys: p
         kimi_catalog.commit(arena, &.{}, "baked fallback — no Kimi login");
         return null;
     }
-    const args = .{ io, gpa, home, access };
+    const args = .{ io, gpa, access };
     return io.concurrent(kimiFetchTask, args) catch io.async(kimiFetchTask, args);
 }
 
@@ -481,7 +481,7 @@ fn spawnKimi(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, keys: p
 /// cache immediately, waits `live_budget_ms` only when there is none, and
 /// otherwise refreshes the cache file in the background.
 pub fn ensureForStartup(io: Io, gpa: Allocator, arena: Allocator, home: []const u8, keys: provider.Keys, model_flag: ?[]const u8, saved: ?serde.SavedModel) void {
-    var kimi_task = spawnKimi(io, gpa, arena, home, keys, model_flag, saved);
+    var kimi_task = spawnKimi(io, gpa, arena, keys, model_flag, saved);
     defer if (kimi_task) |*fut| {
         var outcome = fut.await(io);
         defer if (outcome.arena_state) |*ta| ta.deinit();

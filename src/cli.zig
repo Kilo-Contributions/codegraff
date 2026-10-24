@@ -24,6 +24,12 @@ const update_target = @import("update_target.zig");
 pub const changelog_text =
     \\What's new
     \\──────────
+    \\0.302.51
+    \\  • Kimi API keys and logins work again (no more RstStream)
+    \\  • a used-up Kimi plan window stops instead of retrying
+    \\  • retrying a prompt after a connection failure works again
+    \\  • subagents and workflows can fork the conversation
+    \\
     \\0.302.48
     \\  • oMLX is a built-in local provider: --model omlx
     \\  • compaction counts opaque state by the provider's own measure
