@@ -21,16 +21,18 @@ pub const quota_cap_marker = "quota/billing cap";
 pub fn isQuotaExceeded(body: []const u8) bool {
     // ChatGPT plan usage limits (ADR 0221): stop, never retry into them.
     const needles = [_][]const u8{
-        plan_limit_code,                                "insufficient_quota",    "insufficient quota",
-        "exceeded your current quota",                  "quota exceeded",        quota_cap_marker,
-        "exhausted credit",                             "credits exhausted",     "credit exhausted",
-        "insufficient credit",                          "not enough credit",     "no credits",
-        "out of credits",                               "credit balance",        "requires more credits",
-        "payment required",                             "payment_required",      "billing limit",
-        "billing_hard_limit_reached",                   "billing hard limit",    "insufficient_credits",
-        "credits_exhausted",                            "credit_limit_exceeded", "insufficient_funds",
-        "http 402",                                     "exhausted_credit",      "credit_balance_too_low",
+        plan_limit_code,                                "insufficient_quota",           "insufficient quota",
+        "exceeded your current quota",                  "quota exceeded",               quota_cap_marker,
+        "exhausted credit",                             "credits exhausted",            "credit exhausted",
+        "insufficient credit",                          "not enough credit",            "no credits",
+        "out of credits",                               "credit balance",               "requires more credits",
+        "payment required",                             "payment_required",             "billing limit",
+        "billing_hard_limit_reached",                   "billing hard limit",           "insufficient_credits",
+        "credits_exhausted",                            "credit_limit_exceeded",        "insufficient_funds",
+        "http 402",                                     "exhausted_credit",             "credit_balance_too_low",
         "subscription_sharing_v2_usage_limit_exceeded",
+        // Kimi Code's plan window: "You've reached your 5-hour usage limit".
+        "exceeded_current_quota_error",
         // A Claude subscription past its extra usage answers 400
         // invalid_request_error with only this phrase to go on.
         "out of extra usage",
@@ -176,6 +178,7 @@ test "isQuotaExceeded (#opencode-parity): billing cap detected, transient thrott
     try std.testing.expect(isQuotaExceeded("{\"error\":{\"code\":\"insufficient_quota\",\"message\":\"You exceeded your current quota\"}}"));
     try std.testing.expect(isQuotaExceeded("Quota Exceeded for this key"));
     try std.testing.expect(isQuotaExceeded("{\"error\":{\"code\":\"subscription_sharing_usage_limit_exceeded\"}}"));
+    try std.testing.expect(isQuotaExceeded("{\"error\":{\"message\":\"You've reached your 5-hour usage limit.\",\"type\":\"exceeded_current_quota_error\"}}"));
     try std.testing.expectEqual(Fault.quota, classify("invalid_request_error", null, "You're out of extra usage. Add more at claude.ai/settings/usage and keep going.").?);
     // transient rate-limit -> NOT a quota cap; must still retry
     try std.testing.expect(!isQuotaExceeded("Rate limit reached. Please try again in 20s."));

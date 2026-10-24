@@ -340,7 +340,7 @@ pub fn tryHandle(root: *Agent, keys: *Keys, arena: Allocator, line: []const u8, 
         const home = root.home;
         const saved = storeKey(root.io, root.gpa, arena, home, pid, key); // persist
         _ = keys.set(pid, live_key, if (saved) .stored else .session);
-        if (std.mem.eql(u8, pid, "kimi")) _ = kimi_catalog.load(root.io, root.gpa, arena, home, live_key);
+        if (std.mem.eql(u8, pid, "kimi")) _ = kimi_catalog.load(root.io, root.gpa, arena, live_key);
         try out.print("✓ {s} key set (live{s}) — now: /model {s}\n", .{ pid, if (saved) " + Keychain" else "", pid });
         try out.flush();
         return true;

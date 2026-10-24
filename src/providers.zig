@@ -311,7 +311,7 @@ fn modelQueryMayUseKimi(query: []const u8) bool {
 pub fn ensureModelQueryCatalogs(root: *Agent, keys: Keys, query: []const u8) void {
     if (modelQueryMayUseCodex(query)) root.ensureModelCatalog(keys);
     if (modelQueryMayUseKimi(query))
-        kimi_catalog.ensure(root.io, root.gpa, root.arena, root.home, keys.get("kimi") orelse "");
+        kimi_catalog.ensure(root.io, root.gpa, root.arena, keys.get("kimi") orelse "");
     router_catalog.ensureForQuery(root.io, root.gpa, root.arena, root.home, keys, query);
 }
 
@@ -334,7 +334,7 @@ pub fn ensureControlRequestCatalogs(root: *Agent, keys: Keys, provider_query: []
     if (controlRequestMayUseCodex(provider_query, model_query, legacy_name)) root.ensureModelCatalog(keys);
     const query = catalog_selection.controlQuery(provider_query, model_query, legacy_name);
     if (modelQueryMayUseKimi(query))
-        kimi_catalog.ensure(root.io, root.gpa, root.arena, root.home, keys.get("kimi") orelse "");
+        kimi_catalog.ensure(root.io, root.gpa, root.arena, keys.get("kimi") orelse "");
     router_catalog.ensureForQuery(root.io, root.gpa, root.arena, root.home, keys, query);
 }
 
