@@ -18,6 +18,9 @@ pub var device_name: []const u8 = "unknown";
 pub var device_model: []const u8 = "unknown";
 pub var os_version: []const u8 = "unknown";
 
+/// `device_id` outlives every caller's arena (it rides on each request's
+/// headers), so it is copied here rather than allocated.
+var device_id_buf: [36]u8 = undefined;
 var device_name_buf: [256]u8 = undefined;
 var device_model_buf: [128]u8 = undefined;
 var os_version_buf: [128]u8 = undefined;
@@ -167,7 +170,8 @@ pub fn initIdentity(io: Io, arena: Allocator, home: []const u8) void {
     if (Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(128))) |raw| {
         const value = std.mem.trim(u8, raw, " \t\r\n");
         if (validDeviceId(value)) {
-            device_id = arena.dupe(u8, value) catch "unknown";
+            @memcpy(&device_id_buf, value);
+            device_id = &device_id_buf;
             secureDir(io, dir);
             const file = Io.Dir.cwd().openFile(io, path, .{ .mode = .read_only }) catch return;
             defer file.close(io);
@@ -180,7 +184,7 @@ pub fn initIdentity(io: Io, arena: Allocator, home: []const u8) void {
     random[6] = (random[6] & 0x0f) | 0x40;
     random[8] = (random[8] & 0x3f) | 0x80;
     const hex = std.fmt.bytesToHex(random, .lower);
-    const id = arena.alloc(u8, 36) catch return;
+    const id = &device_id_buf;
     @memcpy(id[0..8], hex[0..8]);
     id[8] = '-';
     @memcpy(id[9..13], hex[8..12]);
@@ -275,4 +279,24 @@ test "identityHeaders use hostname and Node-shaped model, not zig os tags" {
     if (prefix.len != 0) try std.testing.expect(std.mem.startsWith(u8, got[3].value, prefix));
     try std.testing.expect(std.mem.endsWith(u8, got[3].value, nodeArch(builtin.cpu.arch)));
     try std.testing.expect(!std.mem.eql(u8, got[4].value, @tagName(builtin.os.tag)));
+}
+
+test "device_id survives the arena initIdentity was called with" {
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(io, ".kimi", private_dir_permissions);
+    const stored = "0b8f2c4e-1d3a-4f5b-9c6d-7e8f9a0b1c2d";
+    try tmp.dir.writeFile(io, .{ .sub_path = ".kimi/device_id", .data = stored ++ "\n" });
+    const saved = device_id;
+    defer device_id = saved;
+
+    // Startup and the catalog fetch hand in short-lived arenas; the id rides
+    // on every later request header, so it must not point into them.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const home = try std.fmt.allocPrint(arena_state.allocator(), ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    device_id = "unknown";
+    initIdentity(io, arena_state.allocator(), home);
+    arena_state.deinit();
+    try std.testing.expectEqualStrings(stored, device_id);
 }
